@@ -17,10 +17,12 @@ import postgres from "postgres";
 import type { ArtifactKind } from "@/components/chat/artifact";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { ChatbotError } from "../errors";
+import type { CourseGraph } from "../types";
 import { generateUUID } from "../utils";
 import {
   type Chat,
   chat,
+  course,
   type DBMessage,
   document,
   message,
@@ -585,6 +587,36 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
       .execute();
 
     return streamIds.map(({ id }) => id);
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function saveCourse({
+  graph,
+  files,
+}: {
+  graph: CourseGraph;
+  files: string[];
+}) {
+  try {
+    const row = { files, graph, id: graph.courseId, name: graph.name };
+    return await db
+      .insert(course)
+      .values(row)
+      .onConflictDoUpdate({
+        set: { ...row, updatedAt: new Date() },
+        target: course.id,
+      });
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function getCourseById({ id }: { id: string }) {
+  try {
+    const [row] = await db.select().from(course).where(eq(course.id, id));
+    return row ?? null;
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }

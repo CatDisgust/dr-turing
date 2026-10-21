@@ -3,6 +3,7 @@ import {
   boolean,
   foreignKey,
   json,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -10,6 +11,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { CourseGraph } from "../types";
 
 export const user = pgTable("User", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
@@ -134,3 +136,14 @@ export const stream = pgTable(
 );
 
 export type Stream = InferSelectModel<typeof stream>;
+
+// 一门课一份图谱 JSON；files 记课件在 Anthropic Files API 里的 file_id
+export const course = pgTable("Course", {
+  files: jsonb("files").$type<string[]>().notNull(),
+  graph: jsonb("graph").$type<CourseGraph>().notNull(),
+  id: text("id").primaryKey().notNull(),
+  name: text("name").notNull(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+export type Course = InferSelectModel<typeof course>;

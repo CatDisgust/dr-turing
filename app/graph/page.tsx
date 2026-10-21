@@ -1,165 +1,276 @@
 "use client";
 
 import { type ChangeEvent, useState } from "react";
-import type { PageCheck, ValidationResult } from "@/lib/graph/validate";
+import type { GraphScore } from "@/lib/graph/score";
+import type { ValidationResult } from "@/lib/graph/validate";
+import type { CourseGraph, Edge, Lesson } from "@/lib/types";
 
-type Result = ValidationResult & {
+type LessonResult = ValidationResult & {
   fileId: string;
-  lesson: { id: string; index: number; title: string };
+  lesson: Lesson;
   ms: number;
   pageCount: number;
 };
 
-const STATUS_LABEL: Record<PageCheck["status"], string> = {
-  fuzzy: "✓ 大致对",
-  match: "✓ 对",
-  mismatch: "✗ 不在这页",
-  "no-text": "? 图片页，人工看",
+type AssembleResult = {
+  droppedEdges: { edge: Edge; reason: string }[];
+  graph: CourseGraph;
+  merged: { from: string; into: string }[];
+  saved: boolean;
+  score: GraphScore | null;
+  timings: Record<string, number>;
 };
 
-// D2 自测页：上传一课课件，看抽出的知识点和页码核对
-export default function GraphExtractPage() {
-  const [lessonIndex, setLessonIndex] = useState(1);
-  const [lessonTitle, setLessonTitle] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [step, setStep] = useState("");
-  const [error, setError] = useState("");
-  const [result, setResult] = useState<Result | null>(null);
+type Run = {
+  lessons: LessonResult[];
+  assemble: AssembleResult;
+  extractMs: number;
+  totalMs: number;
+};
 
-  const onLessonIndex = (e: ChangeEvent<HTMLInputElement>) =>
-    setLessonIndex(Number(e.target.value));
-  const onLessonTitle = (e: ChangeEvent<HTMLInputElement>) =>
-    setLessonTitle(e.target.value);
-  const onFile = (e: ChangeEvent<HTMLInputElement>) =>
-    setFile(e.target.files?.[0] ?? null);
+const EDGE_LABEL: Record<Edge["type"], string> = {
+  confusable: "易混",
+  part_of: "属于",
+  prereq: "先修",
+};
 
-  async function run() {
-    if (!file) {
-      return;
+const seconds = (ms: number) => `${(ms / 1000).toFixed(0)} 秒`;
+
+// 读一行一个 JSON 的进度流，返回最后的结果
+async function readProgress<T>(
+  response: Response,
+  onStep: (step: string) => void
+): Promise<T> {
+  if (!response.body) {
+    throw new Error(`请求失败（${response.status}）`);
+  }
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  while (true) {
+    // biome-ignore lint/performance/noAwaitInLoops: 流只能一段一段顺序读
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
     }
+    buffer += value;
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines.filter(Boolean)) {
+      const event = JSON.parse(line);
+      if (event.error) {
+        throw new Error(event.error);
+      }
+      if (event.done) {
+        return event as T;
+      }
+      onStep(event.step);
+    }
+  }
+  throw new Error("连接中断，没有拿到结果");
+}
+
+// D2/D3 自测页：选一门课的课件（一个文件一课，按文件名排序定课序），
+// 每课并行抽知识点，再合成一张图、对金标准打分
+export default function GraphBuildPage() {
+  const [courseId, setCourseId] = useState("comp5348");
+  const [courseName, setCourseName] = useState(
+    "COMP5348 Enterprise Scale Software Architecture"
+  );
+  const [files, setFiles] = useState<File[]>([]);
+  const [steps, setSteps] = useState<Record<string, string>>({});
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+  const [run, setRun] = useState<Run | null>(null);
+
+  const onCourseId = (e: ChangeEvent<HTMLInputElement>) =>
+    setCourseId(e.target.value);
+  const onCourseName = (e: ChangeEvent<HTMLInputElement>) =>
+    setCourseName(e.target.value);
+  const onFiles = (e: ChangeEvent<HTMLInputElement>) =>
+    setFiles(
+      [...(e.target.files ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { numeric: true })
+      )
+    );
+
+  async function start() {
     setError("");
-    setResult(null);
-    setStep("开始");
-    const form = new FormData();
-    form.set("file", file);
-    form.set("lessonIndex", String(lessonIndex));
-    form.set("lessonTitle", lessonTitle);
+    setRun(null);
+    setSteps({});
+    setRunning(true);
+    const setStep = (key: string) => (step: string) =>
+      setSteps((current) => ({ ...current, [key]: step }));
+    const startedAt = Date.now();
 
     try {
-      const response = await fetch("/api/graph/extract", {
-        body: form,
+      const lessons = await Promise.all(
+        files.map(async (file, i) => {
+          const form = new FormData();
+          form.set("file", file);
+          form.set("lessonIndex", String(i + 1));
+          form.set("lessonTitle", file.name.replace(/\.pdf$/i, ""));
+          const response = await fetch("/api/graph/extract", {
+            body: form,
+            method: "POST",
+          });
+          const result = await readProgress<LessonResult>(
+            response,
+            setStep(`第 ${i + 1} 课`)
+          );
+          setStep(`第 ${i + 1} 课`)("完成");
+          return result;
+        })
+      );
+      const extractMs = Date.now() - startedAt;
+
+      const response = await fetch("/api/graph/assemble", {
+        body: JSON.stringify({
+          courseId,
+          lessons: lessons.map(({ accepted, lesson }) => ({
+            accepted,
+            lesson,
+          })),
+          name: courseName,
+        }),
+        headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      if (!response.body) {
-        throw new Error(`请求失败（${response.status}）`);
-      }
-      const reader = response.body
-        .pipeThrough(new TextDecoderStream())
-        .getReader();
-      let buffer = "";
-      while (true) {
-        // biome-ignore lint/performance/noAwaitInLoops: 流只能一段一段顺序读
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        buffer += value;
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines.filter(Boolean)) {
-          const event = JSON.parse(line);
-          if (event.error) {
-            setError(event.error);
-          } else if (event.done) {
-            setResult(event);
-          } else {
-            setStep(event.step);
-          }
-        }
-      }
+      const assemble = await readProgress<AssembleResult>(
+        response,
+        setStep("合图")
+      );
+      setStep("合图")("完成");
+      setRun({ assemble, extractMs, lessons, totalMs: Date.now() - startedAt });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-    setStep("");
+    setRunning(false);
   }
 
   function download() {
-    if (!result) {
+    if (!run) {
       return;
     }
-    const blob = new Blob([JSON.stringify(result, null, 2)], {
+    const blob = new Blob([JSON.stringify(run, null, 2)], {
       type: "application/json",
     });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `lesson-${result.lesson.index}.json`;
+    link.download = `${courseId}-graph.json`;
     link.click();
   }
 
-  const counts = { fuzzy: 0, match: 0, mismatch: 0, "no-text": 0 };
-  for (const check of result?.checks ?? []) {
-    counts[check.status] += 1;
-  }
-  const checkable = counts.match + counts.fuzzy + counts.mismatch;
-  const withSource = result
-    ? result.accepted.length /
-      (result.accepted.length + result.rejected.length || 1)
-    : 0;
+  const graph = run?.assemble.graph;
+  const score = run?.assemble.score;
+  const nameOf = (id: string) =>
+    graph?.points.find((p) => p.id === id)?.name ?? id;
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 p-4 text-sm md:p-8">
-      <h1 className="font-semibold text-xl">课件抽知识点（D2 自测）</h1>
+      <h1 className="font-semibold text-xl">课件生成知识图谱（自测）</h1>
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
-          第几课
+          课程 id
           <input
-            className="w-20 rounded border bg-background px-2 py-1"
-            min={1}
-            onChange={onLessonIndex}
-            type="number"
-            value={lessonIndex}
+            className="w-32 rounded border bg-background px-2 py-1"
+            onChange={onCourseId}
+            value={courseId}
           />
         </label>
         <label className="flex flex-col gap-1">
-          课名（可不填）
+          课程名
           <input
-            className="w-64 rounded border bg-background px-2 py-1"
-            onChange={onLessonTitle}
-            value={lessonTitle}
+            className="w-80 rounded border bg-background px-2 py-1"
+            onChange={onCourseName}
+            value={courseName}
           />
         </label>
-        <input accept="application/pdf" onChange={onFile} type="file" />
+        <label className="flex flex-col gap-1">
+          课件（一个文件一课，可多选）
+          <input
+            accept="application/pdf"
+            multiple
+            onChange={onFiles}
+            type="file"
+          />
+        </label>
         <button
           className="rounded bg-primary px-4 py-1.5 text-primary-foreground disabled:opacity-50"
-          disabled={!file || Boolean(step)}
-          onClick={run}
+          disabled={files.length === 0 || running}
+          onClick={start}
           type="button"
         >
-          {step ? `${step}…` : "开始"}
+          {running ? "生成中…" : "开始"}
         </button>
       </div>
 
+      {files.length > 0 ? (
+        <ul className="space-y-1">
+          {files.map((file, i) => (
+            <li key={file.name}>
+              第 {i + 1} 课：{file.name}
+              {steps[`第 ${i + 1} 课`] ? `　${steps[`第 ${i + 1} 课`]}` : ""}
+            </li>
+          ))}
+          {steps.合图 ? <li>合成图谱：{steps.合图}</li> : null}
+        </ul>
+      ) : null}
+
       {error ? <p className="text-red-600">出错了：{error}</p> : null}
 
-      {result ? (
+      {run && graph ? (
         <>
-          <div className="space-y-1 rounded border p-3">
+          <section className="space-y-1 rounded border p-3">
             <p>
-              {result.pageCount} 页，收下 {result.accepted.length}{" "}
-              个知识点，拒收 {result.rejected.length} 个，用时{" "}
-              {(result.ms / 1000).toFixed(0)} 秒。
+              总耗时 {seconds(run.totalMs)}：各课并行抽取{" "}
+              {seconds(run.extractMs)}，合图和连边{" "}
+              {seconds(run.totalMs - run.extractMs)}。
+              {run.assemble.saved ? "已存库。" : "存库失败，看日志。"}
             </p>
+            {run.lessons.map((lesson) => {
+              const ok = lesson.checks.filter(
+                (c) => c.status === "match" || c.status === "fuzzy"
+              ).length;
+              return (
+                <p key={lesson.lesson.id}>
+                  第 {lesson.lesson.index} 课：{lesson.pageCount} 页，
+                  {lesson.accepted.length} 个知识点，拒收{" "}
+                  {lesson.rejected.length} 个，页码 {ok}/{lesson.checks.length}{" "}
+                  对得上，抽取 {seconds(lesson.ms)}
+                </p>
+              );
+            })}
             <p>
-              带课和页码：{(withSource * 100).toFixed(0)}%。页码自动核对：
-              {checkable > 0
-                ? `${counts.match + counts.fuzzy}/${checkable} 对得上`
-                : "无可核对"}
-              ，另有 {counts["no-text"]} 处在图片页要人工看。
+              合并后 {graph.points.length} 个节点（合并了{" "}
+              {run.assemble.merged.length} 个），{graph.edges.length} 条边
+              {run.assemble.droppedEdges.length > 0
+                ? `，丢掉 ${run.assemble.droppedEdges.length} 条不合格的边`
+                : ""}
+              。
             </p>
-            {result.rejected.map((r) => (
-              <p className="text-red-600" key={r.name}>
-                拒收「{r.name}」：{r.reason}
+            {score ? (
+              <p className="font-medium">
+                金标准覆盖率 {(score.coverage * 100).toFixed(0)}%（
+                {score.covered.length}/
+                {score.covered.length + score.missing.length}），疑似重复{" "}
+                {score.duplicates.length} 对，先修边
+                {score.cycles.prereq ? "有环" : "无环"}。
+              </p>
+            ) : null}
+            {score?.missing.map((m) => (
+              <p className="text-red-600" key={`${m.lesson}-${m.gold}`}>
+                没覆盖：第 {m.lesson} 课「{m.gold}」
+              </p>
+            ))}
+            {score?.duplicates.map(([a, b]) => (
+              <p className="text-red-600" key={`${a}-${b}`}>
+                疑似重复：「{nameOf(a)}」和「{nameOf(b)}」
+              </p>
+            ))}
+            {run.assemble.merged.map((m) => (
+              <p className="text-muted-foreground" key={m.from}>
+                已合并：{m.from} → 「{nameOf(m.into)}」
               </p>
             ))}
             <button
@@ -169,51 +280,47 @@ export default function GraphExtractPage() {
             >
               下载 JSON
             </button>
-          </div>
+          </section>
 
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b text-left">
-                <th className="p-2">知识点</th>
-                <th className="p-2">页</th>
-                <th className="p-2">核对</th>
-                <th className="p-2">课件原文</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.accepted.map((point) =>
-                result.checks
-                  .filter((check) => check.pointId === point.id)
-                  .map((check, i) => (
-                    <tr
-                      className="border-b align-top"
-                      key={`${check.pointId}-${check.page}-${check.quote}`}
-                    >
-                      <td className="p-2">
-                        {i === 0 && (
-                          <>
-                            <div className="font-medium">{point.name}</div>
-                            <div className="text-muted-foreground">
-                              {point.aliases.join(" / ")} · {point.kind}
-                            </div>
-                            <div className="mt-1">{point.definition}</div>
-                          </>
-                        )}
-                      </td>
-                      <td className="p-2">{check.page}</td>
-                      <td className="whitespace-nowrap p-2">
-                        {STATUS_LABEL[check.status]}
-                        {check.foundOn.length > 0 &&
-                          `（在第 ${check.foundOn.join("、")} 页）`}
-                      </td>
-                      <td className="p-2 text-muted-foreground">
-                        {check.quote}
-                      </td>
-                    </tr>
-                  ))
-              )}
-            </tbody>
-          </table>
+          {graph.lessons.map((lesson) => (
+            <section className="space-y-2" key={lesson.id}>
+              <h2 className="font-semibold">
+                第 {lesson.index} 课 {lesson.title}
+              </h2>
+              <ul className="space-y-1">
+                {graph.points
+                  .filter((p) => p.lessonId === lesson.id)
+                  .map((p) => (
+                    <li key={p.id}>
+                      <span className="font-medium">{p.name}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {p.aliases.slice(0, 3).join(" / ")} · 页{" "}
+                        {p.sources
+                          .map((s) =>
+                            s.lessonId === lesson.id
+                              ? s.page
+                              : `${s.lessonId}-${s.page}`
+                          )
+                          .join(", ")}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          ))}
+
+          <section className="space-y-1">
+            <h2 className="font-semibold">关系</h2>
+            {graph.edges.map((edge) => (
+              <p key={`${edge.type}-${edge.from}-${edge.to}`}>
+                {nameOf(edge.from)} → {nameOf(edge.to)}
+                <span className="text-muted-foreground">
+                  （{EDGE_LABEL[edge.type]}）
+                </span>
+              </p>
+            ))}
+          </section>
         </>
       ) : null}
     </main>

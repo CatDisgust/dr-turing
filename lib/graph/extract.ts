@@ -1,7 +1,6 @@
 import "server-only";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { claude, MODEL, TIERS } from "@/lib/claude";
+import { askJson } from "./ask";
 
 // Claude 只填它能从课件里看出来的东西；课和文件由代码填，不让模型猜
 export const draftPointSchema = z.object({
@@ -27,40 +26,17 @@ const EXTRACT_PROMPT = `你在为一个学习辅导系统整理课程知识点�
 - kind：memory（要记住的事实、名词）、procedure（步骤、做法）、concept（要理解的原理）、design（要会权衡取舍的设计问题）。
 - sources：这个知识点在课件里出现的页，每页一条。page 是 PDF 的页序号，从 1 开始数（这份课件页脚的 “Page N” 一般就等于页序号）。quote 从那一页原样摘一句英文原文，不要改写、不要翻译，方便人回去对。图里的文字也可以摘。至少一条。`;
 
-// 一次只看一个文件，页码才不会混；一课多个文件就调多次，D3 的 match 再去重
+// 一次只看一个文件，页码才不会混；一课多个文件就调多次，再由 match 去重
 export async function extractFilePoints(
   fileId: string,
   lessonTitle: string
 ): Promise<DraftPoint[]> {
-  // 课件长、还要想，流式取完整结果，避免非流式请求超时
-  const stream = claude.messages.stream({
-    max_tokens: 32_000,
-    messages: [
-      {
-        content: [
-          { source: { file_id: fileId, type: "file" }, type: "document" },
-          { text: `这节课：${lessonTitle}\n\n${EXTRACT_PROMPT}`, type: "text" },
-        ],
-        role: "user",
-      },
+  const { points } = await askJson(
+    [
+      { source: { file_id: fileId, type: "file" }, type: "document" },
+      { text: `这节课：${lessonTitle}\n\n${EXTRACT_PROMPT}`, type: "text" },
     ],
-    model: MODEL,
-    output_config: {
-      effort: TIERS.build.effort,
-      format: zodOutputFormat(extractionSchema),
-    },
-  });
-
-  const message = await stream.finalMessage();
-  if (message.stop_reason === "refusal") {
-    throw new Error("Claude 拒绝处理这份课件");
-  }
-  if (message.stop_reason === "max_tokens") {
-    throw new Error("知识点太多，输出被截断了");
-  }
-  const text = message.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .join("");
-  return extractionSchema.parse(JSON.parse(text)).points;
+    extractionSchema
+  );
+  return points;
 }
