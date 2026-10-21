@@ -42,8 +42,6 @@ export function ChatShell() {
     isReadonly,
     isLoading,
     votes,
-    currentModelId,
-    setCurrentModelId,
     showCreditCardAlert,
     setShowCreditCardAlert,
   } = useActiveChat();
@@ -135,7 +133,6 @@ export function ChatShell() {
               messages={messages}
               onEditMessage={handleEditMessage}
               regenerate={regenerate}
-              selectedModelId={currentModelId}
               setMessages={setMessages}
               status={status}
               votes={votes}
@@ -151,8 +148,6 @@ export function ChatShell() {
                   isLoading={isLoading}
                   messages={messages}
                   onCancelEdit={handleCancelEdit}
-                  onModelChange={setCurrentModelId}
-                  selectedModelId={currentModelId}
                   selectedVisibilityType={visibilityType}
                   sendMessage={
                     editingMessage ? handleSendEditedMessage : sendMessage
@@ -176,7 +171,6 @@ export function ChatShell() {
           isReadonly={isReadonly}
           messages={messages}
           regenerate={regenerate}
-          selectedModelId={currentModelId}
           selectedVisibilityType={visibilityType}
           sendMessage={sendMessage}
           setAttachments={setAttachments}

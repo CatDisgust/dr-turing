@@ -1,6 +1,6 @@
-import { auth } from "@/app/(auth)/auth";
 import { getSuggestionsByDocumentId } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
+import { auth } from "@/lib/session";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
