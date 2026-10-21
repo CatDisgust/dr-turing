@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -25,6 +26,20 @@ import { generateTitleFromUserMessage } from "../../actions";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
 
 export const maxDuration = 60;
+
+// demo 阶段把出错原因直接显示出来，省得翻日志；错误信息里不含 key
+function describeClaudeError(error: unknown): string {
+  if (error instanceof Anthropic.AuthenticationError) {
+    return "出错了：ANTHROPIC_API_KEY 无效或没配置。";
+  }
+  if (error instanceof Anthropic.RateLimitError) {
+    return "出错了：请求太频繁或额度不足，稍后再试。";
+  }
+  if (error instanceof Anthropic.APIError) {
+    return `出错了（Anthropic ${error.status ?? "网络"}）：${error.message}`;
+  }
+  return `出错了：${error instanceof Error ? error.message : String(error)}`;
+}
 
 function getStreamContext() {
   try {
@@ -69,7 +84,10 @@ export async function POST(request: Request) {
         userId: session.user.id,
         visibility: selectedVisibilityType,
       });
-      titlePromise = generateTitleFromUserMessage({ message });
+      // 起标题失败不影响讲解，也不能留下未处理的 rejection
+      titlePromise = generateTitleFromUserMessage({ message }).catch(
+        () => "新对话"
+      );
     }
 
     const messagesFromDb = chat ? await getMessagesByChatId({ id }) : [];
@@ -163,7 +181,7 @@ export async function POST(request: Request) {
       },
       onError: (error) => {
         console.error("Claude stream error:", error);
-        return "出错了，请再试一次。";
+        return describeClaudeError(error);
       },
     });
 
