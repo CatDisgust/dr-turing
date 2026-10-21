@@ -1,0 +1,417 @@
+{
+  "course": "COMP5348 Enterprise Scale Software Architecture",
+  "note": "手写金标准，D3 graph-score 用来算覆盖率；页码是 PDF 页序号",
+  "lessons": [
+    {
+      "index": 1,
+      "title": "What is Software Architecture",
+      "points": [
+        {
+          "name": "企业 IT 系统",
+          "aliases": ["Enterprise IT systems", "Enterprise systems"],
+          "pages": [19, 20]
+        },
+        {
+          "name": "应用架构",
+          "aliases": [
+            "Application architecture",
+            "structure / behavior / allocation"
+          ],
+          "pages": [21]
+        },
+        {
+          "name": "软件架构的定义",
+          "aliases": [
+            "Software architecture definition",
+            "IEEE 1471",
+            "SEI",
+            "Garlan and Shaw"
+          ],
+          "pages": [23, 24, 25]
+        },
+        {
+          "name": "架构定义结构：组件、接口、通信、职责",
+          "aliases": [
+            "Architecture defines structure",
+            "component interfaces",
+            "component responsibilities"
+          ],
+          "pages": [26]
+        },
+        {
+          "name": "组件通信：数据传递与控制流",
+          "aliases": [
+            "Component communication",
+            "data passing mechanisms",
+            "control flow"
+          ],
+          "pages": [27]
+        },
+        {
+          "name": "架构模式/风格",
+          "aliases": [
+            "Architecture patterns",
+            "architecture styles",
+            "client-server",
+            "message bus",
+            "message broker"
+          ],
+          "pages": [28]
+        },
+        {
+          "name": "分层架构",
+          "aliases": [
+            "Layering",
+            "tiers",
+            "controller / service / repository layer"
+          ],
+          "pages": [29, 53]
+        },
+        {
+          "name": "非功能需求",
+          "aliases": [
+            "Non-functional requirements",
+            "NFRs",
+            "architecture requirements"
+          ],
+          "pages": [30]
+        },
+        {
+          "name": "架构视图",
+          "aliases": ["Architecture views"],
+          "pages": [31]
+        },
+        {
+          "name": "4+1 视图模型",
+          "aliases": [
+            "4+1 view model",
+            "logical / process / physical / development view"
+          ],
+          "pages": [32]
+        },
+        {
+          "name": "架构师的职责",
+          "aliases": ["Software architect's role"],
+          "pages": [33]
+        },
+        {
+          "name": "质量属性",
+          "aliases": ["Quality attributes", "QAs", "-ilities"],
+          "pages": [34]
+        },
+        {
+          "name": "质量属性要可度量",
+          "aliases": ["Quality attribute specification", "measurable QAs"],
+          "pages": [35]
+        },
+        {
+          "name": "性能：响应时间",
+          "aliases": ["Response time", "latency", "percentile latency"],
+          "pages": [36, 39]
+        },
+        {
+          "name": "性能：吞吐量",
+          "aliases": [
+            "Throughput",
+            "average vs peak",
+            "maximum sustainable throughput"
+          ],
+          "pages": [36, 37, 38]
+        },
+        {
+          "name": "可伸缩性",
+          "aliases": [
+            "Scalability",
+            "request load / connections / data size / deployments"
+          ],
+          "pages": [40, 42, 43, 44]
+        },
+        {
+          "name": "纵向扩展与横向扩展",
+          "aliases": ["Scale-up", "scale-out"],
+          "pages": [41]
+        },
+        {
+          "name": "可修改性",
+          "aliases": ["Modifiability"],
+          "pages": [45, 46]
+        },
+        {
+          "name": "安全性",
+          "aliases": [
+            "Security",
+            "authentication",
+            "authorization",
+            "encryption",
+            "integrity",
+            "non-repudiation"
+          ],
+          "pages": [47, 48]
+        },
+        {
+          "name": "可用性",
+          "aliases": [
+            "Availability",
+            "single point of failure",
+            "replication and failover"
+          ],
+          "pages": [49, 50]
+        },
+        {
+          "name": "其他质量属性",
+          "aliases": [
+            "Portability",
+            "testability",
+            "supportability",
+            "integration"
+          ],
+          "pages": [51]
+        },
+        {
+          "name": "质量属性之间的设计权衡",
+          "aliases": ["Design trade-offs"],
+          "pages": [52]
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "title": "State and Concurrency",
+      "points": [
+        {
+          "name": "状态",
+          "aliases": ["State"],
+          "pages": [7]
+        },
+        {
+          "name": "会话状态",
+          "aliases": ["Session state", "session", "cookies"],
+          "pages": [8]
+        },
+        {
+          "name": "本地计算状态",
+          "aliases": ["Local computation state"],
+          "pages": [9]
+        },
+        {
+          "name": "资源状态",
+          "aliases": ["Resource state"],
+          "pages": [10]
+        },
+        {
+          "name": "派生状态",
+          "aliases": ["Derived state"],
+          "pages": [11]
+        },
+        {
+          "name": "状态的生命周期与共享",
+          "aliases": ["Lifetime of state", "sharing of state"],
+          "pages": [12, 13]
+        },
+        {
+          "name": "状态完整性约束",
+          "aliases": [
+            "Integrity of state",
+            "invariants",
+            "referential integrity"
+          ],
+          "pages": [14]
+        },
+        {
+          "name": "有状态与无状态",
+          "aliases": ["Stateful", "stateless"],
+          "pages": [15]
+        },
+        {
+          "name": "状态管理与持久化状态",
+          "aliases": [
+            "State management",
+            "persistent state",
+            "state store",
+            "OR mapper"
+          ],
+          "pages": [16, 17]
+        },
+        {
+          "name": "并发与交错执行",
+          "aliases": ["Concurrency", "interleaving"],
+          "pages": [19, 20]
+        },
+        {
+          "name": "丢失更新",
+          "aliases": ["Lost update"],
+          "pages": [21]
+        },
+        {
+          "name": "何时需要并发控制",
+          "aliases": ["General rules for concurrency control", "shared state"],
+          "pages": [22]
+        },
+        {
+          "name": "乐观并发控制",
+          "aliases": ["Optimistic concurrency control", "modification count"],
+          "pages": [23, 24]
+        },
+        {
+          "name": "悲观并发控制（加锁）",
+          "aliases": ["Pessimistic concurrency control", "locking"],
+          "pages": [23, 25]
+        },
+        {
+          "name": "死锁",
+          "aliases": ["Deadlock", "canonical locking order", "lock timeout"],
+          "pages": [26]
+        },
+        {
+          "name": "锁粒度",
+          "aliases": [
+            "Granularity of locks",
+            "fine-grain / coarse-grain locks"
+          ],
+          "pages": [27]
+        },
+        {
+          "name": "事务",
+          "aliases": ["Transaction"],
+          "pages": [28]
+        },
+        {
+          "name": "ACID",
+          "aliases": [
+            "Atomic",
+            "Consistent",
+            "Isolated",
+            "Durable",
+            "commit",
+            "rollback"
+          ],
+          "pages": [29, 30]
+        },
+        {
+          "name": "隔离级别",
+          "aliases": ["Isolation level"],
+          "pages": [30]
+        },
+        {
+          "name": "显式事务",
+          "aliases": ["Explicit transactions", "JTA", "TransactionScope"],
+          "pages": [31]
+        },
+        {
+          "name": "声明式事务",
+          "aliases": ["Declarative transactions", "@Transactional"],
+          "pages": [32]
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "title": "Distributed Computing",
+      "points": [
+        {
+          "name": "分布式计算的目标与难点",
+          "aliases": ["Distributed computing"],
+          "pages": [5, 6]
+        },
+        {
+          "name": "分布式计算的八个谬误",
+          "aliases": ["Fallacies of distributed computing", "Peter Deutsch"],
+          "pages": [9]
+        },
+        {
+          "name": "本地方法调用",
+          "aliases": ["Local method calls"],
+          "pages": [10]
+        },
+        {
+          "name": "远程方法调用",
+          "aliases": ["Remote method call", "RMI", "stub", "proxy", "skeleton"],
+          "pages": [11, 12, 13]
+        },
+        {
+          "name": "编组与解组",
+          "aliases": ["Marshalling", "unmarshalling"],
+          "pages": [11, 12, 13]
+        },
+        {
+          "name": "请求与响应消息",
+          "aliases": [
+            "Requests and responses",
+            "object endpoint ID",
+            "method identifier"
+          ],
+          "pages": [14, 15]
+        },
+        {
+          "name": "SOAP 请求",
+          "aliases": ["SOAP", "SOAP envelope"],
+          "pages": [16]
+        },
+        {
+          "name": "存根的生成与接口定义语言",
+          "aliases": ["Stub generation", "IDL", "WSDL"],
+          "pages": [17]
+        },
+        {
+          "name": "远程调用技术的演进",
+          "aliases": ["RPC", "CORBA", "DCOM", "web services", "REST"],
+          "pages": [18]
+        },
+        {
+          "name": "分布式架构：点对点与多层",
+          "aliases": ["Peer to peer", "multi-tier applications"],
+          "pages": [19]
+        },
+        {
+          "name": "分布透明性的局限",
+          "aliases": ["Transparency", "network latency", "partial failure"],
+          "pages": [21, 22, 24]
+        },
+        {
+          "name": "粗粒度接口",
+          "aliases": ["Coarse-grained components", "fine-grained objects"],
+          "pages": [22]
+        },
+        {
+          "name": "分布式接口的演化",
+          "aliases": ["Interface evolution", "immutable interfaces"],
+          "pages": [23]
+        },
+        {
+          "name": "Java EE 多层应用",
+          "aliases": [
+            "Java EE application model",
+            "client / web / business / EIS tier"
+          ],
+          "pages": [26, 27, 28, 29, 30]
+        },
+        {
+          "name": "企业 Java Bean",
+          "aliases": ["Enterprise Java Beans", "EJB", "stateless session bean"],
+          "pages": [31, 32, 33]
+        },
+        {
+          "name": "部署描述符",
+          "aliases": ["Deployment descriptors"],
+          "pages": [34]
+        },
+        {
+          "name": "Java EE 常用接口",
+          "aliases": ["JNDI", "RMI", "JMS", "JTA", "JDBC"],
+          "pages": [35]
+        },
+        {
+          "name": "Spring Boot 分层",
+          "aliases": [
+            "Spring Boot layering",
+            "controller",
+            "service",
+            "repository",
+            "model"
+          ],
+          "pages": [37, 38, 39, 40, 41, 42]
+        }
+      ]
+    }
+  ]
+}

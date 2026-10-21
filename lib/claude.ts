@@ -7,8 +7,10 @@ export const claude = new Anthropic();
 
 export const MODEL = "claude-opus-5-5";
 
-// 规划文档的三档：快路径归类和规划用 low，讲解用 medium，会话后复核用 high
+// 规划文档的三档：快路径归类和规划用 low，讲解用 medium，会话后复核用 high；
+// 建图是离线一次性的，先用 medium，D3 计时后再定
 export const TIERS = {
+  build: { effort: "medium" },
   fast: { effort: "low" },
   review: { effort: "high" },
   tutor: { effort: "medium" },
