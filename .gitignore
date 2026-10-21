@@ -25,3 +25,6 @@ yarn-error.log*
 /playwright/*
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# 课件有版权，不进仓库
+fixtures/**/*.pdf
