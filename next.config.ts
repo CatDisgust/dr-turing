@@ -1,4 +1,3 @@
-import { withBotId } from "botid/next/config";
 import type { NextConfig } from "next";
 
 const basePath = process.env.IS_DEMO === "1" ? "/demo" : "";
@@ -47,8 +46,12 @@ const nextConfig: NextConfig = {
     },
     incomingRequests: false,
   },
+  // 讲解提示词是运行时读的 .md 文件，要打包进服务端函数
+  outputFileTracingIncludes: {
+    "/api/chat": ["./lib/tutor/prompts/**/*"],
+  },
   poweredByHeader: false,
   reactCompiler: true,
 };
 
-export default withBotId(nextConfig);
+export default nextConfig;

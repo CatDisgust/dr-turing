@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { auth } from "@/app/(auth)/auth";
 import type { ArtifactKind } from "@/components/chat/artifact";
 import {
   deleteDocumentsByIdAfterTimestamp,
@@ -8,6 +7,7 @@ import {
   updateDocumentContent,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
+import { auth } from "@/lib/session";
 
 const documentSchema = z.object({
   content: z.string(),

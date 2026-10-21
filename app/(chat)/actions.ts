@@ -1,38 +1,33 @@
 "use server";
 
-import { generateText, type UIMessage } from "ai";
-import { cookies } from "next/headers";
-import { auth } from "@/app/(auth)/auth";
+import type { UIMessage } from "ai";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
-import { titleModel } from "@/lib/ai/models";
 import { titlePrompt } from "@/lib/ai/prompts";
-import { getTitleModel } from "@/lib/ai/providers";
+import { claude, MODEL, TIERS } from "@/lib/claude";
 import {
   deleteMessagesByChatIdAfterTimestamp,
   getChatById,
   getMessageById,
   updateChatVisibilityById,
 } from "@/lib/db/queries";
+import { auth } from "@/lib/session";
 import { getTextFromMessage } from "@/lib/utils";
-
-export async function saveChatModelAsCookie(model: string) {
-  const cookieStore = await cookies();
-  cookieStore.set("chat-model", model);
-}
 
 export async function generateTitleFromUserMessage({
   message,
 }: {
   message: UIMessage;
 }) {
-  const { text } = await generateText({
-    instructions: titlePrompt,
-    model: getTitleModel(),
-    prompt: getTextFromMessage(message),
-    providerOptions: {
-      gateway: { order: titleModel.gatewayOrder },
-    },
+  const response = await claude.messages.create({
+    max_tokens: 1000,
+    messages: [{ content: getTextFromMessage(message), role: "user" }],
+    model: MODEL,
+    output_config: { effort: TIERS.fast.effort },
+    system: titlePrompt,
   });
+  const text = response.content
+    .flatMap((block) => (block.type === "text" ? [block.text] : []))
+    .join("");
   return text
     .replace(/^[#*"\s]+/, "")
     .replace(/["]+$/, "")

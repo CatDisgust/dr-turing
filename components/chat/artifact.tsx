@@ -68,7 +68,6 @@ function PureArtifact({
   votes: _votes,
   isReadonly: _isReadonly,
   selectedVisibilityType: _selectedVisibilityType,
-  selectedModelId: _selectedModelId,
 }: {
   addToolApprovalResponse: UseChatHelpers<ChatMessage>["addToolApprovalResponse"];
   chatId: string;
@@ -85,7 +84,6 @@ function PureArtifact({
   regenerate: UseChatHelpers<ChatMessage>["regenerate"];
   isReadonly: boolean;
   selectedVisibilityType: VisibilityType;
-  selectedModelId: string;
 }) {
   const { artifact, setArtifact, metadata, setMetadata } = useArtifact();
 

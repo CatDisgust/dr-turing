@@ -20,7 +20,6 @@ type MessagesProps = {
   isReadonly: boolean;
   isArtifactVisible: boolean;
   isLoading?: boolean;
-  selectedModelId: string;
   onEditMessage?: (message: ChatMessage) => void;
 };
 
@@ -35,7 +34,6 @@ function PureMessages({
   isReadonly,
   isArtifactVisible,
   isLoading,
-  selectedModelId: _selectedModelId,
   onEditMessage,
 }: MessagesProps) {
   const {
