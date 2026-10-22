@@ -4,10 +4,16 @@ import {
   getCourseById,
   getLearnerState,
   getMessagesByChatId,
+  getPersonalGraph,
   getUnreviewedChats,
   saveChatReport,
   saveLearnerState,
+  savePersonalGraph,
 } from "@/lib/db/queries";
+import {
+  applyConceptChanges,
+  emptyPersonalGraph,
+} from "@/lib/learner/personal";
 import { applyReview, sessionReport } from "@/lib/learner/review";
 import type { SessionReport } from "@/lib/types";
 import { reviewSession, type TranscriptLine } from "./review";
@@ -76,8 +82,12 @@ export async function endSession(input: {
     }))
     .filter((line) => line.text !== "");
 
-  const { leaks, verdicts } = await reviewSession({
+  const personal =
+    (await getPersonalGraph({ studentId: input.studentId })) ??
+    emptyPersonalGraph(input.studentId);
+  const { concepts, leaks, verdicts } = await reviewSession({
     graph: course.graph,
+    personal,
     sessionId: input.chatId,
     state: before,
     transcript,
@@ -87,6 +97,25 @@ export async function endSession(input: {
   const fresh = (await getLearnerState(input)) ?? before;
   const applied = applyReview(fresh, course.graph, input.chatId, verdicts, now);
   await saveLearnerState({ state: applied.state });
+  // 个人图谱：课外概念的新增 / 更新 / 作废，同样在落库前重新读一次
+  const freshPersonal =
+    (await getPersonalGraph({ studentId: input.studentId })) ?? personal;
+  const nextPersonal = applyConceptChanges(
+    freshPersonal,
+    [course.graph],
+    concepts,
+    input.chatId,
+    now
+  );
+  await savePersonalGraph({ graph: nextPersonal });
+  const changed = nextPersonal.log
+    .slice(freshPersonal.log.length)
+    .map((entry) => ({
+      name:
+        nextPersonal.concepts.find((c) => c.id === entry.conceptId)?.name ??
+        entry.conceptId,
+      op: entry.op,
+    }));
   const report = sessionReport({
     confirmed: applied.confirmed,
     graph: course.graph,
@@ -96,6 +125,7 @@ export async function endSession(input: {
     sessionId: input.chatId,
     state: applied.state,
   });
+  report.concepts = changed;
   await saveChatReport({ id: input.chatId, report });
   return report;
 }

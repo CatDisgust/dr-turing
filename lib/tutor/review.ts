@@ -2,12 +2,29 @@ import "server-only";
 import { z } from "zod";
 import { askJson } from "@/lib/graph/ask";
 import { misconceptionText } from "@/lib/learner/question";
-import type { CourseGraph, LearnerState, ReviewVerdict } from "@/lib/types";
+import type {
+  ConceptChange,
+  CourseGraph,
+  LearnerState,
+  PersonalGraph,
+  ReviewVerdict,
+} from "@/lib/types";
 
 // 慢路径复核（会后跑一次，high）：通读整段对话，逐条确认或推翻快路径批改的暂定结论，
 // 再找出导师没被要求就把答案说出来的轮次。只给结论和理由，数由引擎重算
 
 const reviewSchema = z.object({
+  concepts: z.array(
+    z.object({
+      definition: z.string(),
+      level: z.enum(["touched", "claimed"]),
+      name: z.string(),
+      op: z.enum(["add", "update", "invalidate"]),
+      quote: z.string(),
+      reason: z.string(),
+      sameAs: z.string(),
+    })
+  ),
   leakedMessageIds: z.array(z.string()),
   verdicts: z.array(
     z.object({
@@ -35,6 +52,15 @@ const SYSTEM = [
   "拿不准就 confirm。每条证据都要给结论。",
   "",
   "二、找答案泄漏：导师在学生作答之前、学生也没要求的情况下，自己把题目的答案说了出来。把这些助手消息的 id 放进 leakedMessageIds；没有就给空数组。",
+  "",
+  "三、更新学生的个人图谱（只管课外概念）。找出学生在这次对话里自己提到、问到或说自己学过的概念，它们对不上下面给的任何课程知识点。",
+  "- 对得上课程知识点的不要列：课内的掌握只认答题证据。",
+  "- 对得上已有课外概念的（同一个东西换了个说法也算），op 填 update，sameAs 填它的 id。",
+  "- 全新的，op 填 add，sameAs 留空。粒度和课程知识点相当：一个术语或一个具体概念，不要整门学科。",
+  "- 对话表明之前记下的课外概念记错了（比如学生说其实没学过），op 填 invalidate，sameAs 填它的 id，reason 写原因。",
+  "- level：学生说自己学过、会用，填 claimed；只是提到或问到，填 touched。",
+  "- quote 是学生的原话；definition 用一句中文写清楚这个概念。",
+  "- 只记学生说的，导师自己提到的不算。没有就给空数组。宁缺毋滥。",
 ].join("\n");
 
 export async function reviewSession(input: {
@@ -42,7 +68,12 @@ export async function reviewSession(input: {
   state: LearnerState;
   sessionId: string;
   transcript: TranscriptLine[];
-}): Promise<{ verdicts: ReviewVerdict[]; leaks: number }> {
+  personal: PersonalGraph;
+}): Promise<{
+  verdicts: ReviewVerdict[];
+  leaks: number;
+  concepts: ConceptChange[];
+}> {
   const { graph, state, sessionId } = input;
   const evidence: string[] = [];
   for (const [kpId, node] of Object.entries(state.nodes)) {
@@ -64,9 +95,12 @@ export async function reviewSession(input: {
   const assistantIds = new Set(
     input.transcript.filter((l) => l.role === "assistant").map((l) => l.id)
   );
-  if (evidence.length === 0 && assistantIds.size === 0) {
-    return { leaks: 0, verdicts: [] };
+  if (input.transcript.length === 0) {
+    return { concepts: [], leaks: 0, verdicts: [] };
   }
+  const known = input.personal.concepts.filter(
+    (c) => c.status !== "invalidated"
+  );
 
   const text = [
     "整段对话（每条带消息 id）：",
@@ -76,6 +110,14 @@ export async function reviewSession(input: {
     "",
     "要复核的暂定证据：",
     ...(evidence.length > 0 ? evidence : ["（无）"]),
+    "",
+    `课程「${graph.name}」的知识点（这些不算课外概念）：`,
+    graph.points.map((p) => p.name).join("、"),
+    "",
+    "学生已有的课外概念：",
+    ...(known.length > 0
+      ? known.map((c) => `- ${c.id}「${c.name}」：${c.definition}`)
+      : ["（无）"]),
   ].join("\n");
 
   const result = await askJson([{ text, type: "text" }], reviewSchema, {
@@ -84,6 +126,7 @@ export async function reviewSession(input: {
     tier: "review",
   });
   return {
+    concepts: result.concepts,
     leaks: new Set(result.leakedMessageIds.filter((id) => assistantIds.has(id)))
       .size,
     verdicts: result.verdicts,

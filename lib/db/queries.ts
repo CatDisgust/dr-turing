@@ -21,6 +21,7 @@ import { ChatbotError } from "../errors";
 import type {
   CourseGraph,
   LearnerState,
+  PersonalGraph,
   SessionReport,
   Transaction,
 } from "../types";
@@ -33,6 +34,7 @@ import {
   document,
   learnerState,
   message,
+  personalGraph,
   type Suggestion,
   stream,
   suggestion,
@@ -745,6 +747,51 @@ export async function reopenChat({ id }: { id: string }) {
       .update(chat)
       .set({ report: null, reviewedAt: null })
       .where(eq(chat.id, id));
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// ---- D9b：个人图谱 ----
+
+export async function getPersonalGraph({ studentId }: { studentId: string }) {
+  try {
+    const [row] = await db
+      .select()
+      .from(personalGraph)
+      .where(eq(personalGraph.studentId, studentId));
+    return row?.graph ?? null;
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function savePersonalGraph({ graph }: { graph: PersonalGraph }) {
+  try {
+    return await db
+      .insert(personalGraph)
+      .values({ graph, studentId: graph.studentId })
+      .onConflictDoUpdate({
+        set: { graph, updatedAt: new Date() },
+        target: personalGraph.studentId,
+      });
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// 一个学生在所有课上的状态：底层能力跨课程统计
+export async function getLearnerStatesByStudent({
+  studentId,
+}: {
+  studentId: string;
+}) {
+  try {
+    const rows = await db
+      .select()
+      .from(learnerState)
+      .where(eq(learnerState.studentId, studentId));
+    return rows.map((row) => row.state);
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }

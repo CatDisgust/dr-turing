@@ -16,6 +16,8 @@ import type { SessionReport } from "@/lib/types";
 
 // 顶栏“结束本次学习”：跑会后复核，弹出这次的会话报告
 
+const CONCEPT_OP = { add: "新增", invalidate: "作废", update: "更新" } as const;
+
 const percent = (x: number | null) =>
   x === null ? "—" : `${Math.round(x * 100)}%`;
 
@@ -135,6 +137,16 @@ function ReportBody({ report }: { report: SessionReport }) {
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+      {report.concepts && report.concepts.length > 0 ? (
+        <section className="text-xs" data-testid="report-concepts">
+          <h4 className="mb-1 font-medium text-sm">个人图谱</h4>
+          <p className="text-muted-foreground">
+            {report.concepts
+              .map((c) => `${CONCEPT_OP[c.op]}「${c.name}」`)
+              .join("，")}
+          </p>
         </section>
       ) : null}
       <section className="text-xs">

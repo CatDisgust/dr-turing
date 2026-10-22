@@ -7,6 +7,7 @@ import {
   lightSwatch,
 } from "@/components/graph/graph-panel";
 import { NodeDrawer } from "@/components/graph/node-drawer";
+import { PersonalPanel } from "@/components/graph/personal-panel";
 import { useLearnerState } from "@/hooks/use-learner-state";
 import { COURSE_ID, GRADED_EVENT, NODE_TOUCHED_EVENT } from "@/lib/constants";
 import { type Light, nodeLight } from "@/lib/learner/light";
@@ -108,6 +109,7 @@ export function LearnerGraph({ sessionId }: { sessionId: string }) {
           ) : null}
         </div>
       ) : null}
+      <PersonalPanel state={state} total={graph.points.length} />
       {openPoint ? (
         <NodeDrawer
           node={state?.nodes[openPoint.id]}

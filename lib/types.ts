@@ -150,6 +150,8 @@ export type Attempt = {
   misconceptionId?: string;
   source: "fast" | "slow" | "student_edit";
   provisional: boolean; // 快路径写入时为 true，复核后转正或撤销
+  // 答的是哪种题；“保持”这项能力只看隔天复习题。D9 之前的证据没有这个字段
+  questionKind?: PendingQuestion["kind"];
 };
 
 export type NodeMisconception = {
@@ -230,6 +232,8 @@ export type SessionReport = {
   oGain: { kpId: string; name: string; before: number; after: number }[];
   confirmed: number;
   retracted: { kpId: string; name: string; quote: string; reason: string }[];
+  // 这次复核对个人图谱课外概念的改动
+  concepts?: { op: "add" | "update" | "invalidate"; name: string }[];
 };
 
 // 导师留给学生的一道题。题和批改依据都在服务端，学生看到的只有题面
@@ -287,4 +291,57 @@ export type TutorPlan = {
   rationale: string;
   // 动作永远由规则定；其余字段正常由 Claude 填，调用失败时退回规则默认值
   filled_by?: "claude" | "rules";
+};
+
+// ---- 个人图谱（D9b，叠加模型）：课内知识点的状态就是 LearnerState；
+// 这里只存对不上任何课程知识点的“课外概念”，一律标“未锚定”，学生可以删 ----
+export type PersonalConcept = {
+  id: string;
+  name: string;
+  definition: string;
+  // 未锚定；被复核作废的保留原因，不再显示
+  status: "unanchored" | "invalidated";
+  // 只到“接触过 / 自称会”两档：课外概念没有检查题，算不上“会”
+  level: "touched" | "claimed";
+  evidence: { sessionId: string; quote: string; at: string }[];
+  note?: string;
+  createdAt: string;
+};
+
+export type PersonalGraph = {
+  studentId: string;
+  concepts: PersonalConcept[];
+  // 每次复核的新增 / 更新 / 作废，带原话，只追加
+  log: {
+    at: string;
+    sessionId: string;
+    op: "add" | "update" | "invalidate";
+    conceptId: string;
+    quote: string;
+  }[];
+};
+
+// 复核给出的课外概念变更
+export type ConceptChange = {
+  op: "add" | "update" | "invalidate";
+  // 已有课外概念或课程知识点的 id；新概念留空
+  sameAs: string;
+  name: string;
+  definition: string;
+  level: PersonalConcept["level"];
+  quote: string;
+  reason: string;
+};
+
+// 底层能力：代码从全部证据统计，贝叶斯比例估计（Beta-binomial）
+export type Ability = {
+  key: "self_explanation" | "independence" | "retention";
+  label: string;
+  value: number; // 后验均值 (k + α) / (n + α + β)
+  low: number; // 95% 区间
+  high: number;
+  k: number;
+  n: number;
+  certain: boolean; // 证据够不够下结论
+  evidence: { quote: string; at: string; success: boolean }[];
 };
