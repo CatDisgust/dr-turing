@@ -15,6 +15,7 @@ import type {
   Attempt,
   CourseGraph,
   LearnerState as LearnerStateData,
+  PersonalGraph as PersonalGraphData,
   SessionReport,
   TutorPlan,
 } from "../types";
@@ -183,4 +184,11 @@ export const transaction = pgTable("Transaction", {
   messageId: uuid("messageId").notNull(),
   sessionId: uuid("sessionId").notNull(),
   studentId: uuid("studentId").notNull(),
+});
+
+// 个人图谱（D9b）：每个学生一份，跨课程。课内状态在 LearnerState，这里只放课外概念
+export const personalGraph = pgTable("PersonalGraph", {
+  graph: jsonb("graph").$type<PersonalGraphData>().notNull(),
+  studentId: uuid("studentId").primaryKey().notNull(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });

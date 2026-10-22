@@ -22,6 +22,7 @@ import {
   updateChatTitleById,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
+import { computeAbilities, describeAbilities } from "@/lib/learner/abilities";
 import { emptyLearnerState } from "@/lib/learner/update";
 import { auth } from "@/lib/session";
 import { describePlan, tutorPrompts } from "@/lib/tutor/prompts";
@@ -266,6 +267,8 @@ export async function POST(request: Request) {
           turn?.graph.points.find((p) => p.id === kpId)?.name ?? kpId;
         const extra = [
           plan ? describePlan(plan, nameOf, Boolean(step?.question)) : null,
+          // 三项底层能力：证据够了才说，只调讲法
+          turn ? describeAbilities(computeAbilities([turn.state])) : null,
           step?.note
             ? `本轮情况（系统告诉你的，回复里不要提到它）：${step.note}`
             : null,

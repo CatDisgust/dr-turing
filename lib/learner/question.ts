@@ -90,6 +90,7 @@ export function attemptFromGrading(
       grading.misconception > 0 ? `m${grading.misconception - 1}` : undefined,
     producedStep: grading.producedStep,
     provisional: true,
+    questionKind: pending.kind,
     sessionId: pending.sessionId,
     source: "fast",
     type,
