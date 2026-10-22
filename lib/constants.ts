@@ -19,3 +19,4 @@ export const COURSE_ID = process.env.NEXT_PUBLIC_COURSE_ID ?? "comp5348";
 // 聊天和图谱、课件之间用窗口事件通知，不加全局状态
 export const NODE_TOUCHED_EVENT = "dr:node-touched";
 export const LEARNER_REFRESH_EVENT = "dr:learner-refresh";
+export const GRADED_EVENT = "dr:graded";

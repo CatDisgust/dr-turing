@@ -18,6 +18,7 @@ import {
   useArtifact,
   useArtifactSelector,
 } from "@/hooks/use-artifact";
+import type { TurnSignal } from "@/lib/learner/policy";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Artifact } from "./artifact";
@@ -27,6 +28,7 @@ import { MaterialPane } from "./material-pane";
 import { submitEditedMessage } from "./message-editor";
 import { Messages } from "./messages";
 import { MultimodalInput } from "./multimodal-input";
+import { QuickActions } from "./quick-actions";
 
 export function ChatShell() {
   const {
@@ -115,6 +117,17 @@ export function ChatShell() {
     [chatId, sendMessage]
   );
 
+  // 快捷按钮：发一句话，同时告诉服务端这是哪种求助
+  const handleSignal = useCallback(
+    (text: string, signal: TurnSignal) => {
+      sendMessage(
+        { parts: [{ text, type: "text" }], role: "user" },
+        { body: { signal } }
+      );
+    },
+    [sendMessage]
+  );
+
   const handleActivateGateway = useCallback(() => {
     window.open(
       "https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%3Fmodal%3Dadd-credit-card",
@@ -158,7 +171,14 @@ export function ChatShell() {
               votes={votes}
             />
 
-            <div className="sticky bottom-0 z-1 mx-auto flex w-full max-w-4xl gap-2 border-t-0 bg-background px-2 pb-3 md:px-4 md:pb-4">
+            <div className="sticky bottom-0 z-1 mx-auto flex w-full max-w-4xl flex-col gap-2 border-t-0 bg-background px-2 pb-3 md:px-4 md:pb-4">
+              {!isReadonly && (
+                <QuickActions
+                  disabled={status === "submitted" || status === "streaming"}
+                  onSignal={handleSignal}
+                  sessionId={chatId}
+                />
+              )}
               {!isReadonly && (
                 <MultimodalInput
                   attachments={attachments}

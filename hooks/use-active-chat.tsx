@@ -24,6 +24,7 @@ import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { useAutoResume } from "@/hooks/use-auto-resume";
 import {
   COURSE_ID,
+  GRADED_EVENT,
   LEARNER_REFRESH_EVENT,
   NODE_TOUCHED_EVENT,
 } from "@/lib/constants";
@@ -109,6 +110,12 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     onData: (dataPart) => {
       if (dataPart.type === "data-waiting-status") {
         setWaitingStatus(dataPart.data);
+        return;
+      }
+      if (dataPart.type === "data-graded") {
+        window.dispatchEvent(
+          new CustomEvent(GRADED_EVENT, { detail: dataPart.data })
+        );
         return;
       }
       if (dataPart.type === "data-node-touched") {

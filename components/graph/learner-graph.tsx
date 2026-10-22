@@ -6,53 +6,58 @@ import {
   LIGHT_LEGEND,
   lightSwatch,
 } from "@/components/graph/graph-panel";
-import {
-  COURSE_ID,
-  LEARNER_REFRESH_EVENT,
-  NODE_TOUCHED_EVENT,
-} from "@/lib/constants";
+import { NodeDrawer } from "@/components/graph/node-drawer";
+import { useLearnerState } from "@/hooks/use-learner-state";
+import { COURSE_ID, GRADED_EVENT, NODE_TOUCHED_EVENT } from "@/lib/constants";
 import { type Light, nodeLight } from "@/lib/learner/light";
-import type { CourseGraph, LearnerState } from "@/lib/types";
+import type { CourseGraph } from "@/lib/types";
 
-// 聊天右边的图谱：按当前学生的状态点亮。归类一到就先把那个点虚线亮，回答结束再从库里刷新
+type Graded = {
+  kpId: string;
+  name: string;
+  correct: boolean;
+  misconception?: string;
+};
+
+// 聊天右边的图谱：按当前学生的状态点亮。归类一到就先把那个点虚线亮，批改完、回答结束再从库里刷新。
+// 点一个节点打开抽屉，看证据原话
 export function LearnerGraph({ sessionId }: { sessionId: string }) {
   const [graph, setGraph] = useState<CourseGraph | null>(null);
-  const [state, setState] = useState<LearnerState | null>(null);
+  const state = useLearnerState();
   const [touched, setTouched] = useState<{ kpId: string; name: string }>();
+  const [graded, setGraded] = useState<Graded>();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const refresh = useCallback(() => {
-    fetch(`/api/learner/${COURSE_ID}`)
-      .then((response) => response.json())
-      .then((body) => setState(body.state))
-      .catch(() => {
-        /* 刷新失败就保持上一份 */
-      });
-  }, []);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/course/${COURSE_ID}`)
       .then((response) => response.json())
       .then((body) => setGraph(body.graph ?? null))
       .catch(() => setGraph(null));
-    refresh();
-  }, [refresh]);
+  }, []);
 
   useEffect(() => {
     const onTouched = (event: Event) => {
       const { detail } = event as CustomEvent<{ kpId: string; name: string }>;
       setTouched(detail);
       setSelectedId(detail.kpId);
-      refresh();
+    };
+    const onGraded = (event: Event) => {
+      setGraded((event as CustomEvent<Graded>).detail);
     };
     window.addEventListener(NODE_TOUCHED_EVENT, onTouched);
-    window.addEventListener(LEARNER_REFRESH_EVENT, refresh);
+    window.addEventListener(GRADED_EVENT, onGraded);
     return () => {
       window.removeEventListener(NODE_TOUCHED_EVENT, onTouched);
-      window.removeEventListener(LEARNER_REFRESH_EVENT, refresh);
+      window.removeEventListener(GRADED_EVENT, onGraded);
     };
-  }, [refresh]);
+  }, []);
 
+  const select = useCallback((id: string | null) => {
+    setSelectedId(id);
+    setOpenId(id);
+  }, []);
+  const close = useCallback(() => setOpenId(null), []);
   const lights = useMemo(() => {
     const result: Record<string, Light> = {};
     for (const point of graph?.points ?? []) {
@@ -64,6 +69,8 @@ export function LearnerGraph({ sessionId }: { sessionId: string }) {
     }
     return result;
   }, [graph, state, sessionId, touched]);
+
+  const openPoint = graph?.points.find((p) => p.id === openId);
 
   if (!graph) {
     return (
@@ -79,7 +86,7 @@ export function LearnerGraph({ sessionId }: { sessionId: string }) {
         focusId={touched?.kpId}
         graph={graph}
         lights={lights}
-        onSelect={setSelectedId}
+        onSelect={select}
         selectedId={selectedId}
       />
       {touched ? (
@@ -88,7 +95,26 @@ export function LearnerGraph({ sessionId }: { sessionId: string }) {
           data-testid="touched-node"
         >
           这次在问：{touched.name}
+          {graded?.kpId === touched.kpId ? (
+            <span
+              className={graded.correct ? "text-emerald-600" : "text-red-600"}
+              data-testid="graded"
+            >
+              {graded.correct ? " · 答对了" : " · 没答对"}
+              {graded.misconception
+                ? `，像这个误解：${graded.misconception}`
+                : ""}
+            </span>
+          ) : null}
         </div>
+      ) : null}
+      {openPoint ? (
+        <NodeDrawer
+          node={state?.nodes[openPoint.id]}
+          onClose={close}
+          point={openPoint}
+          sessionId={sessionId}
+        />
       ) : null}
       <div className="absolute right-3 bottom-3 flex flex-col gap-1 rounded-md border bg-background/90 p-2 text-xs">
         {LIGHT_LEGEND.map((item) => (
