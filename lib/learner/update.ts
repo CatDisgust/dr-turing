@@ -113,11 +113,15 @@ function reviewEvidence(attempt: Attempt) {
   };
 }
 
-type Carry = Pick<NodeState, "explained" | "checkFlag" | "touchedInSession">;
+type Carry = Pick<
+  NodeState,
+  "explained" | "checkFlag" | "touchedInSession" | "retracted"
+>;
 
 const carryOf = (node: NodeState): Carry => ({
   checkFlag: node.checkFlag,
   explained: node.explained,
+  retracted: node.retracted,
   touchedInSession: node.touchedInSession,
 });
 

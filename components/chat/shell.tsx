@@ -18,6 +18,7 @@ import {
   useArtifact,
   useArtifactSelector,
 } from "@/hooks/use-artifact";
+import { COURSE_ID, LEARNER_REFRESH_EVENT } from "@/lib/constants";
 import type { TurnSignal } from "@/lib/learner/policy";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -70,6 +71,23 @@ export function ChatShell() {
       setAttachments([]);
     }
   }, [chatId, setArtifact]);
+
+  // 开新对话：之前没点“结束本次学习”的会话在后台补跑复核，跑完刷新图谱
+  const isNewChat = messages.length === 0;
+  useEffect(() => {
+    if (!isNewChat || isReadonly) {
+      return;
+    }
+    fetch("/api/session/catch-up", {
+      body: JSON.stringify({ courseId: COURSE_ID, exceptChatId: chatId }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    })
+      .then(() => window.dispatchEvent(new Event(LEARNER_REFRESH_EVENT)))
+      .catch(() => {
+        /* 补跑失败下次再补 */
+      });
+  }, [chatId, isNewChat, isReadonly]);
 
   const handleEditMessage = useCallback(
     (msg: ChatMessage) => {
@@ -151,6 +169,7 @@ export function ChatShell() {
           )}
         >
           <ChatHeader
+            canEnd={messages.length > 0 && status === "ready"}
             chatId={chatId}
             isReadonly={isReadonly}
             selectedVisibilityType={visibilityType}

@@ -14,9 +14,11 @@ import {
   getCourseById,
   getLearnerState,
   getMessagesByChatId,
+  reopenChat,
   saveChat,
   saveLearnerState,
   saveMessages,
+  saveTransaction,
   updateChatTitleById,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
@@ -133,6 +135,9 @@ export async function POST(request: Request) {
       if (chat.userId !== session.user.id) {
         return new ChatbotError("forbidden:chat").toResponse();
       }
+      if (chat.reviewedAt) {
+        await reopenChat({ id });
+      }
     } else {
       await saveChat({
         id,
@@ -236,6 +241,19 @@ export async function POST(request: Request) {
           }
           const { state } = step;
           await safely("save learner state", () => saveLearnerState({ state }));
+          if (graded && courseId) {
+            // 只追加的作答记录：每次批改一行
+            await safely("save transaction", () =>
+              saveTransaction({
+                attempt: graded.attempt,
+                courseId,
+                kpId: graded.point.id,
+                messageId: message.id,
+                sessionId: id,
+                studentId: session.user.id,
+              })
+            );
+          }
         }
         if (plan) {
           writer.write({

@@ -9,6 +9,7 @@ import {
   gt,
   gte,
   inArray,
+  isNull,
   lt,
   type SQL,
 } from "drizzle-orm";
@@ -17,7 +18,12 @@ import postgres from "postgres";
 import type { ArtifactKind } from "@/components/chat/artifact";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { ChatbotError } from "../errors";
-import type { CourseGraph, LearnerState } from "../types";
+import type {
+  CourseGraph,
+  LearnerState,
+  SessionReport,
+  Transaction,
+} from "../types";
 import { generateUUID } from "../utils";
 import {
   type Chat,
@@ -30,6 +36,7 @@ import {
   type Suggestion,
   stream,
   suggestion,
+  transaction,
   type User,
   user,
   vote,
@@ -660,6 +667,84 @@ export async function saveLearnerState({ state }: { state: LearnerState }) {
         set: { state, updatedAt: new Date() },
         target: [learnerState.studentId, learnerState.courseId],
       });
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// ---- D9：作答记录、会后复核 ----
+
+export async function saveTransaction(row: Transaction) {
+  try {
+    return await db.insert(transaction).values(row);
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function getTransactionsBySession({
+  sessionId,
+}: {
+  sessionId: string;
+}) {
+  try {
+    return await db
+      .select()
+      .from(transaction)
+      .where(eq(transaction.sessionId, sessionId))
+      .orderBy(asc(transaction.createdAt));
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// 还没复核过的旧会话，新的在前；开新对话时补跑
+export async function getUnreviewedChats({
+  userId,
+  exceptId,
+  limit,
+}: {
+  userId: string;
+  exceptId: string;
+  limit: number;
+}) {
+  try {
+    const rows = await db
+      .select()
+      .from(chat)
+      .where(and(eq(chat.userId, userId), isNull(chat.reviewedAt)))
+      .orderBy(desc(chat.createdAt))
+      .limit(limit + 1);
+    return rows.filter((row) => row.id !== exceptId).slice(0, limit);
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function saveChatReport({
+  id,
+  report,
+}: {
+  id: string;
+  report: SessionReport;
+}) {
+  try {
+    return await db
+      .update(chat)
+      .set({ report, reviewedAt: new Date(report.reviewedAt) })
+      .where(eq(chat.id, id));
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// 结束后学生又在同一个对话里说话：撤掉复核标记，下次结束或补跑时再复核新的证据
+export async function reopenChat({ id }: { id: string }) {
+  try {
+    return await db
+      .update(chat)
+      .set({ report: null, reviewedAt: null })
+      .where(eq(chat.id, id));
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }
