@@ -29,7 +29,7 @@ async function writeSeed(request: Request) {
   const seed = seedStudents(course.graph, courseId, new Date());
   if (!seed) {
     return Response.json(
-      { error: "图谱里找不到「悲观并发控制（加锁）」这个点" },
+      { error: "图谱里找不到「死锁」这个点" },
       { status: 422 }
     );
   }

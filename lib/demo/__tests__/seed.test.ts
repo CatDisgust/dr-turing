@@ -34,16 +34,21 @@ const pre = (from: string, to: string) => ({
 const graph: CourseGraph = {
   builtAt: "",
   courseId: "comp5348",
-  edges: [pre("conc", "lock"), pre("ctrl", "lock"), pre("txn", "conc")],
+  edges: [
+    pre("lock", "dl"),
+    pre("conc", "lock"),
+    pre("ctrl", "lock"),
+    pre("txn", "conc"),
+  ],
   lessons: [{ fileIds: [], id: "l2", index: 2, title: "COMP5348_W2" }],
   name: "comp5348",
   points: [
     point("conc", "并发及其问题"),
     point("ctrl", "并发控制"),
     point("txn", "事务"),
-    point("lock", "悲观并发控制（加锁）", {
-      kind: "procedure",
-      misconceptions: ["加了锁就不会再有任何并发问题"],
+    point("lock", "悲观并发控制（加锁）", { kind: "procedure" }),
+    point("dl", "死锁", {
+      misconceptions: ["只要加了锁就不会出问题"],
     }),
     point("opt", "乐观并发控制"),
   ],
@@ -62,12 +67,12 @@ const seeded = (g: CourseGraph = graph) => {
 const sorted = (ids: string[]) => [...ids].sort((x, y) => x.localeCompare(y));
 
 describe("seedStudents", () => {
-  it("按名字找到加锁这个点", () => {
-    expect(demoTarget(graph)?.id).toBe("lock");
+  it("按名字找到死锁这个点", () => {
+    expect(demoTarget(graph)?.id).toBe("dl");
     expect(
       demoTarget({
         ...graph,
-        points: graph.points.filter((p) => p.id !== "lock"),
+        points: graph.points.filter((p) => p.id !== "dl"),
       })
     ).toBeNull();
   });
@@ -75,26 +80,26 @@ describe("seedStudents", () => {
   it("A 的两跳前置都到半亮，B 的都没到", () => {
     const seed = seeded();
     const rows = seedSummary(seed);
-    expect(sorted(rows.map((r) => r.id))).toEqual(["conc", "ctrl", "txn"]);
+    expect(sorted(rows.map((r) => r.id))).toEqual(["conc", "ctrl", "lock"]);
     expect(rows.every((r) => r.aOwned)).toBe(true);
     expect(rows.every((r) => !r.bOwned)).toBe(true);
-    expect(seed.a.nodes.lock).toBeUndefined();
-    expect(seed.b.nodes.lock?.misconceptions[0]?.status).not.toBe("repaired");
+    expect(seed.a.nodes.dl).toBeUndefined();
+    expect(seed.b.nodes.dl?.misconceptions[0]?.status).not.toBe("repaired");
     expect(seed.b.nodes.conc?.helpRequests).toBeGreaterThan(0);
   });
 
   it("规则默认值：A 讲解、从前置讲起；B 先查误解、没有可借力的前置", () => {
     const seed = seeded();
     const plan = (state: typeof seed.a) =>
-      planTurn({ graph, kpId: "lock", sessionId: "s", state });
+      planTurn({ graph, kpId: "dl", sessionId: "s", state });
     const a = plan(seed.a);
     const b = plan(seed.b);
     expect(a.next_action).toBe("teach");
-    expect(sorted(a.start_from)).toEqual(["conc", "ctrl", "txn"]);
+    expect(sorted(a.start_from)).toEqual(["conc", "ctrl", "lock"]);
     expect(a.check_misconception_first).toBeUndefined();
     expect(b.next_action).toBe("diagnose_misconception");
     expect(b.start_from).toEqual([]);
-    expect(b.check_misconception_first).toBe("加了锁就不会再有任何并发问题");
+    expect(b.check_misconception_first).toBe("只要加了锁就不会出问题");
     expect(a.disclosure_level).not.toBe(b.disclosure_level);
   });
 
@@ -102,19 +107,19 @@ describe("seedStudents", () => {
     const plain = {
       ...graph,
       points: graph.points.map((p) =>
-        p.id === "lock" ? { ...p, misconceptions: [] } : p
+        p.id === "dl" ? { ...p, misconceptions: [] } : p
       ),
     };
     const seed = seeded(plain);
     expect(seed.misconception).toBeUndefined();
-    expect(seed.b.nodes.lock?.misconceptions).toEqual([]);
+    expect(seed.b.nodes.dl?.misconceptions).toEqual([]);
   });
 });
 
 describe("compareRuns", () => {
   const seed = seeded();
-  const a = planTurn({ graph, kpId: "lock", sessionId: "s", state: seed.a });
-  const b = planTurn({ graph, kpId: "lock", sessionId: "s", state: seed.b });
+  const a = planTurn({ graph, kpId: "dl", sessionId: "s", state: seed.a });
+  const b = planTurn({ graph, kpId: "dl", sessionId: "s", state: seed.b });
 
   it("规则默认值下 A、B 至少 3 项不同，5 次都一样就算稳定", () => {
     const verdict = compareRuns(Array.from({ length: 5 }, () => ({ a, b })));
@@ -138,5 +143,41 @@ describe("compareRuns", () => {
   it("start_from 顺序不同不算不同", () => {
     const reordered = { ...a, start_from: [...a.start_from].reverse() };
     expect(compareRuns([{ a, b: reordered }]).alwaysDifferent).toBe(0);
+  });
+});
+
+describe("线上图谱的样子", () => {
+  // 死锁只有一个前置：加锁；加锁 part_of 并发控制，自己没有前置
+  const online: CourseGraph = {
+    ...graph,
+    edges: [
+      pre("lock", "dl"),
+      {
+        from: "lock",
+        status: "tentative" as const,
+        to: "ctrl",
+        type: "part_of" as const,
+      },
+    ],
+  };
+
+  it("只有一个前置也能拉开：A 从加锁讲起，B 先查误解", () => {
+    const seed = seeded(online);
+    expect(seedSummary(seed).map((r) => r.id)).toEqual(["lock"]);
+    const a = planTurn({
+      graph: online,
+      kpId: "dl",
+      sessionId: "s",
+      state: seed.a,
+    });
+    const b = planTurn({
+      graph: online,
+      kpId: "dl",
+      sessionId: "s",
+      state: seed.b,
+    });
+    expect(a.start_from).toEqual(["lock"]);
+    expect(b.start_from).toEqual([]);
+    expect(compareRuns([{ a, b }]).alwaysDifferent).toBeGreaterThanOrEqual(3);
   });
 });

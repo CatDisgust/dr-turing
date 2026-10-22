@@ -14,10 +14,11 @@ import type {
 // A：前置都独立答对过、隔天也还会，求助少，爱自己推；
 // B：前置答错过、要过提示才勉强做对，在目标点上答错过一次、错法像已知误解
 
-export const DEMO_QUESTION = "加锁为什么能解决并发冲突？";
+export const DEMO_QUESTION = "加锁为什么会死锁？";
 
-// 用户 2026-10-22 定：第 2 课「悲观并发控制（加锁）」。按名字和别名找，不认死 id
-const TARGET = /悲观并发|加锁|pessimistic|locking/i;
+// 用户 2026-10-22 定：第 2 课「死锁」，它的前置是「悲观并发控制（加锁）」。
+// 原定的加锁本身没有前置（它 part_of 并发控制），A、B 拉不开。按名字和别名找，不认死 id
+const TARGET = /死锁|deadlock/i;
 
 export const [, STUDENT_A, STUDENT_B] = STUDENTS;
 
@@ -165,7 +166,7 @@ export function seedStudents(
       questionKind: "check",
       quote: misconception
         ? `（预置）B 的回答：${misconception}`
-        : "（预置）B 答错了加锁的题",
+        : "（预置）B 答错了死锁的题",
       type: "check_wrong",
     })
   );
