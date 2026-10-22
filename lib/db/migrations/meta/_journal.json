@@ -50,6 +50,13 @@
       "when": 1792690000000,
       "tag": "0006_personal_graph",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792700000000,
+      "tag": "0007_demo_ab",
+      "breakpoints": true
     }
   ]
 }
