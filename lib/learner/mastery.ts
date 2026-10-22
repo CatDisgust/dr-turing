@@ -59,8 +59,8 @@ export function isGraded(attempt: Attempt): boolean {
 
 // 一条批改过的证据怎么动 M、O（主文档“学生怎么建模”的更新表）：
 // - 答案被揭示后照着做对（d = 0）：弱证据，学习率减半，O 不动
-// - 隔天复习独立做对、变式题独立做对：O 向 M 靠拢
-//   （只靠 d 吃涨幅时 O 的上限是 1 − 先验 = 0.7，永远到不了全亮门槛，见 D6 的单测）
+// - 隔天复习独立做对：O 向 M 靠拢
+//   只靠 d 吃涨幅时 O 的上限是 1 − 先验 = 0.7，到不了全亮门槛，所以全亮只能靠隔天复习（用户 2026-10-22 定）
 // - 其余：M 按 BKT，O 按 d 吃到 M 的涨幅；答错时 M 降、O 不变
 export function applyGraded(
   { M, O }: { M: number; O: number },
@@ -74,9 +74,7 @@ export function applyGraded(
     revealed ? { ...BKT, learn: BKT.learn * REVEALED_LEARN_FACTOR } : BKT
   );
   let nextO = updateO(O, M, next, attempt.d);
-  const pulls =
-    attempt.type === "review_correct" || attempt.type === "transfer_correct";
-  if (pulls && correct && !attempt.hinted) {
+  if (attempt.type === "review_correct" && correct && !attempt.hinted) {
     nextO = Math.min(next, Math.max(nextO, O + REVIEW_PULL * (next - O)));
   }
   return { M: next, O: nextO };

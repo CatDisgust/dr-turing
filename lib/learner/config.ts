@@ -37,5 +37,5 @@ export const ENGAGEMENT_LOW = 3;
 // 主文档更新表：答案被揭示后照着做对是弱证据，学习率减半
 export const REVEALED_LEARN_FACTOR = 0.5;
 
-// 隔天复习独立做对（主文档）和变式题独立做对（D6 新增），O 向 M 靠拢这么多（假设）
+// 主文档更新表：隔天复习独立做对，O 向 M 靠拢这么多（假设）。这是 O 达到全亮门槛的唯一途径
 export const REVIEW_PULL = 0.5;

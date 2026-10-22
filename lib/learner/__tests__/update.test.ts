@@ -159,7 +159,7 @@ describe("更新表：每种事件", () => {
     expect(gap(node.review)).toBeGreaterThan(gap(first.review));
   });
 
-  it("变式题独立做对：O 向 M 靠拢，迁移题记为通过；有提示的不算", () => {
+  it("变式题做对：d = 1，迁移题记为通过；有提示的不算", () => {
     let s = apply(start(), "kp_race", {
       d: 0.5,
       hinted: true,
@@ -170,7 +170,7 @@ describe("更新表：每种事件", () => {
     s = apply(s, "kp_race", { type: "transfer_correct" });
     const node = s.nodes.kp_race;
     expect(node.transferPassed).toBe(true);
-    expect(node.O).toBeCloseTo(before.O + 0.5 * (node.M - before.O), 12);
+    expect(node.O).toBeCloseTo(before.O + (node.M - before.M), 12);
   });
 
   it("“说懂了”和求助只记证据，不动 M、O", () => {
@@ -195,7 +195,7 @@ describe("全亮要几道题", () => {
     expect(nodeLight(s.nodes.kp_race).light).toBe("half");
   });
 
-  it("画面二：预置一条有提示的旧证据（半亮），现场独立答对检查题，再独立答对一道变式题 → 全亮", () => {
+  it("画面二当天：有提示的旧证据（半亮）+ 独立答对检查题 + 独立答对变式题，仍是半亮", () => {
     let s = apply(start(), "kp_race", {
       at: "2026-10-12T10:00:00Z",
       d: 0.5,
@@ -205,18 +205,41 @@ describe("全亮要几道题", () => {
     });
     expect(nodeLight(s.nodes.kp_race).light).toBe("half");
     s = apply(s, "kp_race", {});
-    expect(nodeLight(s.nodes.kp_race).light).toBe("half");
     s = apply(s, "kp_race", { type: "transfer_correct" });
+    expect(s.nodes.kp_race.O).toBeLessThan(0.7);
+    expect(nodeLight(s.nodes.kp_race).light).toBe("half");
+  });
+
+  it("画面二要全亮，得预置一次“隔天复习独立做对”", () => {
+    let s = apply(start(), "kp_race", {
+      at: "2026-10-12T10:00:00Z",
+      d: 0.5,
+      hinted: true,
+      provisional: false,
+      sessionId: "old",
+    });
+    s = apply(s, "kp_race", { at: "2026-10-12T10:05:00Z", sessionId: "old" });
+    s = apply(s, "kp_race", {
+      at: "2026-10-13T10:00:00Z",
+      sessionId: "old2",
+      type: "review_correct",
+    });
     expect(s.nodes.kp_race.O).toBeGreaterThanOrEqual(0.7);
     expect(nodeLight(s.nodes.kp_race).light).toBe("full");
   });
 
-  it("从零开始：独立答对两道检查题再答对变式题才全亮，一道不够", () => {
-    let one = apply(start(), "kp_race", {});
-    one = apply(one, "kp_race", { type: "transfer_correct" });
+  it("从零开始：独立答对两道题，隔天复习再答对才全亮；只答对一道再复习不够", () => {
+    const review = {
+      at: "2026-10-23T10:00:00Z",
+      type: "review_correct" as const,
+    };
+    const one = apply(apply(start(), "kp_race", {}), "kp_race", review);
     expect(nodeLight(one.nodes.kp_race).light).toBe("half");
-    let two = apply(apply(start(), "kp_race", {}), "kp_race", {});
-    two = apply(two, "kp_race", { type: "transfer_correct" });
+    const two = apply(
+      apply(apply(start(), "kp_race", {}), "kp_race", {}),
+      "kp_race",
+      review
+    );
     expect(nodeLight(two.nodes.kp_race).light).toBe("full");
   });
 });
@@ -333,7 +356,11 @@ describe("亮度和规划器切片", () => {
     expect(nodeLight(s.nodes.kp_race).light).toBe("half");
     expect(nodeLight(s.nodes.kp_race).provisional).toBe(true);
     s = apply(s, "kp_race", { provisional: false });
-    s = apply(s, "kp_race", { provisional: false, type: "transfer_correct" });
+    s = apply(s, "kp_race", {
+      at: "2026-10-23T10:00:00Z",
+      provisional: false,
+      type: "review_correct",
+    });
     const lit = nodeLight(s.nodes.kp_race);
     expect(lit.light).toBe("full");
     expect(lit.ring).toBe(1);
