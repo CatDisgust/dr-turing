@@ -21,6 +21,7 @@ const userMessageSchema = z.object({
 });
 
 export const postRequestBodySchema = z.object({
+  courseId: z.string().max(64).optional(),
   id: z.uuid(),
   message: userMessageSchema.optional(),
   selectedVisibilityType: z.enum(["public", "private"]),

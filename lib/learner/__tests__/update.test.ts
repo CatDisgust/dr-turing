@@ -10,6 +10,7 @@ import {
   emptyLearnerState,
   markExplained,
   retractEvidence,
+  touchNode,
 } from "../update";
 
 // D6 验收：主文档更新表每条事件各一条单测；随机序列下 O ≤ M 恒成立；
@@ -379,5 +380,27 @@ describe("亮度和规划器切片", () => {
     expect(plannerContext(graph, s, "kp_race").confusable[0].id).toBe(
       "kp_deadlock"
     );
+  });
+});
+
+describe("快路径归类：虚线亮", () => {
+  it("归类到的点在本次会话虚线亮，别的会话看是灰的，不动 M、O", () => {
+    const s = touchNode(start(), "kp_race", "chat1");
+    expect(nodeLight(s.nodes.kp_race, "chat1").light).toBe("dashed");
+    expect(nodeLight(s.nodes.kp_race, "chat2").light).toBe("gray");
+    expect(s.nodes.kp_race.M).toBe(BKT.prior);
+    expect(s.nodes.kp_race.O).toBe(0);
+  });
+
+  it("讲解之后还是虚线亮；有了本次会话的证据照常按 M 算", () => {
+    let s = touchNode(start(), "kp_mutex", "chat1");
+    s = markExplained(s, graph, "kp_mutex");
+    expect(nodeLight(s.nodes.kp_mutex, "chat1").light).toBe("dashed");
+    s = apply(s, "kp_mutex", {
+      correct: false,
+      sessionId: "chat1",
+      type: "check_wrong",
+    });
+    expect(s.nodes.kp_mutex.touchedInSession).toBe("chat1");
   });
 });

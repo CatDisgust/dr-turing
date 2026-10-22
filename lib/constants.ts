@@ -12,3 +12,10 @@ export const suggestions = [
   "乐观并发控制和悲观并发控制有什么区别？",
   "远程方法调用为什么不能当成本地调用来用？",
 ];
+
+// demo 只有一门课；学生状态和快路径归类都按这门课算
+export const COURSE_ID = process.env.NEXT_PUBLIC_COURSE_ID ?? "comp5348";
+
+// 聊天和图谱、课件之间用窗口事件通知，不加全局状态
+export const NODE_TOUCHED_EVENT = "dr:node-touched";
+export const LEARNER_REFRESH_EVENT = "dr:learner-refresh";
