@@ -11,7 +11,11 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { CourseGraph, LearnerState as LearnerStateData } from "../types";
+import type {
+  CourseGraph,
+  LearnerState as LearnerStateData,
+  TutorPlan,
+} from "../types";
 
 export const user = pgTable("User", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
@@ -49,6 +53,8 @@ export const message = pgTable("Message_v2", {
   createdAt: timestamp("createdAt").notNull(),
   id: uuid("id").primaryKey().notNull().defaultRandom(),
   parts: json("parts").notNull(),
+  // 助手消息对应的规划（D9），验收时逐条可查
+  plan: jsonb("plan").$type<TutorPlan>(),
   role: varchar("role").notNull(),
 });
 

@@ -1,4 +1,5 @@
 import "server-only";
+import { planTurn } from "@/lib/learner/planner";
 import type { TurnSignal } from "@/lib/learner/policy";
 import {
   attemptFromGrading,
@@ -11,13 +12,14 @@ import type {
   KnowledgePoint,
   LearnerState,
   PendingQuestion,
+  TutorPlan,
 } from "@/lib/types";
 import { generateUUID } from "@/lib/utils";
 import { classifyQuestion } from "./classify";
 import { gradeAnswer } from "./grade";
 
 // 一轮对话里引擎这一侧要做的事：快捷按钮、批改上一轮留的题、归类新问题。
-// 返回新状态、给导师的情况说明，以及讲完之后要不要出题
+// 返回新状态和给导师的情况说明；之后 planAndAsk 定本轮动作、要不要出题
 
 export type Turn = {
   graph: CourseGraph;
@@ -34,8 +36,6 @@ export type TurnResult = {
   graded?: { point: KnowledgePoint; correct: boolean; misconception?: string };
   // 写进导师 system 的本轮情况；null 就是普通讲解
   note: string | null;
-  // 讲完之后就这个点出一道题
-  askAbout?: KnowledgePoint;
 };
 
 const HELP_ORDER = ["none", "hint", "revealed"] as const;
@@ -105,7 +105,6 @@ export async function answerTurn(turn: Turn): Promise<TurnResult | null> {
   const misconception = misconceptionText(point, attempt.misconceptionId);
   if (grading.correct) {
     return {
-      askAbout: point,
       graded: { correct: true, point },
       note: `学生刚答对了这道题：「${pending.question}」。用一两句话肯定他说对的地方，引用他的原话，不要再重讲一遍。`,
       state: { ...state, pendingQuestion: undefined },
@@ -138,11 +137,75 @@ export async function questionTurn(turn: Turn): Promise<TurnResult> {
     return { note: null, state: turn.state };
   }
   return {
-    askAbout: point,
     note: null,
     state: touchNode(turn.state, point.id, turn.sessionId),
     touched: point,
   };
+}
+
+const ASKS: TutorPlan["next_action"][] = [
+  "teach",
+  "diagnose_misconception",
+  "independent_check",
+  "variant",
+  "review",
+];
+
+// 引擎这一步之后：规划器定本轮动作；讲解、出题、复习之后接一道题（还有题没答完就不出新题）
+export function planAndAsk(
+  turn: Turn,
+  result: TurnResult,
+  signal?: TurnSignal
+): {
+  plan?: TutorPlan;
+  question?: string;
+  state: LearnerState;
+  note: string | null;
+} {
+  const { touched } = result;
+  if (!touched || signal === "skip") {
+    return { note: result.note, state: result.state };
+  }
+  const plan = planTurn({
+    graph: turn.graph,
+    kpId: touched.id,
+    sessionId: turn.sessionId,
+    signal,
+    state: result.state,
+  });
+  const stillOpen = result.state.pendingQuestion?.sessionId === turn.sessionId;
+  const target = turn.graph.points.find((p) => p.id === plan.target_kc);
+  if (
+    stillOpen ||
+    !target ||
+    !ASKS.includes(plan.next_action) ||
+    plan.reveals_answer
+  ) {
+    return { note: result.note, plan, state: result.state };
+  }
+  const asked = askQuestion(turn, result.state, target);
+  if (asked) {
+    return {
+      note: result.note,
+      plan,
+      question: asked.question,
+      state: asked.state,
+    };
+  }
+  // 规则说该出题，但这个点这次的题都做完了：简短收个尾
+  if (plan.prompt === "question" || plan.prompt === "review") {
+    return {
+      note: [
+        result.note,
+        "这个点这次的题都做完了。用一两句话总结他今天弄懂了什么，再问他接下来想弄懂什么。",
+      ]
+        .filter(Boolean)
+        .join(""),
+      plan,
+      state: result.state,
+    };
+  }
+  return { note: result.note, plan, state: result.state };
 }
 
 // 讲完之后出题：选好题、存成 PendingQuestion，返回题面

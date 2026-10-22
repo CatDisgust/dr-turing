@@ -148,6 +148,14 @@ describe("画面二", () => {
     expect(told.helpRequests).toBe(1);
   });
 
+  it("答错留下误解，之后独立答对这个点的题就算修正；靠提示答对不算", () => {
+    let s = answer(start(), "s1", TODAY, "none", false, 1).state;
+    s = answer(s, "s1", TODAY, "hint", true).state;
+    expect(s.nodes.kp_lost.misconceptions[0].status).toBe("suspected");
+    s = answer(s, "s1", TODAY, "none", true).state;
+    expect(s.nodes.kp_lost.misconceptions[0].status).toBe("repaired");
+  });
+
   it("要了提示的复习题答对不算隔天复习", () => {
     let s = answer(start(), "s1", TODAY, "none", true).state;
     s = answer(s, "s2", TOMORROW, "hint", true).state;
