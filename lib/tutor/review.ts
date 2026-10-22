@@ -1,7 +1,6 @@
 import "server-only";
 import { z } from "zod";
 import { askJson } from "@/lib/graph/ask";
-import { misconceptionText } from "@/lib/learner/question";
 import type {
   ConceptChange,
   CourseGraph,
@@ -82,12 +81,11 @@ export async function reviewSession(input: {
       if (!a.provisional || a.sessionId !== sessionId) {
         continue;
       }
-      const mis = point ? misconceptionText(point, a.misconceptionId) : null;
       evidence.push(
         [
           `- 证据 ${a.id}｜知识点「${point?.name ?? kpId}」｜学生消息 ${a.turnId}`,
           `  学生原话：${a.quote}`,
-          `  快速批改：${a.correct ? "答对" : "答错"}；${a.hinted ? "答之前要过提示或答案" : "没要提示"}；${a.producedStep ? "自己说出了推理" : "没有自己的推理"}${mis ? `；像误解「${mis}」` : ""}`,
+          `  快速批改：${a.correct ? "答对" : "答错"}；${a.hinted ? "答之前要过提示或答案" : "没要提示"}；${a.producedStep ? "自己说出了推理" : "没有自己的推理"}${a.misconception ? `；提出的错误想法「${a.misconception}」` : ""}`,
         ].join("\n")
       );
     }

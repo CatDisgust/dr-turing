@@ -7,7 +7,6 @@ import type {
 import { HALF_M } from "./config";
 import { plannerContext } from "./context";
 import { type ActionDecision, nextAction, type TurnSignal } from "./policy";
-import { misconceptionText } from "./question";
 
 // 规划器第一步：七条规则定下一步（policy.nextAction）。其余字段这里按规则给一份默认值，
 // 正常由 Claude 改填（lib/tutor/plan.ts），Claude 调用失败时就用这份
@@ -94,9 +93,9 @@ export function planTurn(input: {
   const owned = target.prereqs.filter((p) => p.M >= HALF_M);
   const start_from = owned.map((p) => p.id);
   const open = target.target.misconceptions.find(
-    (m) => m.status !== "repaired"
+    (m) => m.status !== "repaired" && m.text
   );
-  const check_misconception_first = misconceptionText(point, open?.id);
+  const check_misconception_first = open?.text;
   const dependent = target.target.H !== null && target.target.H >= HIGH_H;
   const newToIt = !target.target.hasEvidence && target.target.M < NEW_TO_IT_M;
 

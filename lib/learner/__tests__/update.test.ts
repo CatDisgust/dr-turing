@@ -23,7 +23,6 @@ const point = (id: string, kind: "concept" | "memory" = "concept") => ({
   id,
   kind,
   lessonId: "l1",
-  misconceptions: [`${id} 的误解`],
   name: id,
   sources: [{ fileId: "f", lessonId: "l1", page: 1, quote: "q" }],
   status: "auto" as const,
@@ -113,32 +112,33 @@ describe("更新表：每种事件", () => {
     expect(H(s, "kp_race")).toBe(1);
   });
 
-  it("做错并匹配误解：M 降、O 不变（除非 M 掉到 O 以下，O 跟着压到 M）；第一次疑似，第二次确认；之后独立做对记为已修正", () => {
+  it("做错并提出错误想法：M 降、O 不变（除非 M 掉到 O 以下，O 跟着压到 M）；第一次疑似，第二次确认；之后独立做对记为已修正", () => {
     let s = apply(start(), "kp_race", {});
     const before = s.nodes.kp_race;
     s = apply(s, "kp_race", {
       correct: false,
-      misconceptionId: "own-copy",
-      quote: "每个线程有自己的 count 副本",
+      misconception: "每个线程有自己的 count 副本",
+      quote: "每个线程都改自己那份 count，不会冲突",
       type: "check_wrong",
     });
     expect(s.nodes.kp_race.M).toBeLessThan(before.M);
     expect(s.nodes.kp_race.O).toBe(Math.min(before.O, s.nodes.kp_race.M));
     expect(s.nodes.kp_race.misconceptions).toEqual([
       {
-        id: "own-copy",
-        lastQuote: "每个线程有自己的 count 副本",
+        id: "e1",
+        lastQuote: "每个线程都改自己那份 count，不会冲突",
         seen: 1,
         status: "suspected",
+        text: "每个线程有自己的 count 副本",
       },
     ]);
     s = apply(s, "kp_race", {
       correct: false,
-      misconceptionId: "own-copy",
+      misconception: "每个线程有自己的 count 副本",
       type: "check_wrong",
     });
     expect(s.nodes.kp_race.misconceptions[0].status).toBe("confirmed");
-    s = apply(s, "kp_race", { misconceptionId: "own-copy" });
+    s = apply(s, "kp_race", {});
     expect(s.nodes.kp_race.misconceptions[0].status).toBe("repaired");
   });
 

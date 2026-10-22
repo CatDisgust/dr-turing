@@ -17,7 +17,6 @@ const point = (
   id,
   kind: "concept",
   lessonId: "l2",
-  misconceptions: [],
   name,
   sources: [],
   status: "auto",
@@ -47,9 +46,7 @@ const graph: CourseGraph = {
     point("ctrl", "并发控制"),
     point("txn", "事务"),
     point("lock", "悲观并发控制（加锁）", { kind: "procedure" }),
-    point("dl", "死锁", {
-      misconceptions: ["只要加了锁就不会出问题"],
-    }),
+    point("dl", "死锁"),
     point("opt", "乐观并发控制"),
   ],
 };
@@ -99,20 +96,16 @@ describe("seedStudents", () => {
     expect(a.check_misconception_first).toBeUndefined();
     expect(b.next_action).toBe("diagnose_misconception");
     expect(b.start_from).toEqual([]);
-    expect(b.check_misconception_first).toBe("只要加了锁就不会出问题");
+    expect(b.check_misconception_first).toBe("只要用了锁就一定会死锁");
     expect(a.disclosure_level).not.toBe(b.disclosure_level);
   });
 
-  it("目标点没写误解时 B 照样能种，只是没有误解可查", () => {
-    const plain = {
-      ...graph,
-      points: graph.points.map((p) =>
-        p.id === "dl" ? { ...p, misconceptions: [] } : p
-      ),
-    };
-    const seed = seeded(plain);
-    expect(seed.misconception).toBeUndefined();
-    expect(seed.b.nodes.dl?.misconceptions).toEqual([]);
+  it("B 的错误想法来自他自己的错答，记在他身上，不靠课程图谱", () => {
+    const seed = seeded();
+    const [m] = seed.b.nodes.dl?.misconceptions ?? [];
+    expect(m?.text).toBe("只要用了锁就一定会死锁");
+    expect(m?.lastQuote).toContain("两个任务都加了锁");
+    expect(seed.a.nodes.dl).toBeUndefined();
   });
 });
 

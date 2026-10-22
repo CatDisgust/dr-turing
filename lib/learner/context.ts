@@ -87,7 +87,6 @@ export function plannerContext(
       checkQuestions: point.checkQuestions,
       definition: point.definition,
       kind: point.kind,
-      knownMisconceptions: point.misconceptions,
       misconceptions: node?.misconceptions ?? [],
       transferPassed: node?.transferPassed ?? false,
     },

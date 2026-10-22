@@ -204,7 +204,8 @@ export function nextAction(input: {
     // ② 学生要答案：给讲解，答案全揭示
     return { action: "teach", kpId, prompt: "aha", rule: 2 };
   }
-  if (node.misconceptions.some((m) => m.status !== "repaired")) {
+  // 只认从学生错答里提出来、有原文的错误想法；旧数据里按图谱误解编号记的没有原文，不再触发
+  if (node.misconceptions.some((m) => m.status !== "repaired" && m.text)) {
     return {
       action: "diagnose_misconception",
       kpId,

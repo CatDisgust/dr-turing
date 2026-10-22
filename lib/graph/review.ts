@@ -37,7 +37,6 @@ function mergePoints(
       (alias) => alias !== keep.name
     ),
     checkQuestions: unique([...keep.checkQuestions, ...drop.checkQuestions]),
-    misconceptions: unique([...keep.misconceptions, ...drop.misconceptions]),
     sources: [...keep.sources, ...drop.sources],
     status: "reviewed",
   };

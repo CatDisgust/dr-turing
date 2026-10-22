@@ -1,11 +1,7 @@
 import "server-only";
 import { planTurn } from "@/lib/learner/planner";
 import type { TurnSignal } from "@/lib/learner/policy";
-import {
-  attemptFromGrading,
-  misconceptionText,
-  pickQuestion,
-} from "@/lib/learner/question";
+import { attemptFromGrading, pickQuestion } from "@/lib/learner/question";
 import { applyEvidence, applySignal, touchNode } from "@/lib/learner/update";
 import type {
   Attempt,
@@ -98,7 +94,10 @@ export async function answerTurn(turn: Turn): Promise<TurnResult | null> {
     return null;
   }
   const { pending, point } = open;
-  const grading = await gradeAnswer(point, pending.question, turn.text);
+  const known = (turn.state.nodes[point.id]?.misconceptions ?? [])
+    .filter((m) => m.status !== "repaired")
+    .map((m) => m.text);
+  const grading = await gradeAnswer(point, pending.question, turn.text, known);
   if (!grading.isAnswer) {
     return null;
   }
@@ -109,7 +108,7 @@ export async function answerTurn(turn: Turn): Promise<TurnResult | null> {
     turnId: turn.turnId,
   });
   const state = applyEvidence(turn.state, turn.graph, point.id, attempt);
-  const misconception = misconceptionText(point, attempt.misconceptionId);
+  const { misconception } = attempt;
   if (grading.correct) {
     return {
       graded: { attempt, correct: true, point },
@@ -123,7 +122,7 @@ export async function answerTurn(turn: Turn): Promise<TurnResult | null> {
     graded: { attempt, correct: false, misconception, point },
     note: [
       `学生答错了这道题：「${pending.question}」。`,
-      misconception ? `他的错法像这个常见误解：${misconception}。` : "",
+      misconception ? `从他的回答看，他可能以为：${misconception}。` : "",
       "不要直接给答案。用一个反例或一个追问让他自己发现哪里不对，然后请他再答一次。",
     ].join(""),
     state: {

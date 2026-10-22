@@ -57,8 +57,8 @@ export function pickQuestion(
 
 export type Grading = {
   correct: boolean;
-  // 命中第几个已知误解，从 1 数；0 表示没有
-  misconception: number;
+  // 答错时提出的错误想法；看不出具体想法就是空字符串
+  misconception: string;
   producedStep: boolean;
 };
 
@@ -86,8 +86,10 @@ export function attemptFromGrading(
     correct: grading.correct,
     d: DEPTH[pending.help],
     hinted,
-    misconceptionId:
-      grading.misconception > 0 ? `m${grading.misconception - 1}` : undefined,
+    misconception:
+      !grading.correct && grading.misconception.trim()
+        ? grading.misconception.trim()
+        : undefined,
     producedStep: grading.producedStep,
     provisional: true,
     questionKind: pending.kind,
@@ -95,13 +97,4 @@ export function attemptFromGrading(
     source: "fast",
     type,
   };
-}
-
-// 误解 id → 建图时写的那句误解原文
-export function misconceptionText(
-  point: Pick<KnowledgePoint, "misconceptions">,
-  id: string | undefined
-): string | undefined {
-  const index = Number(id?.slice(1));
-  return id?.startsWith("m") ? point.misconceptions[index] : undefined;
 }

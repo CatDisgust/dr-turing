@@ -56,18 +56,17 @@ function helpWeight(attempt: Attempt): number {
   return attempt.d === 0.5 ? 0.5 : 1;
 }
 
-// 误解：答错并匹配到某个误解，次数加一，两次及以上转为确认；之后独立答对这个点的题，记为已修正。
-// 题目和误解不是一一对应的，所以独立答对时没标误解 id 就把这个点上没修正的都算修正（D9a）
+// 学生的错误模式：答错时从他的话里提出的那句错误想法，同一句归到一起、次数加一，两次及以上转为确认；
+// 之后独立答对这个点的题，这个点上没修正的都记为已修正（题目和错误想法不是一一对应的，D9a）
 function nextMisconceptions(
   list: NodeMisconception[],
   attempt: Attempt
 ): NodeMisconception[] {
-  const id = attempt.misconceptionId;
   if (!isGraded(attempt)) {
     return list;
   }
-  if (id === undefined) {
-    if (!attempt.correct || attempt.hinted) {
+  if (attempt.correct) {
+    if (attempt.hinted) {
       return list;
     }
     return list.map((m) =>
@@ -76,24 +75,21 @@ function nextMisconceptions(
         : { ...m, lastQuote: attempt.quote, status: "repaired" }
     );
   }
-  const current = list.find((m) => m.id === id);
-  if (attempt.correct) {
-    if (!current || attempt.hinted) {
-      return list;
-    }
-    return list.map((m) =>
-      m.id === id ? { ...m, lastQuote: attempt.quote, status: "repaired" } : m
-    );
+  const text = attempt.misconception?.trim();
+  if (!text) {
+    return list;
   }
+  const current = list.find((m) => m.text === text);
   const seen = (current?.seen ?? 0) + 1;
   const updated: NodeMisconception = {
-    id,
+    id: current?.id ?? `e${list.length + 1}`,
     lastQuote: attempt.quote,
     seen,
     status: seen >= 2 ? "confirmed" : "suspected",
+    text,
   };
   return current
-    ? list.map((m) => (m.id === id ? updated : m))
+    ? list.map((m) => (m.id === current.id ? updated : m))
     : [...list, updated];
 }
 

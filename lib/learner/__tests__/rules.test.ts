@@ -49,7 +49,7 @@ describe("七条规则", () => {
       kpId: "kp",
       node: node({
         misconceptions: [
-          { id: "m", lastQuote: "", seen: 1, status: "suspected" },
+          { id: "e1", lastQuote: "", seen: 1, status: "suspected", text: "x" },
         ],
       }),
       prereqs: [],
@@ -86,7 +86,7 @@ describe("七条规则", () => {
       node: node({
         M: 0.9,
         misconceptions: [
-          { id: "m", lastQuote: "", seen: 2, status: "repaired" },
+          { id: "e1", lastQuote: "", seen: 2, status: "repaired", text: "x" },
         ],
         O: 0.9,
         transferPassed: true,
@@ -147,5 +147,24 @@ describe("七条规则", () => {
       prereqs: [],
     });
     expect([d.rule, d.prompt]).toEqual([7, "review"]);
+  });
+});
+
+describe("学生的错误想法", () => {
+  it("旧数据里没有原文的误解记录不再触发规则③", () => {
+    const d = nextAction({
+      engagement: calm,
+      kpId: "kp",
+      node: node({
+        M: 0.9,
+        misconceptions: [
+          { id: "m0", lastQuote: "", seen: 1, status: "suspected", text: "" },
+        ],
+        O: 0.9,
+        transferPassed: true,
+      }),
+      prereqs: [],
+    });
+    expect(d.rule).toBe(7);
   });
 });

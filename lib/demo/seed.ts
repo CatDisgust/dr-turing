@@ -12,7 +12,7 @@ import type {
 // 画面三（D11）的预置学生：A、B 问同一句话，规划不一样。
 // 两人的历史都是按真实的证据一条条喂给引擎重放出来的，M、O、H 全由引擎算，不手填。
 // A：前置都独立答对过、隔天也还会，求助少，爱自己推；
-// B：前置答错过、要过提示才勉强做对，在目标点上答错过一次、错法像已知误解
+// B：前置答错过、要过提示才勉强做对，在目标点上答错过一次，从他的错答里提出了一个错误想法
 
 export const DEMO_QUESTION = "加锁为什么会死锁？";
 
@@ -31,6 +31,10 @@ export function demoTarget(graph: CourseGraph): KnowledgePoint | null {
 }
 
 const DAY = 24 * 60 * 60 * 1000;
+
+// B 在死锁上的那次错答，和从这句话里提出来的错误想法（批改时就是这样从学生原话里提的）
+const B_ANSWER = "（预置）B 的回答：两个任务都加了锁，所以肯定会死锁";
+const B_MISCONCEPTION = "只要用了锁就一定会死锁";
 
 function attempt(
   sessionId: string,
@@ -105,7 +109,7 @@ export function seedStudents(
     );
   }
 
-  // B：每个前置先答错，要了提示后才答对；目标点上答错一次，错法对上建图时写的第一条误解
+  // B：每个前置先答错，要了提示后才答对；目标点上答错一次，记下他的错误想法
   let b: LearnerState = { ...empty, studentId: STUDENT_B.id };
   for (const [i, p] of prereqs.entries()) {
     const at = t0 + i * 60_000;
@@ -152,7 +156,6 @@ export function seedStudents(
       })
     );
   }
-  const [misconception] = target.misconceptions;
   b = applyEvidence(
     b,
     graph,
@@ -161,12 +164,10 @@ export function seedStudents(
       correct: false,
       d: 0,
       hinted: true,
-      misconceptionId: misconception ? "m0" : undefined,
+      misconception: B_MISCONCEPTION,
       producedStep: false,
       questionKind: "check",
-      quote: misconception
-        ? `（预置）B 的回答：${misconception}`
-        : "（预置）B 答错了死锁的题",
+      quote: B_ANSWER,
       type: "check_wrong",
     })
   );
@@ -177,7 +178,7 @@ export function seedStudents(
   return {
     a,
     b,
-    misconception,
+    misconception: B_MISCONCEPTION,
     prereqs: prereqs.map((p) => ({ id: p.id, name: p.name })),
     target,
   };
