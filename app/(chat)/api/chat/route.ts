@@ -25,6 +25,11 @@ import { ChatbotError } from "@/lib/errors";
 import { computeAbilities, describeAbilities } from "@/lib/learner/abilities";
 import { emptyLearnerState } from "@/lib/learner/update";
 import { auth } from "@/lib/session";
+import {
+  diagnosisAnswer,
+  diagnosisSkip,
+  diagnosisStart,
+} from "@/lib/tutor/diagnose-turn";
 import { describePlan, tutorPrompts } from "@/lib/tutor/prompts";
 import { pipeClaudeToUI, toClaudeMessages } from "@/lib/tutor/to-ui-stream";
 import {
@@ -207,8 +212,22 @@ export async function POST(request: Request) {
 
         // 引擎这一侧先走完：快捷按钮 / 批改上一轮的题 / 归类新问题，再由规划器定本轮动作。
         // 导师用哪段提示词取决于规划，所以归类不能再和讲解并行
-        let result: TurnResult | null = null;
-        if (turn && signal) {
+        // 诊断入口（D10）优先：“我要学第 N 课”、诊断题的回答、诊断中点“先不做题”
+        const diagnosed = turn
+          ? await safely("diagnose", () =>
+              signal === "skip"
+                ? diagnosisSkip(turn)
+                : signal
+                  ? Promise.resolve(null)
+                  : diagnosisAnswer(turn).then(
+                      (answered) => answered ?? diagnosisStart(turn)
+                    )
+            )
+          : null;
+        let result: TurnResult | null = diagnosed?.result ?? null;
+        if (diagnosed) {
+          // 诊断这一侧已经定好了规划和题
+        } else if (turn && signal) {
           result = signalTurn(turn, signal);
         } else if (turn) {
           result =
@@ -216,7 +235,8 @@ export async function POST(request: Request) {
             (await safely("classify", () => questionTurn(turn)));
         }
         const step =
-          turn && result ? await planAndAsk(turn, result, signal) : null;
+          diagnosed?.step ??
+          (turn && result ? await planAndAsk(turn, result, signal) : null);
         const plan = step?.plan;
 
         if (turn && result && step) {
