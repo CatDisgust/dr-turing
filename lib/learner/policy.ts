@@ -200,6 +200,10 @@ export function nextAction(input: {
   if (signal === "hint") {
     return { action: "hint", kpId, prompt: "min_hint", rule: 2 };
   }
+  if (signal === "just_tell_me") {
+    // ② 学生要答案：给讲解，答案全揭示
+    return { action: "teach", kpId, prompt: "aha", rule: 2 };
+  }
   if (node.misconceptions.some((m) => m.status !== "repaired")) {
     return {
       action: "diagnose_misconception",

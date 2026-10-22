@@ -29,6 +29,13 @@
       "when": 1792660000000,
       "tag": "0003_learner_state",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792670000000,
+      "tag": "0004_message_plan",
+      "breakpoints": true
     }
   ]
 }

@@ -56,14 +56,25 @@ function helpWeight(attempt: Attempt): number {
   return attempt.d === 0.5 ? 0.5 : 1;
 }
 
-// 误解：答错并匹配到某个误解，次数加一，两次及以上转为确认；之后独立答对同一个误解的题，记为已修正
+// 误解：答错并匹配到某个误解，次数加一，两次及以上转为确认；之后独立答对这个点的题，记为已修正。
+// 题目和误解不是一一对应的，所以独立答对时没标误解 id 就把这个点上没修正的都算修正（D9a）
 function nextMisconceptions(
   list: NodeMisconception[],
   attempt: Attempt
 ): NodeMisconception[] {
   const id = attempt.misconceptionId;
-  if (id === undefined || !isGraded(attempt)) {
+  if (!isGraded(attempt)) {
     return list;
+  }
+  if (id === undefined) {
+    if (!attempt.correct || attempt.hinted) {
+      return list;
+    }
+    return list.map((m) =>
+      m.status === "repaired"
+        ? m
+        : { ...m, lastQuote: attempt.quote, status: "repaired" }
+    );
   }
   const current = list.find((m) => m.id === id);
   if (attempt.correct) {

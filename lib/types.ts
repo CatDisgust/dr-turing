@@ -5,6 +5,7 @@ import type { Suggestion } from "./db/schema";
 
 export const messageMetadataSchema = z.object({
   createdAt: z.string(),
+  plan: z.custom<TutorPlan>().optional(),
 });
 
 export type MessageMetadata = z.infer<typeof messageMetadataSchema>;
@@ -223,4 +224,26 @@ export type LearnerState = {
   };
   nodes: Record<string, NodeState>;
   pendingQuestion?: PendingQuestion;
+};
+
+// ---- 规划器输出（M3）：LearnTrace 导师动作 + 主文档的“程度 / 方式”字段 ----
+export type TutorPlan = {
+  target_kc: string;
+  next_action:
+    | "diagnose_misconception"
+    | "teach"
+    | "hint"
+    | "independent_check"
+    | "variant"
+    | "review";
+  prompt: "aha" | "counterexample" | "min_hint" | "question" | "review";
+  rule: number; // 命中七条规则里的第几条
+  action_type: "explain" | "scaffold" | "hint" | "ask" | "worked_example";
+  disclosure_level: "question" | "hint" | "partial" | "full";
+  elicits_production: boolean;
+  reveals_answer: boolean;
+  start_from: string[]; // 跳过哪些已掌握的先修（kp id）
+  representation: "analogy" | "code" | "formula" | "diagram";
+  check_misconception_first?: string; // 误解原文
+  rationale: string;
 };

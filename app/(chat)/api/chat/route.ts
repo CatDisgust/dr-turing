@@ -22,15 +22,11 @@ import {
 import { ChatbotError } from "@/lib/errors";
 import { emptyLearnerState } from "@/lib/learner/update";
 import { auth } from "@/lib/session";
-import { ahaPrompt } from "@/lib/tutor/prompts";
-import {
-  buffered,
-  pipeClaudeToUI,
-  toClaudeMessages,
-} from "@/lib/tutor/to-ui-stream";
+import { describePlan, tutorPrompts } from "@/lib/tutor/prompts";
+import { pipeClaudeToUI, toClaudeMessages } from "@/lib/tutor/to-ui-stream";
 import {
   answerTurn,
-  askQuestion,
+  planAndAsk,
   questionTurn,
   signalTurn,
   type Turn,
@@ -164,6 +160,7 @@ export async function POST(request: Request) {
           createdAt: new Date(),
           id: message.id,
           parts: message.parts,
+          plan: null,
           role: "user",
         },
       ],
@@ -202,44 +199,20 @@ export async function POST(request: Request) {
             })
           : null;
 
-        // 快捷按钮、批改上一轮的题：要先知道结果，导师才知道怎么接
+        // 引擎这一侧先走完：快捷按钮 / 批改上一轮的题 / 归类新问题，再由规划器定本轮动作。
+        // 导师用哪段提示词取决于规划，所以归类不能再和讲解并行
         let result: TurnResult | null = null;
         if (turn && signal) {
           result = signalTurn(turn, signal);
         } else if (turn) {
-          result = await safely("grade", () => answerTurn(turn));
+          result =
+            (await safely("grade", () => answerTurn(turn))) ??
+            (await safely("classify", () => questionTurn(turn)));
         }
+        const step = turn && result ? planAndAsk(turn, result, signal) : null;
+        const plan = step?.plan;
 
-        const claudeStream = claude.beta.messages.stream({
-          ...FALLBACK,
-          max_tokens: 64_000,
-          messages: toClaudeMessages(uiMessages),
-          model: MODEL,
-          output_config: { effort: TIERS.tutor.effort },
-          system: [
-            {
-              cache_control: { type: "ephemeral" },
-              text: ahaPrompt,
-              type: "text",
-            },
-            ...(result?.note
-              ? [
-                  {
-                    text: `本轮情况（系统告诉你的，回复里不要提到它）：${result.note}`,
-                    type: "text" as const,
-                  },
-                ]
-              : []),
-          ],
-        });
-
-        const events = buffered(claudeStream);
-
-        // 新问题：归类和讲解同时发出；先等归类，讲解开始时节点已经亮了
-        if (turn && !result) {
-          result = await safely("classify", () => questionTurn(turn));
-        }
-        if (turn && result) {
+        if (turn && result && step) {
           const { graded, touched } = result;
           if (touched) {
             writer.write({
@@ -260,11 +233,42 @@ export async function POST(request: Request) {
               type: "data-graded",
             });
           }
-          const { state } = result;
+          const { state } = step;
           await safely("save learner state", () => saveLearnerState({ state }));
         }
+        if (plan) {
+          writer.write({
+            messageMetadata: { createdAt: new Date().toISOString(), plan },
+            type: "message-metadata",
+          });
+        }
 
-        await pipeClaudeToUI(events, writer);
+        const nameOf = (kpId: string) =>
+          turn?.graph.points.find((p) => p.id === kpId)?.name ?? kpId;
+        const extra = [
+          plan ? describePlan(plan, nameOf, Boolean(step?.question)) : null,
+          step?.note
+            ? `本轮情况（系统告诉你的，回复里不要提到它）：${step.note}`
+            : null,
+        ].filter((line): line is string => line !== null);
+
+        const claudeStream = claude.beta.messages.stream({
+          ...FALLBACK,
+          max_tokens: 64_000,
+          messages: toClaudeMessages(uiMessages),
+          model: MODEL,
+          output_config: { effort: TIERS.tutor.effort },
+          system: [
+            {
+              cache_control: { type: "ephemeral" },
+              text: tutorPrompts[plan?.prompt ?? "aha"],
+              type: "text",
+            },
+            ...extra.map((line) => ({ text: line, type: "text" as const })),
+          ],
+        });
+
+        await pipeClaudeToUI(claudeStream, writer);
 
         const final = await claudeStream.finalMessage();
         if (final.stop_reason === "refusal") {
@@ -272,22 +276,16 @@ export async function POST(request: Request) {
             errorText: "这个问题我没法回答，换个问法试试？",
             type: "error",
           });
-        } else if (turn && result?.askAbout) {
-          // 讲完出一道题：题面由代码写，不靠导师记得出题
-          const asked = askQuestion(turn, result.state, result.askAbout);
-          if (asked) {
-            const partId = generateUUID();
-            writer.write({ id: partId, type: "text-start" });
-            writer.write({
-              delta: `\n\n**检查一下：**${asked.question}`,
-              id: partId,
-              type: "text-delta",
-            });
-            writer.write({ id: partId, type: "text-end" });
-            await safely("save question", () =>
-              saveLearnerState({ state: asked.state })
-            );
-          }
+        } else if (step?.question) {
+          // 题面由代码写，不靠导师记得出题；题已经和状态一起存好了
+          const partId = generateUUID();
+          writer.write({ id: partId, type: "text-start" });
+          writer.write({
+            delta: `\n\n**检查一下：**${step.question}`,
+            id: partId,
+            type: "text-delta",
+          });
+          writer.write({ id: partId, type: "text-end" });
         }
 
         if (titlePromise) {
@@ -310,6 +308,7 @@ export async function POST(request: Request) {
               createdAt: new Date(),
               id: currentMessage.id,
               parts: currentMessage.parts,
+              plan: currentMessage.metadata?.plan ?? null,
               role: currentMessage.role,
             })),
           });
