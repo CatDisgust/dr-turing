@@ -9,6 +9,7 @@ DeepTutor 源码不进本仓库（Apache-2.0，只翻译了几个纯函数），
 
 BKT 那一组 DeepTutor 没有，用本文件里照公式写的 Python 参考实现生成，
 另外把实现规划里那张 6 轮例子表的数字也放进去。
+跑之前确认环境变量 LEARNING_DEBUG 没设（设了 DeepTutor 会把天换成秒）。
 """
 
 from __future__ import annotations
@@ -24,8 +25,11 @@ sys.path.insert(0, str(DT_ROOT))
 
 from deeptutor.learning import mastery as dt_mastery  # noqa: E402
 from deeptutor.learning import policy as dt_policy  # noqa: E402
+from deeptutor.learning.scheduler import SpacedRepetitionScheduler  # noqa: E402
 from deeptutor.learning.models import (  # noqa: E402
     DeferredObjective,
+    ErrorRecord,
+    ErrorType,
     KnowledgePoint,
     KnowledgeType,
     LearnerProfile,
@@ -226,22 +230,28 @@ def next_objective_cases(n: int) -> list[dict]:
     return cases
 
 
-# ---- BKT 参考实现（不是 DeepTutor 的）----
+# ---- BKT 参考实现（不是 DeepTutor 的），按主文档的更新表 ----
 G, S, L, PRIOR = 0.2, 0.1, 0.15, 0.3
+REVEALED_LEARN_FACTOR, REVIEW_PULL = 0.5, 0.5
 
 
-def bkt(m: float, correct: bool) -> float:
+def bkt(m: float, correct: bool, learn: float = L) -> float:
     post = m * (1 - S) / (m * (1 - S) + (1 - m) * G) if correct else m * S / (m * S + (1 - m) * (1 - G))
-    return post + (1 - post) * L
+    return post + (1 - post) * learn
 
 
 def replay(steps: list[dict]) -> list[dict]:
     m, o, out = PRIOR, 0.0, []
     for step in steps:
         if "correct" in step:
-            nm = bkt(m, step["correct"])
-            o = min(nm, o + step["d"] * max(nm - m, 0.0))
-            m = nm
+            correct, d = step["correct"], step["d"]
+            # 答案被揭示后照着做对：学习率减半
+            nm = bkt(m, correct, L * REVEALED_LEARN_FACTOR if correct and d == 0 else L)
+            no = min(nm, o + d * max(nm - m, 0.0))
+            # 隔天复习独立做对：O 向 M 靠拢
+            if step.get("review") and correct and d == 1:
+                no = min(nm, max(no, o + REVIEW_PULL * (nm - o)))
+            m, o = nm, no
         out.append({"M": m, "O": o})
     return out
 
@@ -254,8 +264,91 @@ def bkt_cases(n: int) -> list[dict]:
             if rng.random() < 0.15:
                 steps.append({})  # 没批改的证据，不动 M、O
             else:
-                steps.append({"correct": rng.random() < 0.65, "d": rng.choice([1, 0.5, 0])})
+                step = {"correct": rng.random() < 0.65, "d": rng.choice([1, 0.5, 0])}
+                if rng.random() < 0.2:
+                    step["review"] = True
+                steps.append(step)
         cases.append({"input": steps, "output": replay(steps)})
+    return cases
+
+
+def state_dict(st: RepetitionState) -> dict:
+    return {
+        "intervalIndex": st.interval_index,
+        "consecutiveCorrect": st.consecutive_correct,
+        "consecutiveWrong": st.consecutive_wrong,
+        "nextReviewAt": st.next_review_at,
+        "difficulty": st.difficulty,
+        "stability": st.stability,
+        "retrievability": st.retrievability,
+        "desiredRetention": st.desired_retention,
+        "reviewCount": st.review_count,
+        "lapseCount": st.lapse_count,
+        "lastReviewAt": st.last_review_at,
+        "lastScheduledAt": st.last_scheduled_at,
+        "scheduledAfterFailure": st.scheduled_after_failure,
+    }
+
+
+def scheduler_cases(n: int) -> list[dict]:
+    sched = SpacedRepetitionScheduler()
+    assert not sched.DEBUG_MODE
+    cases = []
+    gaps = [0, 60, 3600, 6 * 3600, 86400, 3 * 86400, 7 * 86400, 20 * 86400]
+    for _ in range(n):
+        kind = rng.choice(KINDS)
+        t = NOW
+        events = []
+        for _ in range(rng.randint(1, 8)):
+            t += rng.choice(gaps)
+            result = rng.choice(["correct", "correct", "incorrect", "partial"])
+            ev = {
+                "timestamp": t,
+                "result": result,
+                "quality": round(rng.random(), 2) if rng.random() < 0.2 else None,
+                "hintsUsed": rng.choice([0, 0, 1, 3]),
+                "attemptCount": rng.choice([1, 1, 2, 4]),
+                "assessmentType": rng.choice(["quiz", "qualitative", "review"]),
+            }
+            events.append(ev)
+        dt_events = [
+            LearningEvidence(
+                knowledge_point_id="kp",
+                timestamp=e["timestamp"],
+                result=e["result"],
+                quality=e["quality"],
+                hints_used=e["hintsUsed"],
+                attempt_count=e["attemptCount"],
+                assessment_type=e["assessmentType"],
+            )
+            for e in events
+        ]
+        states = []
+        state = sched.get_initial_state(KnowledgeType(kind), now=events[0]["timestamp"])
+        for ev in dt_events:
+            sched.schedule_review(state, KnowledgeType(kind), ev, now=ev.timestamp)
+            states.append(state_dict(state))
+        later = t + rng.choice(gaps)
+        has_error = rng.random() < 0.3
+        progress = LearningProgress(
+            book_id="b",
+            error_records=(
+                [ErrorRecord(id="e", question_id="q", knowledge_point_id="kp", module_id="m", error_type=ErrorType.APPLICATION_ERROR)]
+                if has_error
+                else []
+            ),
+        )
+        cases.append(
+            {
+                "kind": kind,
+                "events": events,
+                "states": states,
+                "later": later,
+                "hasActiveError": has_error,
+                "retrievability": sched.retrievability(state, now=later),
+                "forgettingRisk": sched.forgetting_risk(state, progress, "kp", now=later),
+            }
+        )
     return cases
 
 
@@ -301,6 +394,7 @@ def main() -> None:
         "learningStage": learning_stage_cases(300),
         "nextObjective": next_objective_cases(300),
         "bkt": bkt_cases(200),
+        "scheduler": scheduler_cases(300),
         "planTable": {**PLAN_TABLE, "replay": replay(PLAN_TABLE["steps"])},
     }
     OUT.write_text(json.dumps(golden, ensure_ascii=False) + "\n")

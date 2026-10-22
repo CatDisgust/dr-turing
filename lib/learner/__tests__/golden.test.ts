@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Attempt, KnowledgeKind, NodeState } from "@/lib/types";
+import type {
+  Attempt,
+  KnowledgeKind,
+  NodeState,
+  RepetitionState,
+} from "@/lib/types";
 import { computeMastery, masteryFromAttempts } from "../mastery";
 import {
   gateKind,
@@ -10,6 +15,13 @@ import {
   pickObjective,
   type ReviewTask,
 } from "../policy";
+import {
+  forgettingRisk,
+  initialState,
+  type ReviewEvidence,
+  retrievability,
+  scheduleReview,
+} from "../scheduler";
 import golden from "./golden.json";
 
 // 金标准：golden.json 由 scripts/gen-golden.py 调 DeepTutor 原函数生成，
@@ -17,7 +29,7 @@ import golden from "./golden.json";
 
 const EPS = 1e-6;
 
-type Step = { correct?: boolean; d?: Attempt["d"] };
+type Step = { correct?: boolean; d?: Attempt["d"]; review?: boolean };
 
 function attempt(fields: Partial<Attempt>): Attempt {
   return {
@@ -36,6 +48,13 @@ function attempt(fields: Partial<Attempt>): Attempt {
   };
 }
 
+function stepType(step: Step): Attempt["type"] {
+  if (!step.correct) {
+    return "check_wrong";
+  }
+  return step.review ? "review_correct" : "check_correct";
+}
+
 function fromSteps(steps: Step[]): Attempt[] {
   return steps.map((step) =>
     step.correct === undefined
@@ -43,7 +62,8 @@ function fromSteps(steps: Step[]): Attempt[] {
       : attempt({
           correct: step.correct,
           d: step.d ?? 1,
-          type: step.correct ? "check_correct" : "check_wrong",
+          hinted: (step.d ?? 1) !== 1,
+          type: stepType(step),
         })
   );
 }
@@ -111,6 +131,39 @@ describe("BKT + 构建深度（Python 参考实现）", () => {
   });
 });
 
+function expectState(got: RepetitionState, expected: RepetitionState) {
+  for (const key of Object.keys(expected) as (keyof RepetitionState)[]) {
+    const want = expected[key];
+    if (typeof want === "number") {
+      expect(Math.abs((got[key] as number) - want), key).toBeLessThan(EPS);
+    } else {
+      expect(got[key], key).toBe(want);
+    }
+  }
+}
+
+describe("DeepTutor scheduler.SpacedRepetitionScheduler", () => {
+  it.each(
+    golden.scheduler.map((c, i) => [i, c] as const)
+  )("用例 %i", (_, c) => {
+    const kind = c.kind as KnowledgeKind;
+    const events = c.events as ReviewEvidence[];
+    let state = initialState(kind, events[0].timestamp);
+    events.forEach((event, k) => {
+      state = scheduleReview(state, kind, event);
+      expectState(state, c.states[k] as RepetitionState);
+    });
+    expect(
+      Math.abs(retrievability(state, c.later) - c.retrievability)
+    ).toBeLessThan(EPS);
+    expect(
+      Math.abs(
+        forgettingRisk(state, c.later, c.hasActiveError) - c.forgettingRisk
+      )
+    ).toBeLessThan(EPS);
+  });
+});
+
 // 实现规划里那张 6 轮表：数字和每轮命中的规则都要对上
 describe("实现规划的 6 轮例子（竞争条件）", () => {
   const { steps, expected } = golden.planTable;
@@ -145,7 +198,7 @@ describe("实现规划的 6 轮例子（竞争条件）", () => {
           ? [{ id: "m1", lastQuote: "", seen: 1, status: "suspected" }]
           : [],
       O,
-      review: { difficulty: 0.3, lapses: 0, stability: 0 },
+      review: null,
       stage: "not_covered",
       stuckSessions: [],
       transferPassed: false,

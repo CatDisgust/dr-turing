@@ -151,6 +151,23 @@ export type NodeMisconception = {
   lastQuote: string;
 };
 
+// 复习调度状态：DeepTutor RepetitionState，字段一一对应，时间用秒
+export type RepetitionState = {
+  intervalIndex: number;
+  consecutiveCorrect: number;
+  consecutiveWrong: number;
+  nextReviewAt: number;
+  difficulty: number;
+  stability: number;
+  retrievability: number;
+  desiredRetention: number;
+  reviewCount: number;
+  lapseCount: number;
+  lastReviewAt: number | null;
+  lastScheduledAt: number | null;
+  scheduledAfterFailure: boolean;
+};
+
 export type NodeState = {
   attempts: Attempt[];
   M: number; // 表面掌握 0–1，所有答对都算
@@ -161,13 +178,7 @@ export type NodeState = {
   helpOpportunities: number;
   misconceptions: NodeMisconception[];
   stuckSessions: string[];
-  review: {
-    stability: number;
-    difficulty: number;
-    lapses: number;
-    lastAt?: string;
-    dueAt?: string;
-  };
+  review: RepetitionState | null; // 第一次批改后才开始排复习
   touchedInSession?: string;
   transferPassed: boolean; // 变式 / 迁移题过没过
   lastIndependentAt?: string;
