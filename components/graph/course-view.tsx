@@ -187,18 +187,6 @@ export function CourseView({ id }: { id: string }) {
             </section>
 
             <section>
-              <h3 className="font-medium">常见误解</h3>
-              <ul className="list-disc pl-5">
-                {selected.misconceptions.map((m) => (
-                  <li key={m}>{m}</li>
-                ))}
-              </ul>
-              {selected.misconceptions.length === 0 ? (
-                <p className="text-muted-foreground">还没有</p>
-              ) : null}
-            </section>
-
-            <section>
               <h3 className="font-medium">关系</h3>
               {related.map((e) => (
                 <p key={`${e.type}:${e.from}:${e.to}`}>

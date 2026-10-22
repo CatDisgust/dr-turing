@@ -2,7 +2,6 @@
 
 import { FULL_O, HALF_M } from "@/lib/learner/config";
 import { nodeLight } from "@/lib/learner/light";
-import { misconceptionText } from "@/lib/learner/question";
 import type {
   Attempt,
   KnowledgePoint,
@@ -173,13 +172,12 @@ export function NodeDrawer({
 
       {node && node.misconceptions.length > 0 ? (
         <section>
-          <h4 className="mb-1 font-medium">记下的误解</h4>
+          <h4 className="mb-1 font-medium">他的错误想法（从他的错答里提的）</h4>
           <ul className="flex flex-col gap-2" data-testid="misconceptions">
             {node.misconceptions.map((m) => (
               <li className="rounded-md border p-2 text-xs" key={m.id}>
                 <div>
-                  {MISCONCEPTION_LABEL[m.status]}：
-                  {misconceptionText(point, m.id) ?? m.id}
+                  {MISCONCEPTION_LABEL[m.status]}：{m.text}
                 </div>
                 <div className="mt-1 text-muted-foreground">
                   最近一次：「{m.lastQuote}」

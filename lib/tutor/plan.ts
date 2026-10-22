@@ -2,7 +2,6 @@ import "server-only";
 import { z } from "zod";
 import { askJson } from "@/lib/graph/ask";
 import { plannerContext } from "@/lib/learner/context";
-import { misconceptionText } from "@/lib/learner/question";
 import type { CourseGraph, LearnerState, TutorPlan } from "@/lib/types";
 import { mergePlan } from "./plan-merge";
 
@@ -55,10 +54,9 @@ export async function fillPlan(input: {
   const { graph, state, rulePlan } = input;
   const ctx = plannerContext(graph, state, rulePlan.target_kc, input.sessionId);
   const t = ctx.target;
-  const point = graph.points.find((p) => p.id === rulePlan.target_kc);
   const openMisconceptions = t.misconceptions
-    .filter((m) => m.status !== "repaired")
-    .map((m) => (point && misconceptionText(point, m.id)) ?? m.id);
+    .filter((m) => m.status !== "repaired" && m.text)
+    .map((m) => m.text);
   const prompt = [
     `本轮动作（规则${"①②③④⑤⑥⑦"[rulePlan.rule - 1]}定的，不能改）：${ACTION_NAMES[rulePlan.next_action]}`,
     "",

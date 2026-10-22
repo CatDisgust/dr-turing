@@ -21,7 +21,6 @@ const point = (
   id,
   kind: "concept",
   lessonId,
-  misconceptions: [],
   name: id,
   sources: [],
   status: "auto",

@@ -13,7 +13,6 @@ const point = (id: string, kind: "concept" | "procedure" = "concept") => ({
   id,
   kind,
   lessonId: "l1",
-  misconceptions: [`${id} 误解一`, `${id} 误解二`],
   name: id,
   sources: [{ fileId: "f", lessonId: "l1", page: 1, quote: "q" }],
   status: "auto" as const,
@@ -69,7 +68,7 @@ function studentB() {
   let s = emptyLearnerState("B", "c");
   s = evidence(s, "kp_mutex", {
     correct: false,
-    misconceptionId: "m0",
+    misconception: "kp_mutex 的错误想法",
     type: "check_wrong",
   });
   s = evidence(s, "kp_mutex", { d: 0, hinted: true });
@@ -86,7 +85,7 @@ describe("规划器", () => {
     expect(a.start_from).toEqual(["kp_race", "kp_state"]);
     expect(b.start_from).toEqual([]);
     expect(a.check_misconception_first).toBeUndefined();
-    expect(b.check_misconception_first).toBe("kp_mutex 误解一");
+    expect(b.check_misconception_first).toBe("kp_mutex 的错误想法");
     const differ = [
       JSON.stringify(a.start_from) !== JSON.stringify(b.start_from),
       a.disclosure_level !== b.disclosure_level,

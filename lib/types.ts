@@ -80,7 +80,6 @@ export const knowledgePointSchema = z.object({
   id: z.string().startsWith("kp_"),
   kind: knowledgeKindSchema,
   lessonId: z.string(),
-  misconceptions: z.array(z.string()),
   name: z.string().min(1),
   sources: z.array(sourceSchema).min(1),
   status: z.enum(["auto", "reviewed"]),
@@ -147,15 +146,19 @@ export type Attempt = {
   hinted: boolean; // 答之前要过提示或答案
   producedStep: boolean;
   quote: string; // 学生原话
-  misconceptionId?: string;
+  // 答错时从学生这句话里提出的错误想法，一句话；看不出具体想法就没有。
+  // 只记在这个学生身上，不进课程图谱（用户 2026-10-22）
+  misconception?: string;
   source: "fast" | "slow" | "student_edit";
   provisional: boolean; // 快路径写入时为 true，复核后转正或撤销
   // 答的是哪种题；“保持”这项能力只看隔天复习题。D9 之前的证据没有这个字段
   questionKind?: PendingQuestion["kind"];
 };
 
+// 学生自己的错误模式：从他的错答里提出来的，同一个想法按原文归到一起
 export type NodeMisconception = {
   id: string;
+  text: string;
   status: "suspected" | "confirmed" | "repaired";
   seen: number; // ≥ 2 → confirmed
   lastQuote: string;

@@ -195,7 +195,15 @@ describe("实现规划的 6 轮例子（竞争条件）", () => {
       M,
       misconceptions:
         turn === 5
-          ? [{ id: "m1", lastQuote: "", seen: 1, status: "suspected" }]
+          ? [
+              {
+                id: "e1",
+                lastQuote: "",
+                seen: 1,
+                status: "suspected",
+                text: "各有副本",
+              },
+            ]
           : [],
       O,
       review: null,

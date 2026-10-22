@@ -27,7 +27,6 @@ const graph: CourseGraph = {
       id: "kp_lost",
       kind: "concept",
       lessonId: "l1",
-      misconceptions: [],
       name: "丢失更新",
       sources: [],
       status: "auto",

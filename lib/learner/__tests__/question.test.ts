@@ -2,11 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CourseGraph, PendingQuestion } from "@/lib/types";
 import { FULL_O, HALF_M } from "../config";
 import { nodeLight } from "../light";
-import {
-  attemptFromGrading,
-  misconceptionText,
-  pickQuestion,
-} from "../question";
+import { attemptFromGrading, pickQuestion } from "../question";
 import { applyEvidence, emptyLearnerState } from "../update";
 
 // D8 验收：画面二。检查题、变式题独立答对 → 半亮；隔天复习答对 → 全亮；
@@ -22,7 +18,6 @@ const point = {
   id: "kp_lost",
   kind: "concept" as const,
   lessonId: "l2",
-  misconceptions: ["加了事务就不会丢失更新", "只有多线程才会丢失更新"],
   name: "丢失更新",
   sources: [{ fileId: "f", lessonId: "l2", page: 21, quote: "q" }],
   status: "auto" as const,
@@ -47,7 +42,7 @@ function answer(
   at: string,
   help: PendingQuestion["help"],
   correct: boolean,
-  misconception = 0
+  misconception = ""
 ) {
   const node = state.nodes.kp_lost;
   const picked = pickQuestion(point, node, session, at);
@@ -122,15 +117,31 @@ describe("画面二", () => {
     expect(light(r.state, "s2")).toBe("full");
   });
 
-  it("答错：不升级，记下命中的误解", () => {
-    const s = answer(start(), "s1", TODAY, "none", false, 2).state;
+  it("答错：不升级，记下从他错答里提出的错误想法", () => {
+    const s = answer(
+      start(),
+      "s1",
+      TODAY,
+      "none",
+      false,
+      "只有多线程才会丢失更新"
+    ).state;
     const node = s.nodes.kp_lost;
     expect(node.M).toBeLessThan(HALF_M);
     expect(light(s)).toBe("dashed");
-    expect(node.misconceptions[0].id).toBe("m1");
-    expect(misconceptionText(point, node.misconceptions[0].id)).toBe(
-      "只有多线程才会丢失更新"
-    );
+    expect(node.misconceptions[0].id).toBe("e1");
+    expect(node.misconceptions[0].text).toBe("只有多线程才会丢失更新");
+  });
+
+  it("答错但看不出具体想法：不记错误想法；答对时就算批改给了想法也不记", () => {
+    expect(
+      answer(start(), "s1", TODAY, "none", false).state.nodes.kp_lost
+        .misconceptions
+    ).toEqual([]);
+    expect(
+      answer(start(), "s1", TODAY, "none", true, "随便什么").state.nodes.kp_lost
+        .misconceptions
+    ).toEqual([]);
   });
 
   it("给提示后答对：d = 0.5，O 只吃一半涨幅；要了答案后答对：只升 M", () => {
@@ -149,7 +160,14 @@ describe("画面二", () => {
   });
 
   it("答错留下误解，之后独立答对这个点的题就算修正；靠提示答对不算", () => {
-    let s = answer(start(), "s1", TODAY, "none", false, 1).state;
+    let s = answer(
+      start(),
+      "s1",
+      TODAY,
+      "none",
+      false,
+      "加了事务就不会丢失更新"
+    ).state;
     s = answer(s, "s1", TODAY, "hint", true).state;
     expect(s.nodes.kp_lost.misconceptions[0].status).toBe("suspected");
     s = answer(s, "s1", TODAY, "none", true).state;

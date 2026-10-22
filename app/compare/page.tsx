@@ -177,8 +177,8 @@ export default function ComparePage() {
             .join("，") || "（没有）"}
           。
           {seed.misconception
-            ? `B 的误解：${seed.misconception}`
-            : "这个点没有写误解，B 不会触发查误解。"}
+            ? `B 的错误想法（从他的错答里提的）：${seed.misconception}`
+            : null}
         </p>
       ) : null}
 

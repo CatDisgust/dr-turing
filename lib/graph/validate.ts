@@ -116,7 +116,6 @@ export function validatePoints(
       // 模型偶尔写出四类以外的词，归到 concept
       kind: knowledgeKindSchema.catch("concept").parse(draft.kind),
       lessonId: lesson.id,
-      misconceptions: [],
       name: draft.name.trim(),
       sources,
       status: "auto",
