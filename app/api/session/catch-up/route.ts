@@ -1,0 +1,21 @@
+import { z } from "zod";
+import { auth } from "@/lib/session";
+import { catchUpSessions } from "@/lib/tutor/session";
+
+// 开新对话时前端调一次：之前没点“结束本次学习”的会话在这里补跑复核
+export const maxDuration = 300;
+
+const bodySchema = z.object({
+  courseId: z.string().max(64),
+  exceptChatId: z.string().uuid(),
+});
+
+export async function POST(request: Request) {
+  const parsed = bodySchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return Response.json({ error: "bad request" }, { status: 400 });
+  }
+  const session = await auth();
+  await catchUpSessions({ ...parsed.data, studentId: session.user.id });
+  return Response.json({ ok: true });
+}

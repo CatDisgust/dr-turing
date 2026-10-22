@@ -8,6 +8,7 @@ import {
 } from "@/lib/learner/question";
 import { applyEvidence, applySignal, touchNode } from "@/lib/learner/update";
 import type {
+  Attempt,
   CourseGraph,
   KnowledgePoint,
   LearnerState,
@@ -34,7 +35,12 @@ export type Turn = {
 export type TurnResult = {
   state: LearnerState;
   touched?: KnowledgePoint;
-  graded?: { point: KnowledgePoint; correct: boolean; misconception?: string };
+  graded?: {
+    point: KnowledgePoint;
+    correct: boolean;
+    misconception?: string;
+    attempt: Attempt;
+  };
   // 写进导师 system 的本轮情况；null 就是普通讲解
   note: string | null;
 };
@@ -106,7 +112,7 @@ export async function answerTurn(turn: Turn): Promise<TurnResult | null> {
   const misconception = misconceptionText(point, attempt.misconceptionId);
   if (grading.correct) {
     return {
-      graded: { correct: true, point },
+      graded: { attempt, correct: true, point },
       note: `学生刚答对了这道题：「${pending.question}」。用一两句话肯定他说对的地方，引用他的原话，不要再重讲一遍。`,
       state: { ...state, pendingQuestion: undefined },
       touched: point,
@@ -114,7 +120,7 @@ export async function answerTurn(turn: Turn): Promise<TurnResult | null> {
   }
   // 答错了题还留着，导师接下来的反馈本身就是提示，再答对按“要过提示”算
   return {
-    graded: { correct: false, misconception, point },
+    graded: { attempt, correct: false, misconception, point },
     note: [
       `学生答错了这道题：「${pending.question}」。`,
       misconception ? `他的错法像这个常见误解：${misconception}。` : "",

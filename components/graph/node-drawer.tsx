@@ -152,6 +152,25 @@ export function NodeDrawer({
         )}
       </section>
 
+      {node?.retracted && node.retracted.length > 0 ? (
+        <section>
+          <h4 className="mb-1 font-medium">会后复核撤掉的证据</h4>
+          <ul className="flex flex-col gap-2" data-testid="retracted">
+            {node.retracted.map((r) => (
+              <li
+                className="rounded-md border border-dashed p-2 text-xs"
+                key={r.attempt.id}
+              >
+                <div className="text-muted-foreground line-through">
+                  {TYPE_LABEL[r.attempt.type]}「{r.attempt.quote}」
+                </div>
+                <div className="mt-1">撤销原因：{r.reason}</div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {node && node.misconceptions.length > 0 ? (
         <section>
           <h4 className="mb-1 font-medium">记下的误解</h4>

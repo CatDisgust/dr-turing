@@ -191,6 +191,45 @@ export type NodeState = {
   transferPassed: boolean; // 变式 / 迁移题过没过
   lastIndependentAt?: string;
   checkFlag?: "prereq_suspect"; // 保守传播：只标记待检查，不扣分
+  // 会后复核撤掉的证据，连同原因留在证据栏里
+  retracted?: RetractedAttempt[];
+};
+
+export type RetractedAttempt = {
+  attempt: Attempt;
+  reason: string;
+  at: string;
+};
+
+// 只追加的作答记录（LearnTrace 的 transaction）：每次批改一行，掌握度和底层能力都能从它重算
+export type Transaction = {
+  studentId: string;
+  courseId: string;
+  sessionId: string;
+  kpId: string;
+  messageId: string;
+  attempt: Attempt;
+};
+
+// 会后复核对一条暂定证据的结论
+export type ReviewVerdict = {
+  attemptId: string;
+  verdict: "confirm" | "retract";
+  reason: string;
+};
+
+// 会话报告：这次是教会了，还是替他做完了（LearnTrace readouts）
+export type SessionReport = {
+  sessionId: string;
+  reviewedAt: string;
+  steps: number; // 这次批改过的作答
+  ownSteps: number; // 其中没要提示、自己答对的
+  revealRate: number | null; // 看了答案才作答的比例
+  selfProducedRate: number | null; // 学生自己做出步骤的比例
+  leaks: number; // 导师没被要求就把答案说出来的轮数（复核判断）
+  oGain: { kpId: string; name: string; before: number; after: number }[];
+  confirmed: number;
+  retracted: { kpId: string; name: string; quote: string; reason: string }[];
 };
 
 // 导师留给学生的一道题。题和批改依据都在服务端，学生看到的只有题面

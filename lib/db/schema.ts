@@ -12,8 +12,10 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
+  Attempt,
   CourseGraph,
   LearnerState as LearnerStateData,
+  SessionReport,
   TutorPlan,
 } from "../types";
 
@@ -34,6 +36,9 @@ export type User = InferSelectModel<typeof user>;
 export const chat = pgTable("Chat", {
   createdAt: timestamp("createdAt").notNull(),
   id: uuid("id").primaryKey().notNull().defaultRandom(),
+  report: jsonb("report").$type<SessionReport>(),
+  // 会后复核（D9）：复核过的会话不再补跑
+  reviewedAt: timestamp("reviewedAt"),
   title: text("title").notNull(),
   userId: uuid("userId")
     .notNull()
@@ -167,3 +172,15 @@ export const learnerState = pgTable(
     pk: primaryKey({ columns: [table.studentId, table.courseId] }),
   })
 );
+
+// 只追加的作答记录：每次批改一行，从不更新、不删除。复核撤销也只改 LearnerState，这里留原样
+export const transaction = pgTable("Transaction", {
+  attempt: jsonb("attempt").$type<Attempt>().notNull(),
+  courseId: text("courseId").notNull(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  kpId: text("kpId").notNull(),
+  messageId: uuid("messageId").notNull(),
+  sessionId: uuid("sessionId").notNull(),
+  studentId: uuid("studentId").notNull(),
+});
