@@ -13,7 +13,7 @@ function node(fields: Partial<NodeState>): NodeState {
     M: 0.3,
     misconceptions: [],
     O: 0,
-    review: { difficulty: 0.3, lapses: 0, stability: 0 },
+    review: null,
     stage: "not_covered",
     stuckSessions: [],
     transferPassed: false,
