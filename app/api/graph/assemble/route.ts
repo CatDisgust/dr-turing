@@ -3,6 +3,7 @@ import { z } from "zod";
 import gold from "@/fixtures/gold/comp5348-w1-w3.json";
 import { saveCourse } from "@/lib/db/queries";
 import { inferEdges } from "@/lib/graph/edges";
+import { enrichPoints } from "@/lib/graph/enrich";
 import { matchLesson } from "@/lib/graph/match";
 import { scoreGraph } from "@/lib/graph/score";
 import {
@@ -11,7 +12,7 @@ import {
   lessonSchema,
 } from "@/lib/types";
 
-// 把每课抽好的知识点合成一张图：逐课 match → 连边 → 存库 → 对金标准打分。
+// 把每课抽好的知识点合成一张图：逐课 match → 连边、补检查题 → 存库 → 对金标准打分。
 // 抽取在 /api/graph/extract 里每课各跑一次（可并行），这里只做合并，所以请求体很小
 export const maxDuration = 300;
 
@@ -63,7 +64,12 @@ export async function POST(request: Request) {
           merged.push(...result.merged);
         }
 
-        const { edges, dropped } = await time("连边", () => inferEdges(points));
+        // 连边和补检查题互不依赖，一起跑
+        const [{ edges, dropped }, enriched] = await Promise.all([
+          time("连边", () => inferEdges(points)),
+          time("补检查题和误解", () => enrichPoints(points)),
+        ]);
+        ({ points } = enriched);
 
         const graph: CourseGraph = {
           builtAt: new Date().toISOString(),
@@ -90,6 +96,7 @@ export async function POST(request: Request) {
           droppedEdges: dropped,
           graph,
           merged,
+          notEnriched: enriched.missing,
           saved,
           score: body.courseId === "comp5348" ? scoreGraph(graph, gold) : null,
           timings,
