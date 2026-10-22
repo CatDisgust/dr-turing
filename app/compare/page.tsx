@@ -60,9 +60,19 @@ async function post<T>(url: string, body: object): Promise<T> {
     headers: { "Content-Type": "application/json" },
     method: "POST",
   });
-  const json = await response.json();
-  if (!response.ok) {
-    throw new Error(json.error ?? `请求失败（${response.status}）`);
+  // 函数超时或崩溃时返回的不是 JSON，把状态码和原文显示出来
+  const text = await response.text();
+  let json: { error?: string } | null = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+  if (!(response.ok && json)) {
+    throw new Error(
+      json?.error ??
+        `请求失败（${response.status}）${text.slice(0, 200) || "，没有返回内容"}`
+    );
   }
   return json as T;
 }

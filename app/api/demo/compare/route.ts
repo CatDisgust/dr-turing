@@ -36,6 +36,20 @@ async function planFor(
 
 // 画面三：同一句话，A、B 各出一份规划，连跑几次看方向变不变
 export async function POST(request: Request) {
+  try {
+    return await compare(request);
+  } catch (error) {
+    console.error("[compare] 失败", error);
+    return Response.json(
+      {
+        error: `对比失败：${error instanceof Error ? error.message : String(error)}`,
+      },
+      { status: 500 }
+    );
+  }
+}
+
+async function compare(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     courseId?: string;
     question?: string;

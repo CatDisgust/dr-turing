@@ -3,6 +3,20 @@ import { seedStudents, seedSummary } from "@/lib/demo/seed";
 
 // 写入画面三的预置学生 A、B（覆盖他们在这门课上的状态，演示学生不动）
 export async function POST(request: Request) {
+  try {
+    return await writeSeed(request);
+  } catch (error) {
+    console.error("[seed] 失败", error);
+    return Response.json(
+      {
+        error: `写入失败：${error instanceof Error ? error.message : String(error)}`,
+      },
+      { status: 500 }
+    );
+  }
+}
+
+async function writeSeed(request: Request) {
   const { courseId = "comp5348" } = (await request
     .json()
     .catch(() => ({}))) as {
