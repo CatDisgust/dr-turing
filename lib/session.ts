@@ -1,8 +1,10 @@
 import "server-only";
+import { cookies } from "next/headers";
+import { STUDENT_COOKIE, STUDENTS, studentByKey } from "./students";
 
-// Demo has no login. Every request acts as one fixed student; D11 replaces
-// this with the student switcher (A / B) in the top bar.
-export const DEMO_STUDENT_ID = "00000000-0000-4000-8000-000000000001";
+// Demo has no login. The student switcher in the top bar (D11) sets a cookie;
+// every request acts as that student, the demo student by default.
+export const DEMO_STUDENT_ID = STUDENTS[0].id;
 
 export type User = {
   id: string;
@@ -13,6 +15,8 @@ export type Session = {
   user: User;
 };
 
-export function auth(): Promise<Session> {
-  return Promise.resolve({ user: { id: DEMO_STUDENT_ID, name: "演示学生" } });
+export async function auth(): Promise<Session> {
+  const store = await cookies();
+  const student = studentByKey(store.get(STUDENT_COOKIE)?.value);
+  return { user: { id: student.id, name: student.name } };
 }

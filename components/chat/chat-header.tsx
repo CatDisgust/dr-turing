@@ -5,9 +5,10 @@ import { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
 import { EndSession } from "./end-session";
+import { StudentSwitcher } from "./student-switcher";
 import { VisibilitySelector, type VisibilityType } from "./visibility-selector";
 
-// 顶栏：侧栏开关、可见性、“结束本次学习”。侧栏收起时也要在，结束按钮不能跟着消失
+// 顶栏：侧栏开关、切换学生、可见性、“结束本次学习”。侧栏收起时也要在，结束按钮不能跟着消失
 function PureChatHeader({
   chatId,
   selectedVisibilityType,
@@ -31,6 +32,8 @@ function PureChatHeader({
       >
         <PanelLeftIcon className="size-4" />
       </Button>
+
+      <StudentSwitcher />
 
       {!isReadonly && (
         <VisibilitySelector
