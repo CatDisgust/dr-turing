@@ -7,6 +7,7 @@
     "build": "tsx lib/db/migrate && next build",
     "start": "next start",
     "check": "ultracite check",
+    "test": "vitest run",
     "fix": "ultracite fix",
     "prepare": "husky",
     "db:generate": "drizzle-kit generate",
@@ -106,7 +107,8 @@
     "tailwindcss": "^4.3.2",
     "tsx": "^4.23.0",
     "typescript": "^5.6.3",
-    "ultracite": "^7.8.4"
+    "ultracite": "^7.8.4",
+    "vitest": "3.2.4"
   },
   "lint-staged": {
     "*": "corepack pnpm run fix --"
