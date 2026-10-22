@@ -13,11 +13,19 @@ type Row = {
 
 const CONCURRENCY = 4;
 
+// 快路径的两个候选模型（D12：首字超过 3 秒时换 Haiku 5.5，先在这里对比）
+const MODELS = [
+  { key: "opus", label: "Opus 5.5 低档（现在用的）" },
+  { key: "haiku", label: "Haiku 5.5" },
+] as const;
+type ModelKey = (typeof MODELS)[number]["key"];
+
 // 快路径归类评测：20 条手写提问，目标准确率 ≥ 85%
 export default function ClassifyEvalPage() {
   const [rows, setRows] = useState<(Row | null)[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const [model, setModel] = useState<ModelKey>("opus");
 
   const run = useCallback(async () => {
     setRunning(true);
@@ -34,7 +42,9 @@ export default function ClassifyEvalPage() {
           const index = next;
           next += 1;
           // biome-ignore lint/performance/noAwaitInLoops: 并发由 worker 数控制
-          const response = await fetch(`/api/eval/classify?index=${index}`);
+          const response = await fetch(
+            `/api/eval/classify?index=${index}&model=${model}`
+          );
           const body = await response.json();
           if (body.error && !body.question) {
             throw new Error(body.error);
@@ -49,7 +59,12 @@ export default function ClassifyEvalPage() {
     } finally {
       setRunning(false);
     }
-  }, []);
+  }, [model]);
+  const pick = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) =>
+      setModel(e.target.value as ModelKey),
+    []
+  );
 
   const done = rows.filter((row): row is Row => row !== null);
   const correct = done.filter((row) => row.ok).length;
@@ -63,6 +78,19 @@ export default function ClassifyEvalPage() {
       <p className="mb-4 text-muted-foreground">
         20 条手写学生提问，看归类器能不能找到对应的知识点。目标准确率 ≥ 85%。
       </p>
+      <select
+        className="mr-2 rounded-md border px-2 py-1.5"
+        data-testid="eval-model"
+        disabled={running}
+        onChange={pick}
+        value={model}
+      >
+        {MODELS.map((m) => (
+          <option key={m.key} value={m.key}>
+            {m.label}
+          </option>
+        ))}
+      </select>
       <button
         className="rounded-md bg-primary px-3 py-1.5 text-primary-foreground disabled:opacity-50"
         disabled={running}

@@ -6,7 +6,19 @@ import type { Suggestion } from "./db/schema";
 export const messageMetadataSchema = z.object({
   createdAt: z.string(),
   plan: z.custom<TutorPlan>().optional(),
+  timing: z.custom<TurnTiming>().optional(),
 });
+
+// 一轮各段用了多少毫秒（D12 验收：划词到讲解首字 ≤ 3 秒）。只在当场显示，不存库
+export type TurnTiming = {
+  // 读状态 + 批改或归类
+  engineMs: number;
+  // 规则定动作 + Claude 填规划
+  planMs: number;
+  // 从收到请求到讲解第一个字
+  firstTokenMs: number;
+  fastModel: string;
+};
 
 export type MessageMetadata = z.infer<typeof messageMetadataSchema>;
 

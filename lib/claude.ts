@@ -18,6 +18,19 @@ export const TIERS = {
 
 export type Tier = keyof typeof TIERS;
 
+// 快路径（归类、批改、填规划）用哪个模型。规划文档 D12：划词到讲解首字超过 3 秒时换 Haiku 5.5。
+// 先在 /eval/classify 对比两种的准确率和耗时再定，改这一行即可
+export const FAST_MODELS = {
+  haiku: "claude-haiku-5-5",
+  opus: MODEL,
+} as const;
+export type FastModel = keyof typeof FAST_MODELS;
+export const FAST_MODEL: FastModel = "opus";
+
+export function modelFor(tier: Tier, fast: FastModel = FAST_MODEL): string {
+  return tier === "fast" ? FAST_MODELS[fast] : MODEL;
+}
+
 // 被安全分类器拒绝时由服务端自动换模型重跑（Opus 5.5 默认开启）
 export const FALLBACK: {
   betas: Anthropic.Beta.AnthropicBeta[];

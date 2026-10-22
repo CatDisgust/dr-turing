@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import type { FastModel } from "@/lib/claude";
 import { askJson } from "@/lib/graph/ask";
 import type { CourseGraph, KnowledgePoint } from "@/lib/types";
 
@@ -29,12 +30,18 @@ export function classifySystem(graph: CourseGraph): string {
 
 export async function classifyQuestion(
   graph: CourseGraph,
-  question: string
+  question: string,
+  fastModel?: FastModel
 ): Promise<KnowledgePoint | null> {
   const { kpId } = await askJson(
     [{ text: `学生提问：${question}`, type: "text" }],
     classifySchema,
-    { maxTokens: 1000, system: classifySystem(graph), tier: "fast" }
+    {
+      fastModel,
+      maxTokens: 1000,
+      system: classifySystem(graph),
+      tier: "fast",
+    }
   );
   return graph.points.find((p) => p.id === kpId) ?? null;
 }

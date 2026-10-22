@@ -6,7 +6,14 @@ import {
 } from "ai";
 import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
-import { claude, FALLBACK, MODEL, TIERS } from "@/lib/claude";
+import {
+  claude,
+  FALLBACK,
+  FAST_MODEL,
+  FAST_MODELS,
+  MODEL,
+  TIERS,
+} from "@/lib/claude";
 import {
   createStreamId,
   deleteChatById,
@@ -59,6 +66,17 @@ function describeClaudeError(error: unknown): string {
     return `出错了（Anthropic ${error.status ?? "网络"}）：${error.message}`;
   }
   return `出错了：${error instanceof Error ? error.message : String(error)}`;
+}
+
+// 讲解重试后还失败时给学生看的一句话：不贴原始报错，详情在服务端日志里
+function tutorDownText(error: unknown): string {
+  if (error instanceof Anthropic.AuthenticationError) {
+    return "ANTHROPIC_API_KEY 无效或没配置，";
+  }
+  if (error instanceof Anthropic.RateLimitError) {
+    return "Claude 那边请求太多，";
+  }
+  return "Claude 暂时没有响应，";
 }
 
 // 引擎这一侧要用的课程图谱和学生状态。读不到就当没有课程，照常讲解
@@ -196,6 +214,7 @@ export async function POST(request: Request) {
         };
 
         writeWaitingStatus("waiting", "思考中…");
+        const startedAt = Date.now();
 
         const text = message.parts
           .map((part) => (part.type === "text" ? part.text : ""))
@@ -234,10 +253,12 @@ export async function POST(request: Request) {
             (await safely("grade", () => answerTurn(turn))) ??
             (await safely("classify", () => questionTurn(turn)));
         }
+        const engineAt = Date.now();
         const step =
           diagnosed?.step ??
           (turn && result ? await planAndAsk(turn, result, signal) : null);
         const plan = step?.plan;
+        const planAt = Date.now();
 
         if (turn && result && step) {
           const { graded, touched } = result;
@@ -294,7 +315,7 @@ export async function POST(request: Request) {
             : null,
         ].filter((line): line is string => line !== null);
 
-        const claudeStream = claude.beta.messages.stream({
+        const tutorRequest = {
           ...FALLBACK,
           max_tokens: 64_000,
           messages: toClaudeMessages(uiMessages),
@@ -302,18 +323,61 @@ export async function POST(request: Request) {
           output_config: { effort: TIERS.tutor.effort },
           system: [
             {
-              cache_control: { type: "ephemeral" },
+              cache_control: { type: "ephemeral" as const },
               text: tutorPrompts[plan?.prompt ?? "aha"],
-              type: "text",
+              type: "text" as const,
             },
             ...extra.map((line) => ({ text: line, type: "text" as const })),
           ],
+        };
+        let firstTokenMs: number | null = null;
+        const onFirstText = () => {
+          firstTokenMs = Date.now() - startedAt;
+        };
+
+        // 出错兜底（D12）：讲解一个字还没出来就失败，自动再试一次；
+        // 还不行就给一句固定提示。引擎这边的状态已经存好，题照常出，流程不断
+        let refused = false;
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            const claudeStream = claude.beta.messages.stream(tutorRequest);
+            // biome-ignore lint/performance/noAwaitInLoops: 失败后才重试，本来就是顺序的
+            await pipeClaudeToUI(claudeStream, writer, onFirstText);
+            const final = await claudeStream.finalMessage();
+            refused = final.stop_reason === "refusal";
+            break;
+          } catch (error) {
+            console.error(`[tutor] 讲解第 ${attempt} 次失败`, error);
+            if (firstTokenMs === null && attempt < 2) {
+              continue;
+            }
+            const partId = generateUUID();
+            writer.write({ id: partId, type: "text-start" });
+            writer.write({
+              delta: `${firstTokenMs === null ? "" : "\n\n"}（${tutorDownText(error)}讲解这一步先跳过${step?.question ? "，我们直接看题" : "，可以再问一次"}。）`,
+              id: partId,
+              type: "text-delta",
+            });
+            writer.write({ id: partId, type: "text-end" });
+            break;
+          }
+        }
+
+        writer.write({
+          messageMetadata: {
+            createdAt: new Date().toISOString(),
+            ...(plan ? { plan } : {}),
+            timing: {
+              engineMs: engineAt - startedAt,
+              fastModel: FAST_MODELS[FAST_MODEL],
+              firstTokenMs: firstTokenMs ?? Date.now() - startedAt,
+              planMs: planAt - engineAt,
+            },
+          },
+          type: "message-metadata",
         });
 
-        await pipeClaudeToUI(claudeStream, writer);
-
-        const final = await claudeStream.finalMessage();
-        if (final.stop_reason === "refusal") {
+        if (refused) {
           writer.write({
             errorText: "这个问题我没法回答，换个问法试试？",
             type: "error",

@@ -9,6 +9,32 @@ import { useDataStream } from "./data-stream-provider";
 import { Greeting } from "./greeting";
 import { PreviewMessage, ThinkingMessage } from "./message";
 
+// 出错兜底（D12）：请求本身失败（网络、服务器）时，提示留在对话里，点一下重发
+function RetryNotice({
+  onRetry,
+}: {
+  onRetry: UseChatHelpers<ChatMessage>["regenerate"];
+}) {
+  const retry = useCallback(() => {
+    onRetry();
+  }, [onRetry]);
+  return (
+    <div
+      className="mx-auto flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-700 text-sm dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+      data-testid="retry-notice"
+    >
+      这一轮没有完成，可能是网络或服务器出了问题。
+      <button
+        className="rounded border border-current px-2 py-0.5"
+        onClick={retry}
+        type="button"
+      >
+        重试
+      </button>
+    </div>
+  );
+}
+
 type MessagesProps = {
   addToolApprovalResponse: UseChatHelpers<ChatMessage>["addToolApprovalResponse"];
   chatId: string;
@@ -104,6 +130,10 @@ function PureMessages({
           {status === "submitted" && messages.at(-1)?.role !== "assistant" && (
             <ThinkingMessage />
           )}
+
+          {status === "error" && !isReadonly ? (
+            <RetryNotice onRetry={regenerate} />
+          ) : null}
 
           <div
             className="min-h-[24px] min-w-[24px] shrink-0"

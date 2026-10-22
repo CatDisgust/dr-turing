@@ -71,6 +71,14 @@ export function LearnerGraph({ sessionId }: { sessionId: string }) {
     return result;
   }, [graph, state, sessionId, touched]);
 
+  const progress = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const [id, node] of Object.entries(state?.nodes ?? {})) {
+      result[id] = node.O;
+    }
+    return result;
+  }, [state]);
+
   const openPoint = graph?.points.find((p) => p.id === openId);
 
   if (!graph) {
@@ -88,6 +96,7 @@ export function LearnerGraph({ sessionId }: { sessionId: string }) {
         graph={graph}
         lights={lights}
         onSelect={select}
+        progress={progress}
         selectedId={selectedId}
       />
       {touched ? (
