@@ -25,6 +25,8 @@ export const postRequestBodySchema = z.object({
   id: z.uuid(),
   message: userMessageSchema.optional(),
   selectedVisibilityType: z.enum(["public", "private"]),
+  // 快捷按钮：给提示、直接告诉我、先不做题
+  signal: z.enum(["hint", "just_tell_me", "skip"]).optional(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

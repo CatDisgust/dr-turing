@@ -20,20 +20,23 @@ import {
   updateChatTitleById,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
-import { emptyLearnerState, touchNode } from "@/lib/learner/update";
+import { emptyLearnerState } from "@/lib/learner/update";
 import { auth } from "@/lib/session";
-import { classifyQuestion } from "@/lib/tutor/classify";
 import { ahaPrompt } from "@/lib/tutor/prompts";
 import {
   buffered,
   pipeClaudeToUI,
   toClaudeMessages,
 } from "@/lib/tutor/to-ui-stream";
-import type {
-  ChatMessage,
-  KnowledgePoint,
-  WaitingStatusData,
-} from "@/lib/types";
+import {
+  answerTurn,
+  askQuestion,
+  questionTurn,
+  signalTurn,
+  type Turn,
+  type TurnResult,
+} from "@/lib/tutor/turn";
+import type { ChatMessage, WaitingStatusData } from "@/lib/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { generateTitleFromUserMessage } from "../../actions";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
@@ -54,34 +57,45 @@ function describeClaudeError(error: unknown): string {
   return `出错了：${error instanceof Error ? error.message : String(error)}`;
 }
 
-// 快路径：归类到一个知识点，记进学生状态，节点虚线亮。失败了只是不亮，不影响讲解
-async function touchFromQuestion({
-  courseId,
-  chatId,
-  studentId,
-  question,
-}: {
+// 引擎这一侧要用的课程图谱和学生状态。读不到就当没有课程，照常讲解
+async function loadTurn(input: {
   courseId: string;
-  chatId: string;
   studentId: string;
-  question: string;
-}): Promise<KnowledgePoint | null> {
+  sessionId: string;
+  turnId: string;
+  text: string;
+}): Promise<Turn | null> {
   try {
-    const course = await getCourseById({ id: courseId });
-    if (!course || question.trim() === "") {
-      return null;
-    }
-    const point = await classifyQuestion(course.graph, question);
-    if (!point) {
+    const course = await getCourseById({ id: input.courseId });
+    if (!course) {
       return null;
     }
     const state =
-      (await getLearnerState({ courseId, studentId })) ??
-      emptyLearnerState(studentId, courseId);
-    await saveLearnerState({ state: touchNode(state, point.id, chatId) });
-    return point;
+      (await getLearnerState(input)) ??
+      emptyLearnerState(input.studentId, input.courseId);
+    return {
+      graph: course.graph,
+      now: new Date().toISOString(),
+      sessionId: input.sessionId,
+      state,
+      text: input.text,
+      turnId: input.turnId,
+    };
   } catch (error) {
-    console.error("classify failed:", error);
+    console.error("load learner state failed:", error);
+    return null;
+  }
+}
+
+// 批改、归类、存状态任何一步失败，都只是这一轮不亮、不批改，不影响讲解
+async function safely<T>(
+  label: string,
+  work: () => Promise<T>
+): Promise<T | null> {
+  try {
+    return await work();
+  } catch (error) {
+    console.error(`${label} failed:`, error);
     return null;
   }
 }
@@ -107,7 +121,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { courseId, id, message, selectedVisibilityType } = requestBody;
+    const { courseId, id, message, selectedVisibilityType, signal } =
+      requestBody;
 
     const session = await auth();
 
@@ -158,11 +173,11 @@ export async function POST(request: Request) {
       execute: async ({ writer }) => {
         const writeWaitingStatus = (
           phase: WaitingStatusData["phase"],
-          text: string
+          status: string
         ) => {
           writer.write({
             data: {
-              message: text,
+              message: status,
               modelId: MODEL,
               modelName: "Dr.Turing",
               phase,
@@ -174,17 +189,26 @@ export async function POST(request: Request) {
 
         writeWaitingStatus("waiting", "思考中…");
 
-        const question = message.parts
+        const text = message.parts
           .map((part) => (part.type === "text" ? part.text : ""))
           .join("\n");
-        const touched = courseId
-          ? touchFromQuestion({
-              chatId: id,
+        const turn = courseId
+          ? await loadTurn({
               courseId,
-              question,
+              sessionId: id,
               studentId: session.user.id,
+              text,
+              turnId: message.id,
             })
-          : Promise.resolve(null);
+          : null;
+
+        // 快捷按钮、批改上一轮的题：要先知道结果，导师才知道怎么接
+        let result: TurnResult | null = null;
+        if (turn && signal) {
+          result = signalTurn(turn, signal);
+        } else if (turn) {
+          result = await safely("grade", () => answerTurn(turn));
+        }
 
         const claudeStream = claude.beta.messages.stream({
           ...FALLBACK,
@@ -198,19 +222,46 @@ export async function POST(request: Request) {
               text: ahaPrompt,
               type: "text",
             },
+            ...(result?.note
+              ? [
+                  {
+                    text: `本轮情况（系统告诉你的，回复里不要提到它）：${result.note}`,
+                    type: "text" as const,
+                  },
+                ]
+              : []),
           ],
         });
 
         const events = buffered(claudeStream);
 
-        // 归类和讲解同时发出；先等归类，讲解开始时节点已经亮了
-        const point = await touched;
-        if (point) {
-          writer.write({
-            data: { kpId: point.id, name: point.name },
-            transient: true,
-            type: "data-node-touched",
-          });
+        // 新问题：归类和讲解同时发出；先等归类，讲解开始时节点已经亮了
+        if (turn && !result) {
+          result = await safely("classify", () => questionTurn(turn));
+        }
+        if (turn && result) {
+          const { graded, touched } = result;
+          if (touched) {
+            writer.write({
+              data: { kpId: touched.id, name: touched.name },
+              transient: true,
+              type: "data-node-touched",
+            });
+          }
+          if (graded) {
+            writer.write({
+              data: {
+                correct: graded.correct,
+                kpId: graded.point.id,
+                misconception: graded.misconception,
+                name: graded.point.name,
+              },
+              transient: true,
+              type: "data-graded",
+            });
+          }
+          const { state } = result;
+          await safely("save learner state", () => saveLearnerState({ state }));
         }
 
         await pipeClaudeToUI(events, writer);
@@ -221,6 +272,22 @@ export async function POST(request: Request) {
             errorText: "这个问题我没法回答，换个问法试试？",
             type: "error",
           });
+        } else if (turn && result?.askAbout) {
+          // 讲完出一道题：题面由代码写，不靠导师记得出题
+          const asked = askQuestion(turn, result.state, result.askAbout);
+          if (asked) {
+            const partId = generateUUID();
+            writer.write({ id: partId, type: "text-start" });
+            writer.write({
+              delta: `\n\n**检查一下：**${asked.question}`,
+              id: partId,
+              type: "text-delta",
+            });
+            writer.write({ id: partId, type: "text-end" });
+            await safely("save question", () =>
+              saveLearnerState({ state: asked.state })
+            );
+          }
         }
 
         if (titlePromise) {

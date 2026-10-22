@@ -39,3 +39,6 @@ export const REVEALED_LEARN_FACTOR = 0.5;
 
 // 主文档更新表：隔天复习独立做对，O 向 M 靠拢这么多（假设）。这是 O 达到全亮门槛的唯一途径
 export const REVIEW_PULL = 0.5;
+
+// 距上次独立做对至少隔这么久，再答对才算“隔天复习”（假设）
+export const REVIEW_MIN_GAP_HOURS = 12;

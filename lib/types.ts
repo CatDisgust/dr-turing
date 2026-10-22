@@ -34,6 +34,12 @@ export type CustomUIDataTypes = {
   "chat-title": string;
   "waiting-status": WaitingStatusData;
   "node-touched": { kpId: string; name: string };
+  graded: {
+    kpId: string;
+    name: string;
+    correct: boolean;
+    misconception?: string;
+  };
 };
 
 export type ChatMessage = UIMessage<
@@ -186,11 +192,18 @@ export type NodeState = {
   checkFlag?: "prereq_suspect"; // 保守传播：只标记待检查，不扣分
 };
 
+// 导师留给学生的一道题。题和批改依据都在服务端，学生看到的只有题面
 export type PendingQuestion = {
   kpId: string;
   questionId: string;
   askedTurnId: string;
   askedAt: string;
+  sessionId: string;
+  question: string;
+  // 检查题、变式题，或者隔天的复习题
+  kind: "check" | "variant" | "review";
+  // 答之前要过什么：没要、要了提示、要了答案
+  help: "none" | "hint" | "revealed";
 };
 
 export type LearnerState = {
