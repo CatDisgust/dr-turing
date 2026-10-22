@@ -267,6 +267,13 @@ export type LearnerState = {
   };
   nodes: Record<string, NodeState>;
   pendingQuestion?: PendingQuestion;
+  // 诊断入口进行中：这一课、还没问的前置
+  diagnosis?: {
+    sessionId: string;
+    lessonId: string;
+    queue: string[];
+    asked: string[];
+  };
 };
 
 // ---- 规划器输出（M3）：LearnTrace 导师动作 + 主文档的“程度 / 方式”字段 ----
@@ -290,7 +297,7 @@ export type TutorPlan = {
   check_misconception_first?: string; // 误解原文
   rationale: string;
   // 动作永远由规则定；其余字段正常由 Claude 填，调用失败时退回规则默认值
-  filled_by?: "claude" | "rules";
+  filled_by?: "claude" | "rules" | "diagnosis";
 };
 
 // ---- 个人图谱（D9b，叠加模型）：课内知识点的状态就是 LearnerState；
