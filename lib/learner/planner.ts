@@ -9,8 +9,8 @@ import { plannerContext } from "./context";
 import { type ActionDecision, nextAction, type TurnSignal } from "./policy";
 import { misconceptionText } from "./question";
 
-// 规划器：七条规则定下一步（policy.nextAction），再按目标节点和两跳先修填程度和方式。
-// 全是规则，不调模型：同样的状态永远给同样的 plan，学生 A、B 的差别可复现
+// 规划器第一步：七条规则定下一步（policy.nextAction）。其余字段这里按规则给一份默认值，
+// 正常由 Claude 改填（lib/tutor/plan.ts），Claude 调用失败时就用这份
 
 // 低于这个 M、又没证据，算刚接触，讲得完整一些（假设）
 const NEW_TO_IT_M = 0.4;
@@ -146,6 +146,7 @@ export function planTurn(input: {
     check_misconception_first,
     disclosure_level,
     elicits_production,
+    filled_by: "rules",
     next_action: decision.action,
     prompt: decision.prompt,
     rationale: why.join("；"),

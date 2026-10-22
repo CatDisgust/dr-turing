@@ -17,6 +17,7 @@ import type {
 import { generateUUID } from "@/lib/utils";
 import { classifyQuestion } from "./classify";
 import { gradeAnswer } from "./grade";
+import { fillPlan } from "./plan";
 
 // 一轮对话里引擎这一侧要做的事：快捷按钮、批改上一轮留的题、归类新问题。
 // 返回新状态和给导师的情况说明；之后 planAndAsk 定本轮动作、要不要出题
@@ -152,27 +153,40 @@ const ASKS: TutorPlan["next_action"][] = [
 ];
 
 // 引擎这一步之后：规划器定本轮动作；讲解、出题、复习之后接一道题（还有题没答完就不出新题）
-export function planAndAsk(
+export async function planAndAsk(
   turn: Turn,
   result: TurnResult,
   signal?: TurnSignal
-): {
+): Promise<{
   plan?: TutorPlan;
   question?: string;
   state: LearnerState;
   note: string | null;
-} {
+}> {
   const { touched } = result;
   if (!touched || signal === "skip") {
     return { note: result.note, state: result.state };
   }
-  const plan = planTurn({
+  const rulePlan = planTurn({
     graph: turn.graph,
     kpId: touched.id,
     sessionId: turn.sessionId,
     signal,
     state: result.state,
   });
+  let plan = rulePlan;
+  try {
+    plan = await fillPlan({
+      graph: turn.graph,
+      justTellMe: signal === "just_tell_me",
+      rulePlan,
+      sessionId: turn.sessionId,
+      state: result.state,
+      studentText: turn.text,
+    });
+  } catch (error) {
+    console.error("[plan] Claude 填 plan 失败，用规则默认值", error);
+  }
   const stillOpen = result.state.pendingQuestion?.sessionId === turn.sessionId;
   const target = turn.graph.points.find((p) => p.id === plan.target_kc);
   if (

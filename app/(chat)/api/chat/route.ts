@@ -209,7 +209,8 @@ export async function POST(request: Request) {
             (await safely("grade", () => answerTurn(turn))) ??
             (await safely("classify", () => questionTurn(turn)));
         }
-        const step = turn && result ? planAndAsk(turn, result, signal) : null;
+        const step =
+          turn && result ? await planAndAsk(turn, result, signal) : null;
         const plan = step?.plan;
 
         if (turn && result && step) {
