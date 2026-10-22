@@ -246,4 +246,6 @@ export type TutorPlan = {
   representation: "analogy" | "code" | "formula" | "diagram";
   check_misconception_first?: string; // 误解原文
   rationale: string;
+  // 动作永远由规则定；其余字段正常由 Claude 填，调用失败时退回规则默认值
+  filled_by?: "claude" | "rules";
 };

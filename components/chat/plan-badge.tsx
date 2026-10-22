@@ -27,7 +27,10 @@ export function PlanBadge({ plan }: { plan: TutorPlan }) {
         规划：{ACTION[plan.next_action]} · {DISCLOSURE[plan.disclosure_level]}
         {plan.elicits_production ? " · 要学生产出" : ""}
       </summary>
-      <p className="mt-1">{plan.rationale}</p>
+      <p className="mt-1">
+        {plan.rationale}
+        {plan.filled_by === "rules" ? "（Claude 没填上，这是规则默认值）" : ""}
+      </p>
       <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-[11px]">
         {JSON.stringify(plan, null, 2)}
       </pre>
