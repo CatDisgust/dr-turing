@@ -17,7 +17,7 @@ import postgres from "postgres";
 import type { ArtifactKind } from "@/components/chat/artifact";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { ChatbotError } from "../errors";
-import type { CourseGraph } from "../types";
+import type { CourseGraph, LearnerState } from "../types";
 import { generateUUID } from "../utils";
 import {
   type Chat,
@@ -25,6 +25,7 @@ import {
   course,
   type DBMessage,
   document,
+  learnerState,
   message,
   type Suggestion,
   stream,
@@ -617,6 +618,48 @@ export async function getCourseById({ id }: { id: string }) {
   try {
     const [row] = await db.select().from(course).where(eq(course.id, id));
     return row ?? null;
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function getLearnerState({
+  studentId,
+  courseId,
+}: {
+  studentId: string;
+  courseId: string;
+}) {
+  try {
+    const [row] = await db
+      .select()
+      .from(learnerState)
+      .where(
+        and(
+          eq(learnerState.studentId, studentId),
+          eq(learnerState.courseId, courseId)
+        )
+      );
+    return row?.state ?? null;
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function saveLearnerState({ state }: { state: LearnerState }) {
+  try {
+    const row = {
+      courseId: state.courseId,
+      state,
+      studentId: state.studentId,
+    };
+    return await db
+      .insert(learnerState)
+      .values(row)
+      .onConflictDoUpdate({
+        set: { state, updatedAt: new Date() },
+        target: [learnerState.studentId, learnerState.courseId],
+      });
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }

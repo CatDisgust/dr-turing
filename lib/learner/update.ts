@@ -102,11 +102,19 @@ function reviewEvidence(attempt: Attempt) {
   };
 }
 
-// 从证据重放出整个节点。explained 和 checkFlag 不来自本节点证据，原样带过来
+type Carry = Pick<NodeState, "explained" | "checkFlag" | "touchedInSession">;
+
+const carryOf = (node: NodeState): Carry => ({
+  checkFlag: node.checkFlag,
+  explained: node.explained,
+  touchedInSession: node.touchedInSession,
+});
+
+// 从证据重放出整个节点。explained、checkFlag、touchedInSession 不全来自本节点证据，原样带过来
 export function deriveNode(
   attempts: Attempt[],
   kind: KnowledgeKind,
-  carry: Pick<NodeState, "explained" | "checkFlag"> = { explained: false }
+  carry: Carry = { explained: false }
 ): NodeState {
   const node: NodeState = { ...emptyNode(), ...carry, attempts };
   const wrongBySession = new Map<string, number>();
@@ -190,10 +198,11 @@ export function applyEvidence(
   attempt: Attempt
 ): LearnerState {
   const node = state.nodes[kpId] ?? emptyNode();
-  const derived = deriveNode([...node.attempts, attempt], kindOf(graph, kpId), {
-    checkFlag: node.checkFlag,
-    explained: node.explained,
-  });
+  const derived = deriveNode(
+    [...node.attempts, attempt],
+    kindOf(graph, kpId),
+    carryOf(node)
+  );
   const reengaged = attempt.correct === true && !attempt.hinted;
   return {
     ...state,
@@ -218,7 +227,7 @@ export function retractEvidence(
   const derived = deriveNode(
     node.attempts.filter((a) => a.id !== attemptId),
     kindOf(graph, kpId),
-    { checkFlag: node.checkFlag, explained: node.explained }
+    carryOf(node)
   );
   return { ...state, nodes: { ...state.nodes, [kpId]: derived } };
 }
@@ -231,10 +240,26 @@ export function markExplained(
 ): LearnerState {
   const node = state.nodes[kpId] ?? emptyNode();
   const derived = deriveNode(node.attempts, kindOf(graph, kpId), {
-    checkFlag: node.checkFlag,
+    ...carryOf(node),
     explained: true,
   });
   return { ...state, nodes: { ...state.nodes, [kpId]: derived } };
+}
+
+// 快路径归类到这个点：本次会话涉及过，节点虚线亮；不动任何数
+export function touchNode(
+  state: LearnerState,
+  kpId: string,
+  sessionId: string
+): LearnerState {
+  const node = state.nodes[kpId] ?? emptyNode();
+  return {
+    ...state,
+    nodes: {
+      ...state.nodes,
+      [kpId]: { ...node, touchedInSession: sessionId },
+    },
+  };
 }
 
 // 投入度 W：放弃、“直接告诉我”、跳题各记一笔；“给提示”只是请求，不算 W

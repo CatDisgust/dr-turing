@@ -33,6 +33,7 @@ export type CustomUIDataTypes = {
   finish: null;
   "chat-title": string;
   "waiting-status": WaitingStatusData;
+  "node-touched": { kpId: string; name: string };
 };
 
 export type ChatMessage = UIMessage<

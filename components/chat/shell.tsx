@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LearnerGraph } from "@/components/graph/learner-graph";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { Artifact } from "./artifact";
 import { ChatHeader } from "./chat-header";
 import { DataStreamHandler } from "./data-stream-handler";
+import { MaterialPane } from "./material-pane";
 import { submitEditedMessage } from "./message-editor";
 import { Messages } from "./messages";
 import { MultimodalInput } from "./multimodal-input";
@@ -100,6 +102,19 @@ export function ChatShell() {
     setInput("");
   }, [editingMessage, input, regenerate, setInput, setMessages]);
 
+  // 课件划词提问：和首页示例问题一样，直接发出去
+  const handleAskMaterial = useCallback(
+    (text: string) => {
+      window.history.pushState(
+        {},
+        "",
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/chat/${chatId}`
+      );
+      sendMessage({ parts: [{ text, type: "text" }], role: "user" });
+    },
+    [chatId, sendMessage]
+  );
+
   const handleActivateGateway = useCallback(() => {
     window.open(
       "https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%3Fmodal%3Dadd-credit-card",
@@ -111,10 +126,15 @@ export function ChatShell() {
   return (
     <>
       <div className="flex h-dvh w-full flex-row overflow-hidden">
+        {!(isArtifactVisible || isReadonly) && (
+          <aside className="hidden w-[26%] min-w-0 shrink-0 border-r bg-background lg:block">
+            <MaterialPane onAsk={handleAskMaterial} />
+          </aside>
+        )}
         <div
           className={cn(
             "flex min-w-0 flex-col bg-sidebar transition-[width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
-            isArtifactVisible ? "w-[40%]" : "w-full"
+            isArtifactVisible ? "w-[40%]" : "w-full min-w-0 flex-1"
           )}
         >
           <ChatHeader
@@ -162,6 +182,12 @@ export function ChatShell() {
             </div>
           </div>
         </div>
+
+        {!isArtifactVisible && (
+          <aside className="hidden w-[34%] min-w-0 shrink-0 border-l bg-background lg:block">
+            <LearnerGraph key={chatId} sessionId={chatId} />
+          </aside>
+        )}
 
         <Artifact
           addToolApprovalResponse={addToolApprovalResponse}

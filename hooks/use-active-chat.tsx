@@ -22,6 +22,11 @@ import { getChatHistoryPaginationKey } from "@/components/chat/sidebar-history";
 import { toast } from "@/components/chat/toast";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { useAutoResume } from "@/hooks/use-auto-resume";
+import {
+  COURSE_ID,
+  LEARNER_REFRESH_EVENT,
+  NODE_TOUCHED_EVENT,
+} from "@/lib/constants";
 import type { Vote } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
 import type { ChatMessage } from "@/lib/types";
@@ -106,6 +111,12 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
         setWaitingStatus(dataPart.data);
         return;
       }
+      if (dataPart.type === "data-node-touched") {
+        window.dispatchEvent(
+          new CustomEvent(NODE_TOUCHED_EVENT, { detail: dataPart.data })
+        );
+        return;
+      }
       setDataStream((ds) => (ds ? [...ds, dataPart] : []));
     },
     onError: (error) => {
@@ -122,6 +133,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     },
     onFinish: () => {
       mutate(unstable_serialize(getChatHistoryPaginationKey));
+      window.dispatchEvent(new Event(LEARNER_REFRESH_EVENT));
     },
     sendAutomaticallyWhen: ({ messages: currentMessages }) => {
       const lastMessage = currentMessages.at(-1);
@@ -157,6 +169,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
             ...(isToolApprovalContinuation
               ? { messages: request.messages }
               : { message: lastMessage }),
+            courseId: COURSE_ID,
             selectedVisibilityType: visibility,
             ...request.body,
           },

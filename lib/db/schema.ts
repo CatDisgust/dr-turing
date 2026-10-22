@@ -11,7 +11,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import type { CourseGraph } from "../types";
+import type { CourseGraph, LearnerState as LearnerStateData } from "../types";
 
 export const user = pgTable("User", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
@@ -147,3 +147,17 @@ export const course = pgTable("Course", {
 });
 
 export type Course = InferSelectModel<typeof course>;
+
+// 一个学生 × 一门课一份状态（LearnerState），整份存 JSONB
+export const learnerState = pgTable(
+  "LearnerState",
+  {
+    courseId: text("courseId").notNull(),
+    state: jsonb("state").$type<LearnerStateData>().notNull(),
+    studentId: uuid("studentId").notNull(),
+    updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.studentId, table.courseId] }),
+  })
+);

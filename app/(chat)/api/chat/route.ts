@@ -11,16 +11,29 @@ import {
   createStreamId,
   deleteChatById,
   getChatById,
+  getCourseById,
+  getLearnerState,
   getMessagesByChatId,
   saveChat,
+  saveLearnerState,
   saveMessages,
   updateChatTitleById,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
+import { emptyLearnerState, touchNode } from "@/lib/learner/update";
 import { auth } from "@/lib/session";
+import { classifyQuestion } from "@/lib/tutor/classify";
 import { ahaPrompt } from "@/lib/tutor/prompts";
-import { pipeClaudeToUI, toClaudeMessages } from "@/lib/tutor/to-ui-stream";
-import type { ChatMessage, WaitingStatusData } from "@/lib/types";
+import {
+  buffered,
+  pipeClaudeToUI,
+  toClaudeMessages,
+} from "@/lib/tutor/to-ui-stream";
+import type {
+  ChatMessage,
+  KnowledgePoint,
+  WaitingStatusData,
+} from "@/lib/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { generateTitleFromUserMessage } from "../../actions";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
@@ -39,6 +52,38 @@ function describeClaudeError(error: unknown): string {
     return `出错了（Anthropic ${error.status ?? "网络"}）：${error.message}`;
   }
   return `出错了：${error instanceof Error ? error.message : String(error)}`;
+}
+
+// 快路径：归类到一个知识点，记进学生状态，节点虚线亮。失败了只是不亮，不影响讲解
+async function touchFromQuestion({
+  courseId,
+  chatId,
+  studentId,
+  question,
+}: {
+  courseId: string;
+  chatId: string;
+  studentId: string;
+  question: string;
+}): Promise<KnowledgePoint | null> {
+  try {
+    const course = await getCourseById({ id: courseId });
+    if (!course || question.trim() === "") {
+      return null;
+    }
+    const point = await classifyQuestion(course.graph, question);
+    if (!point) {
+      return null;
+    }
+    const state =
+      (await getLearnerState({ courseId, studentId })) ??
+      emptyLearnerState(studentId, courseId);
+    await saveLearnerState({ state: touchNode(state, point.id, chatId) });
+    return point;
+  } catch (error) {
+    console.error("classify failed:", error);
+    return null;
+  }
 }
 
 function getStreamContext() {
@@ -62,7 +107,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { id, message, selectedVisibilityType } = requestBody;
+    const { courseId, id, message, selectedVisibilityType } = requestBody;
 
     const session = await auth();
 
@@ -129,6 +174,18 @@ export async function POST(request: Request) {
 
         writeWaitingStatus("waiting", "思考中…");
 
+        const question = message.parts
+          .map((part) => (part.type === "text" ? part.text : ""))
+          .join("\n");
+        const touched = courseId
+          ? touchFromQuestion({
+              chatId: id,
+              courseId,
+              question,
+              studentId: session.user.id,
+            })
+          : Promise.resolve(null);
+
         const claudeStream = claude.beta.messages.stream({
           ...FALLBACK,
           max_tokens: 64_000,
@@ -144,7 +201,19 @@ export async function POST(request: Request) {
           ],
         });
 
-        await pipeClaudeToUI(claudeStream, writer);
+        const events = buffered(claudeStream);
+
+        // 归类和讲解同时发出；先等归类，讲解开始时节点已经亮了
+        const point = await touched;
+        if (point) {
+          writer.write({
+            data: { kpId: point.id, name: point.name },
+            transient: true,
+            type: "data-node-touched",
+          });
+        }
+
+        await pipeClaudeToUI(events, writer);
 
         const final = await claudeStream.finalMessage();
         if (final.stop_reason === "refusal") {
