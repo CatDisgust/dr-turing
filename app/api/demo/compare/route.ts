@@ -20,7 +20,7 @@ async function planFor(
   const sessionId = "compare";
   const rulePlan = planTurn({ graph, kpId, sessionId, state });
   try {
-    return await fillPlan({
+    const { plan } = await fillPlan({
       graph,
       justTellMe: false,
       rulePlan,
@@ -28,6 +28,7 @@ async function planFor(
       state,
       studentText: question,
     });
+    return plan;
   } catch (error) {
     console.error("[compare] Claude 填 plan 失败，用规则默认值", error);
     return rulePlan;

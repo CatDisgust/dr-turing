@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Attempt, CourseGraph, LearnerState } from "@/lib/types";
 import { BKT, FULL_O } from "../config";
 import { plannerContext } from "../context";
-import { sessionEngagement } from "../engagement";
 import { nodeLight } from "../light";
 import { bktUpdate, masteryFromAttempts } from "../mastery";
 import {
@@ -333,39 +332,18 @@ describe("撤销、讲解、投入度", () => {
     expect(s.nodes.kp_race.O).toBe(0);
   });
 
-  it("放弃、直接告诉我、跳题各记一笔；独立做对后清零", () => {
-    let s = applySignal(start(), "give_up", "t", "s1");
-    s = applySignal(s, "skip", "t", "s1");
-    s = applySignal(s, "just_tell_me", "t", "s1");
-    s = applySignal(s, "hint", "t", "s1");
-    expect(s.engagement).toMatchObject({
-      giveUps: 1,
-      justTellMe: 1,
-      skippedQuestions: 1,
-    });
+  it("放弃、直接告诉我、跳题各记一条事件；给提示不记；独立做对也不清零", () => {
+    let s = applySignal(start(), "give_up");
+    s = applySignal(s, "skip");
+    s = applySignal(s, "just_tell_me");
+    s = applySignal(s, "hint");
+    expect(s.engagement.recent.map((e) => e.type)).toEqual([
+      "give_up",
+      "skip",
+      "just_tell_me",
+    ]);
     s = apply(s, "kp_race", {});
-    expect(s.engagement).toMatchObject({
-      giveUps: 0,
-      justTellMe: 0,
-      skippedQuestions: 0,
-    });
-  });
-
-  // 建模审查第 1 条：投入度只算这一次学习，换一次学习从零算
-  it("投入度按会话算：换一次学习从零开始，旧数据没记会话也从零算", () => {
-    let s = applySignal(start(), "give_up", "t", "s1");
-    s = applySignal(s, "give_up", "t", "s1");
-    s = applySignal(s, "give_up", "t", "s1");
-    expect(sessionEngagement(s.engagement, "s1").giveUps).toBe(3);
-    expect(sessionEngagement(s.engagement, "s2").giveUps).toBe(0);
-    s = applySignal(s, "skip", "t", "s2");
-    expect(s.engagement).toMatchObject({
-      giveUps: 0,
-      sessionId: "s2",
-      skippedQuestions: 1,
-    });
-    const old = { giveUps: 5, justTellMe: 0, skippedQuestions: 0 };
-    expect(sessionEngagement(old, "s1").giveUps).toBe(0);
+    expect(s.engagement.recent).toHaveLength(3);
   });
 });
 

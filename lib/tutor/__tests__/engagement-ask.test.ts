@@ -17,7 +17,7 @@ vi.mock("../plan", () => ({
 
 const { planAndAsk } = await import("../turn");
 
-// 建模审查第 1 条：投入度低时规则①给小提示，之后也要出题，学生才有机会答对把投入度清掉
+// 建模审查第 1 条：投入度低时规则①给小提示，之后也要出题，学生才有机会答对；投入度随轮次衰减，不会卡死
 
 const point: KnowledgePoint = {
   aliases: [],
@@ -40,14 +40,16 @@ const graph: CourseGraph = {
   points: [point],
 };
 
-const turn = (engagementSession: string) => {
+// 第 10 轮时，第 turnOfGiveUps 轮放弃了 3 次
+const turn = (turnOfGiveUps: number) => {
   const state = {
     ...emptyLearnerState("u", "c"),
     engagement: {
-      giveUps: 3,
-      justTellMe: 0,
-      sessionId: engagementSession,
-      skippedQuestions: 0,
+      recent: [1, 2, 3].map(() => ({
+        turn: turnOfGiveUps,
+        type: "give_up" as const,
+      })),
+      turn: 10,
     },
   };
   return {
@@ -61,8 +63,8 @@ const turn = (engagementSession: string) => {
 };
 
 describe("投入度低", () => {
-  it("这次学习里放弃了 3 次：规则①给小提示，接着出一道题", async () => {
-    const t = turn("s1");
+  it("这一轮放弃了 3 次：规则①给小提示，接着出一道题", async () => {
+    const t = turn(10);
     const out = await planAndAsk(t, {
       note: null,
       state: t.state,
@@ -73,8 +75,8 @@ describe("投入度低", () => {
     expect(out.state.pendingQuestion?.kpId).toBe("dl");
   });
 
-  it("放弃是上一次学习的事：这次从零算，不命中规则①", async () => {
-    const t = turn("s0");
+  it("放弃是 8 轮前的事：衰减到 0.75，不命中规则①", async () => {
+    const t = turn(2);
     const out = await planAndAsk(t, {
       note: null,
       state: t.state,

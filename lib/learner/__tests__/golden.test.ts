@@ -213,7 +213,7 @@ describe("实现规划的 6 轮例子（竞争条件）", () => {
       transferPassed: false,
     };
     const decision = nextAction({
-      engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 },
+      engagement: { recent: [], turn: 0 },
       kpId: "kp_race",
       node,
       prereqs: [],

@@ -31,9 +31,6 @@ export const QUALITATIVE_KINDS: readonly KnowledgeKind[] = [
 export const RECENCY_WEIGHTS = [0.5, 0.7, 0.85, 0.95, 1.0] as const;
 export const CONFIDENCE_CAP: Record<number, number> = { 1: 0.5, 2: 0.8 };
 
-// 投入度 W：放弃、“直接告诉我”、跳题加起来到这个数就算偏低（假设）
-export const ENGAGEMENT_LOW = 3;
-
 // 主文档更新表：答案被揭示后照着做对是弱证据，学习率减半
 export const REVEALED_LEARN_FACTOR = 0.5;
 

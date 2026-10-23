@@ -23,6 +23,7 @@ import type {
   LearnerState,
   PersonalGraph,
   SessionReport,
+  StudentModelData,
   Transaction,
 } from "../types";
 import { generateUUID } from "../utils";
@@ -32,11 +33,14 @@ import {
   course,
   type DBMessage,
   document,
+  event,
   learnerState,
   message,
   personalGraph,
+  type StudentEvent,
   type Suggestion,
   stream,
+  studentModel,
   suggestion,
   transaction,
   type User,
@@ -793,6 +797,78 @@ export async function getLearnerStatesByStudent({
       .from(learnerState)
       .where(eq(learnerState.studentId, studentId));
     return rows.map((row) => row.state);
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// 学生的反应事件：只追加
+export async function saveEvents(rows: Omit<StudentEvent, "id" | "at">[]) {
+  if (rows.length === 0) {
+    return;
+  }
+  try {
+    return await db.insert(event).values(rows);
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function getEventsByStudent({ studentId }: { studentId: string }) {
+  try {
+    return await db
+      .select()
+      .from(event)
+      .where(eq(event.studentId, studentId))
+      .orderBy(asc(event.at));
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function getTransactionsByStudent({
+  studentId,
+}: {
+  studentId: string;
+}) {
+  try {
+    return await db
+      .select()
+      .from(transaction)
+      .where(eq(transaction.studentId, studentId))
+      .orderBy(asc(transaction.createdAt));
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function getStudentModel({ studentId }: { studentId: string }) {
+  try {
+    const [row] = await db
+      .select()
+      .from(studentModel)
+      .where(eq(studentModel.studentId, studentId));
+    return row?.data ?? null;
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function saveStudentModel({
+  studentId,
+  data,
+}: {
+  studentId: string;
+  data: StudentModelData;
+}) {
+  try {
+    return await db
+      .insert(studentModel)
+      .values({ data, studentId })
+      .onConflictDoUpdate({
+        set: { data, updatedAt: new Date() },
+        target: studentModel.studentId,
+      });
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }

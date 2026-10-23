@@ -21,11 +21,7 @@ function node(fields: Partial<NodeState>): NodeState {
   };
 }
 
-const calm: LearnerState["engagement"] = {
-  giveUps: 0,
-  justTellMe: 0,
-  skippedQuestions: 0,
-};
+const calm: LearnerState["engagement"] = { recent: [], turn: 10 };
 
 const graded = {
   at: "",
@@ -58,9 +54,16 @@ describe("七条规则", () => {
     expect([d.rule, d.prompt]).toEqual([1, "min_hint"]);
   });
 
-  it("① 跳题、放弃累计到 3 次算投入度偏低", () => {
+  it("① 最近两轮跳题、放弃加起来，衰减后仍 ≥ 2，算投入度偏低", () => {
     const d = nextAction({
-      engagement: { giveUps: 1, justTellMe: 0, skippedQuestions: 2 },
+      engagement: {
+        recent: [
+          { turn: 9, type: "skip" },
+          { turn: 10, type: "give_up" },
+          { turn: 10, type: "skip" },
+        ],
+        turn: 10,
+      },
       kpId: "kp",
       node: node({}),
       prereqs: [],

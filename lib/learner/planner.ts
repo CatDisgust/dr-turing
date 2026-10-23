@@ -6,7 +6,7 @@ import type {
 } from "@/lib/types";
 import { HALF_M } from "./config";
 import { plannerContext } from "./context";
-import { sessionEngagement } from "./engagement";
+import { engagementOf } from "./events";
 import { type ActionDecision, nextAction, type TurnSignal } from "./policy";
 
 // 规划器第一步：七条规则定下一步（policy.nextAction）。其余字段这里按规则给一份默认值，
@@ -62,7 +62,7 @@ export function planTurn(input: {
   const ctx = plannerContext(graph, state, input.kpId, input.sessionId);
   const node = state.nodes[input.kpId];
   const decision = nextAction({
-    engagement: sessionEngagement(state.engagement, input.sessionId),
+    engagement: engagementOf(state),
     kpId: input.kpId,
     node: node ?? {
       attempts: [],
