@@ -107,8 +107,16 @@ describe("armOutcomes", () => {
       [{ attempt: attempt({ at: "2026-10-23T09:10:00Z" }), kpId: "kp_a" }],
       [{ messageId: "u2", type: "still_lost" }]
     );
-    expect(out).toEqual([
-      { arm: "analogy:example_first", feel: false, learn: true },
+    expect(out).toMatchObject([
+      {
+        arm: "analogy:example_first",
+        at: "2026-10-23T09:01:00.000Z",
+        chatId: "c1",
+        feel: false,
+        kpId: "kp_a",
+        learn: true,
+        messageId: "m1",
+      },
       { arm: "code:definition_first", feel: true, learn: true },
     ]);
   });
@@ -126,7 +134,7 @@ describe("armOutcomes", () => {
       ],
       []
     );
-    expect(out).toEqual([
+    expect(out).toMatchObject([
       { arm: "analogy:example_first", feel: true, learn: false },
     ]);
   });
@@ -138,7 +146,11 @@ describe("armOutcomes", () => {
         [],
         [{ messageId: "u5", type: "give_up" }]
       )[0]
-    ).toEqual({ arm: "analogy:example_first", feel: true, learn: undefined });
+    ).toMatchObject({
+      arm: "analogy:example_first",
+      feel: true,
+      learn: undefined,
+    });
     expect(
       armOutcomes(
         messages.slice(0, 2),
@@ -169,9 +181,10 @@ describe("armOutcomes", () => {
 
 describe("countArms / populationPrior / posterior", () => {
   it("计数、先验、后验", () => {
+    const base = { at: "", chatId: "c", kpId: "kp", messageId: "m" };
     const counts = countArms([
-      { arm: "code:example_first", feel: true, learn: true },
-      { arm: "code:example_first", feel: false },
+      { ...base, arm: "code:example_first", feel: true, learn: true },
+      { ...base, arm: "code:example_first", feel: false },
     ]);
     expect(counts["code:example_first"]).toEqual({
       feel: { k: 1, n: 2 },

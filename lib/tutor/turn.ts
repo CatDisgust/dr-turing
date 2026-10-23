@@ -6,6 +6,7 @@ import {
   recordEvent,
   signals,
 } from "@/lib/learner/events";
+import { notesFor } from "@/lib/learner/notes";
 import { planTurn } from "@/lib/learner/planner";
 import type { TurnSignal } from "@/lib/learner/policy";
 import { predict } from "@/lib/learner/predict";
@@ -219,6 +220,26 @@ function withBurden(note: string | null, state: LearnerState): string | null {
     .join("");
 }
 
+// 这一轮讲法用得上的教学笔记（检验过的，学生建模方案 E）：只影响怎么讲
+function withNotes(
+  note: string | null,
+  state: LearnerState,
+  plan: TutorPlan,
+  graph: CourseGraph
+): string | null {
+  const kind = graph.points.find((p) => p.id === plan.target_kc)?.kind;
+  const notes = notesFor(state.teachingNotes ?? [], plan, kind);
+  if (notes.length === 0) {
+    return note;
+  }
+  return [
+    note,
+    `之前验证过的、对这个学生怎么讲更有效的观察：${notes.map((n) => n.text).join("；")}。照着调整讲法，不要向学生提起这些观察。`,
+  ]
+    .filter(Boolean)
+    .join("");
+}
+
 // 引擎这一步之后：规划器定本轮动作；讲解、出题、复习之后接一道题（还有题没答完就不出新题）
 export async function planAndAsk(
   turn: Turn,
@@ -260,7 +281,12 @@ export async function planAndAsk(
   } catch (error) {
     console.error("[plan] Claude 填 plan 失败，用规则默认值", error);
   }
-  const note = withBurden(result.note, state);
+  const note = withNotes(
+    withBurden(result.note, state),
+    state,
+    plan,
+    turn.graph
+  );
   const stillOpen = state.pendingQuestion?.sessionId === turn.sessionId;
   const target = turn.graph.points.find((p) => p.id === plan.target_kc);
   if (

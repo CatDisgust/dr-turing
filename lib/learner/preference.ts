@@ -55,11 +55,25 @@ type MessageRow = {
   createdAt: Date | string;
   plan: Pick<
     TutorPlan,
-    "representation" | "order" | "target_kc" | "disclosure_level"
+    | "representation"
+    | "order"
+    | "target_kc"
+    | "disclosure_level"
+    | "expect_like"
   > | null;
 };
 
-export type ArmOutcome = { arm: string; learn?: boolean; feel: boolean };
+export type ArmOutcome = {
+  arm: string;
+  learn?: boolean;
+  feel: boolean;
+  // 教学笔记（方案 E）检验要用：哪条回复、哪个点、什么时候、当时预计喜不喜欢
+  messageId: string;
+  chatId: string;
+  kpId: string;
+  at: string;
+  expectLike?: number;
+};
 
 const time = (t: Date | string) => new Date(t).getTime();
 
@@ -109,10 +123,15 @@ export function armOutcomes(
           order: plan.order,
           representation: plan.representation,
         }),
+        at: new Date(m.createdAt).toISOString(),
+        chatId: m.chatId,
+        expectLike: plan.expect_like,
         feel,
+        kpId: plan.target_kc,
         learn: next
           ? next.attempt.correct === true && !next.attempt.hinted
           : undefined,
+        messageId: m.id,
       });
     });
   }
