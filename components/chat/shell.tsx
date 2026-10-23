@@ -146,6 +146,22 @@ export function ChatShell() {
     [sendMessage]
   );
 
+  // 图谱上点“开始学习”：发一句话，并告诉服务端目标点，不用再归类
+  const handleStartLearning = useCallback(
+    (kpId: string, name: string) => {
+      window.history.pushState(
+        {},
+        "",
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/chat/${chatId}`
+      );
+      sendMessage(
+        { parts: [{ text: `我想学「${name}」`, type: "text" }], role: "user" },
+        { body: { targetKpId: kpId } }
+      );
+    },
+    [chatId, sendMessage]
+  );
+
   const handleActivateGateway = useCallback(() => {
     window.open(
       "https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%3Fmodal%3Dadd-credit-card",
@@ -224,7 +240,15 @@ export function ChatShell() {
 
         {!isArtifactVisible && (
           <aside className="hidden w-[34%] min-w-0 shrink-0 border-l bg-background lg:block">
-            <LearnerGraph key={chatId} sessionId={chatId} />
+            <LearnerGraph
+              key={chatId}
+              onStartLearning={
+                isReadonly || status === "submitted" || status === "streaming"
+                  ? undefined
+                  : handleStartLearning
+              }
+              sessionId={chatId}
+            />
           </aside>
         )}
 

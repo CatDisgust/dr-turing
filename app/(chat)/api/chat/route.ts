@@ -44,6 +44,7 @@ import {
   planAndAsk,
   questionTurn,
   signalTurn,
+  startTurn,
   type Turn,
   type TurnResult,
 } from "@/lib/tutor/turn";
@@ -143,8 +144,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { courseId, id, message, selectedVisibilityType, signal } =
-      requestBody;
+    const {
+      courseId,
+      id,
+      message,
+      selectedVisibilityType,
+      signal,
+      targetKpId,
+    } = requestBody;
 
     const session = await auth();
 
@@ -232,20 +239,23 @@ export async function POST(request: Request) {
         // 引擎这一侧先走完：快捷按钮 / 批改上一轮的题 / 归类新问题，再由规划器定本轮动作。
         // 导师用哪段提示词取决于规划，所以归类不能再和讲解并行
         // 诊断入口（D10）优先：“我要学第 N 课”、诊断题的回答、诊断中点“先不做题”
-        const diagnosed = turn
-          ? await safely("diagnose", () =>
-              signal === "skip"
-                ? diagnosisSkip(turn)
-                : signal
-                  ? Promise.resolve(null)
-                  : diagnosisAnswer(turn).then(
-                      (answered) => answered ?? diagnosisStart(turn)
-                    )
-            )
-          : null;
+        const diagnosed =
+          turn && !targetKpId
+            ? await safely("diagnose", () =>
+                signal === "skip"
+                  ? diagnosisSkip(turn)
+                  : signal
+                    ? Promise.resolve(null)
+                    : diagnosisAnswer(turn).then(
+                        (answered) => answered ?? diagnosisStart(turn)
+                      )
+              )
+            : null;
         let result: TurnResult | null = diagnosed?.result ?? null;
         if (diagnosed) {
           // 诊断这一侧已经定好了规划和题
+        } else if (turn && targetKpId) {
+          result = startTurn(turn, targetKpId);
         } else if (turn && signal) {
           result = signalTurn(turn, signal);
         } else if (turn) {

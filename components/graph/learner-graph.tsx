@@ -22,7 +22,14 @@ type Graded = {
 
 // 聊天右边的图谱：按当前学生的状态点亮。归类一到就先把那个点虚线亮，批改完、回答结束再从库里刷新。
 // 点一个节点打开抽屉，看证据原话
-export function LearnerGraph({ sessionId }: { sessionId: string }) {
+export function LearnerGraph({
+  sessionId,
+  onStartLearning,
+}: {
+  sessionId: string;
+  // 抽屉里点“开始学习”时调用，由对话那边发消息
+  onStartLearning?: (kpId: string, name: string) => void;
+}) {
   const [graph, setGraph] = useState<CourseGraph | null>(null);
   const state = useLearnerState();
   const [touched, setTouched] = useState<{ kpId: string; name: string }>();
@@ -59,6 +66,13 @@ export function LearnerGraph({ sessionId }: { sessionId: string }) {
     setOpenId(id);
   }, []);
   const close = useCallback(() => setOpenId(null), []);
+  const start = useCallback(() => {
+    const point = graph?.points.find((p) => p.id === openId);
+    if (point && onStartLearning) {
+      onStartLearning(point.id, point.name);
+      setOpenId(null);
+    }
+  }, [graph, openId, onStartLearning]);
   const lights = useMemo(() => {
     const result: Record<string, Light> = {};
     for (const point of graph?.points ?? []) {
@@ -123,6 +137,7 @@ export function LearnerGraph({ sessionId }: { sessionId: string }) {
         <NodeDrawer
           node={state?.nodes[openPoint.id]}
           onClose={close}
+          onStart={onStartLearning ? start : undefined}
           point={openPoint}
           sessionId={sessionId}
         />

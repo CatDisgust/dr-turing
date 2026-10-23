@@ -133,6 +133,25 @@ export async function answerTurn(turn: Turn): Promise<TurnResult | null> {
   };
 }
 
+// 图谱上点“开始学习”：目标点已经定了，不用归类。换了个点学，上一道没答的题就不等了
+// （不算“先不做题”，不计入投入度）
+export function startTurn(turn: Turn, kpId: string): TurnResult {
+  const point = turn.graph.points.find((p) => p.id === kpId);
+  if (!point) {
+    return { note: null, state: turn.state };
+  }
+  const pending = turn.state.pendingQuestion;
+  const state =
+    pending && pending.kpId !== kpId
+      ? { ...turn.state, pendingQuestion: undefined }
+      : turn.state;
+  return {
+    note: null,
+    state: touchNode(state, point.id, turn.sessionId),
+    touched: point,
+  };
+}
+
 // 新问题：归类到一个点，虚线亮，讲完出一道题
 export async function questionTurn(turn: Turn): Promise<TurnResult> {
   const point =

@@ -27,6 +27,8 @@ export const postRequestBodySchema = z.object({
   selectedVisibilityType: z.enum(["public", "private"]),
   // 快捷按钮：给提示、直接告诉我、先不做题
   signal: z.enum(["hint", "just_tell_me", "skip"]).optional(),
+  // 图谱上点了某个知识点的“开始学习”：直接以它为目标，不再归类
+  targetKpId: z.string().max(64).optional(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;
