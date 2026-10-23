@@ -7,8 +7,9 @@ import { nodeLight } from "@/lib/learner/light";
 import type { CourseGraph } from "@/lib/types";
 
 // 页头的本课进度（视觉规范 LessonProgress）：课名 + 一条分段进度条，先“真会”再“看懂”。
-// 哪一课：这次在问的点所在的课；还没问过就用最近有证据的那一课
-export function LessonProgress() {
+// 哪一课：这次对话正在讲的点所在的课（刚归类到的点，否则是最后一条导师回答的目标点）。
+// 这次对话还没碰到课里的点（新对话、问课外的东西）就什么都不显示，不拿别的对话的课来充数
+export function LessonProgress({ targetId }: { targetId?: string }) {
   const [graph, setGraph] = useState<CourseGraph | null>(null);
   const state = useLearnerState();
   const [touchedId, setTouchedId] = useState<string | null>(null);
@@ -31,22 +32,13 @@ export function LessonProgress() {
     if (!graph) {
       return null;
     }
-    let pointId = touchedId;
-    if (!pointId) {
-      let latest = "";
-      for (const [id, node] of Object.entries(state?.nodes ?? {})) {
-        const at = node.attempts.at(-1)?.at ?? "";
-        if (at > latest) {
-          latest = at;
-          pointId = id;
-        }
-      }
-    }
+    const pointId = touchedId ?? targetId;
     const lessonId = graph.points.find((p) => p.id === pointId)?.lessonId;
     const lesson = graph.lessons.find((l) => l.id === lessonId);
-    const points = lesson
-      ? graph.points.filter((p) => p.lessonId === lesson.id)
-      : graph.points;
+    if (!lesson) {
+      return null;
+    }
+    const points = graph.points.filter((p) => p.lessonId === lesson.id);
     let full = 0;
     let half = 0;
     for (const point of points) {
@@ -60,10 +52,10 @@ export function LessonProgress() {
     return {
       full,
       half,
-      label: lesson ? `第 ${lesson.index} 课 · ${lesson.title}` : "全课",
+      label: `第 ${lesson.index} 课 · ${lesson.title}`,
       total: points.length,
     };
-  }, [graph, state, touchedId]);
+  }, [graph, state, touchedId, targetId]);
 
   if (!summary || summary.total === 0) {
     return null;

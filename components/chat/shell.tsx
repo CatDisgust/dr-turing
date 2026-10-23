@@ -169,6 +169,10 @@ export function ChatShell() {
   const busy = status === "submitted" || status === "streaming";
   // 最新一条回答留了题：底部换成作答区，平时的输入框先收起来
   const lastMessage = messages.at(-1);
+  // 这次对话最后讲的是哪个点：页头只显示这一课的进度
+  const targetId = messages.findLast(
+    (m) => m.role === "assistant" && m.metadata?.plan
+  )?.metadata?.plan?.target_kc;
   const pendingCard: CheckCard | null = useMemo(() => {
     if (isReadonly || lastMessage?.role !== "assistant") {
       return null;
@@ -223,6 +227,7 @@ export function ChatShell() {
             chatId={chatId}
             isReadonly={isReadonly}
             selectedVisibilityType={visibilityType}
+            targetId={targetId}
           />
 
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
