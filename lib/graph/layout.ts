@@ -27,7 +27,11 @@ export type GraphLayout = {
   positions: Record<string, { x: number; y: number }>;
 };
 
-export function layoutGraph(graph: CourseGraph): GraphLayout {
+// plainTitles：块标题只用 title，不加“第 N 课”（我的星图按课程和课外分块）
+export function layoutGraph(
+  graph: CourseGraph,
+  { plainTitles = false }: { plainTitles?: boolean } = {}
+): GraphLayout {
   const lessons: LessonBox[] = [];
   const positions: GraphLayout["positions"] = {};
   let y = 0;
@@ -85,7 +89,9 @@ export function layoutGraph(graph: CourseGraph): GraphLayout {
     lessons.push({
       height,
       id: lesson.id,
-      title: `第 ${lesson.index} 课 ${lesson.title}`,
+      title: plainTitles
+        ? lesson.title
+        : `第 ${lesson.index} 课 ${lesson.title}`,
       width,
       y,
     });

@@ -454,6 +454,8 @@ export type PersonalConcept = {
   evidence: { sessionId: string; quote: string; at: string }[];
   note?: string;
   createdAt: string;
+  // 学生合并进来的：哪次合并、原来叫什么（可以拆开）
+  merged?: { from: string; mergeId: string; name: string }[];
 };
 
 export type PersonalGraph = {
@@ -464,6 +466,8 @@ export type PersonalGraph = {
     string,
     { sessionId: string; quote: string; at: string }[]
   >;
+  // 学生把课外概念并进了哪个课程知识点：kp id → 并进来的（可以拆开）。旧数据没有
+  anchored?: Record<string, NonNullable<PersonalConcept["merged"]>>;
   // 每次复核的新增 / 更新 / 作废，带原话，只追加
   log: {
     at: string;
