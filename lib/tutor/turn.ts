@@ -10,7 +10,12 @@ import { planTurn } from "@/lib/learner/planner";
 import type { TurnSignal } from "@/lib/learner/policy";
 import { predict } from "@/lib/learner/predict";
 import { attemptFromGrading, pickQuestion } from "@/lib/learner/question";
-import { applyEvidence, applySignal, touchNode } from "@/lib/learner/update";
+import {
+  applyEvidence,
+  applySignal,
+  learnRateOf,
+  touchNode,
+} from "@/lib/learner/update";
 import type {
   Attempt,
   CourseGraph,
@@ -319,7 +324,8 @@ export function askQuestion(
         // 出题前先猜他能不能独立答对（学生建模方案 D）
         prediction: predict(
           state.nodes[point.id]?.attempts ?? [],
-          state.nodes[point.id]?.M ?? BKT.prior
+          state.nodes[point.id]?.M ?? BKT.prior,
+          learnRateOf(state)
         ),
         sessionId: turn.sessionId,
       },
