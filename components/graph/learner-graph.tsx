@@ -142,13 +142,14 @@ export function LearnerGraph({
           sessionId={sessionId}
         />
       ) : null}
-      <div className="absolute right-3 bottom-3 flex flex-col gap-1 rounded-md border bg-background/90 p-2 text-xs">
+      <div className="absolute right-3 bottom-3 flex flex-col gap-1 rounded-md border border-white/10 bg-black/80 p-2 text-stone-200 text-xs">
         {LIGHT_LEGEND.map((item) => (
           <div className="flex items-center gap-2" key={item.light}>
             <span style={lightSwatch(item.light)} />
             {item.label}
           </div>
         ))}
+        <div className="text-stone-400">外圈细弧：离全亮还差多少</div>
       </div>
     </div>
   );
