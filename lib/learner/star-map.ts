@@ -21,6 +21,9 @@ export type StarEvidence = {
   // 答题：批改过的作答；提到：对话里顺口说到；聊过：课外概念的出处
   how: "answer" | "mention" | "chat";
   correct?: boolean;
+  // 回链：哪次对话（标题）、那次学的哪门课；找不到对话（比如预置数据）就没有
+  chat?: string;
+  course?: string;
 };
 
 export type Star = {
@@ -35,6 +38,8 @@ export type Star = {
   evidence: StarEvidence[];
   // 学生合并进来的（可以拆开）
   merged: NonNullable<PersonalConcept["merged"]>;
+  // 常一起出现的：在同一次对话里都出现过，按一起出现的次数排
+  related: string[];
 };
 
 // 并进课程知识点时的候选：图上没有的课内知识点也算
@@ -50,18 +55,23 @@ export type StarMap = {
   lights: Record<string, Light>;
   progress: Record<string, number>;
   stars: Record<string, Star>;
+  related: Record<string, string[]>;
 };
 
 // 一颗星最多列几条出处，新的在前
 const MAX_EVIDENCE = 8;
+// “常一起出现”最多列几个
+const MAX_RELATED = 5;
 
 const recent = (items: StarEvidence[]) =>
-  items.toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, MAX_EVIDENCE);
+  items.toSorted((a, b) => b.at.localeCompare(a.at));
 
 export function buildStarMap(input: {
   courses: readonly CourseGraph[];
   states: readonly LearnerState[];
   personal: PersonalGraph;
+  // 对话 id → 标题
+  chats?: Readonly<Record<string, string>>;
 }): StarMap {
   const lessons: CourseGraph["lessons"] = [];
   const points: CourseGraph["points"] = [];
@@ -129,6 +139,7 @@ export function buildStarMap(input: {
         light: lights[p.id],
         merged: anchored[p.id] ?? [],
         name: p.name,
+        related: [],
         where: whereOf(p.lessonId),
       };
     }
@@ -172,7 +183,7 @@ export function buildStarMap(input: {
       sources: [],
       status: "auto",
     });
-    // 课外概念没有检查题，算不上“会”：聊过就半亮
+    // 课外概念没有检查题，算不上“会”：聊过就半亮（只在一次对话里出现过的，下面再调暗）
     lights[c.id] = "half";
     stars[c.id] = {
       aliases: c.aliases,
@@ -183,8 +194,54 @@ export function buildStarMap(input: {
       light: "half",
       merged: c.merged ?? [],
       name: c.name,
+      related: [],
       where: "课外",
     };
+  }
+
+  // 回链（个人知识库第 3 步）：每条出处标上哪次对话、哪门课；同一次对话里都出现过的算“常一起出现”。
+  // 课外概念只在一次对话里出现过的先暗着，再在别的对话里出现一次才亮（课内的亮度只看答题）
+  const courseOf = new Map<string, string>();
+  for (const state of input.states) {
+    const name = input.courses.find((c) => c.courseId === state.courseId)?.name;
+    for (const node of Object.values(state.nodes)) {
+      for (const a of node.attempts) {
+        if (name) {
+          courseOf.set(a.sessionId, name);
+        }
+      }
+    }
+  }
+  const all = Object.values(stars);
+  const sessions = new Map(
+    all.map((star) => [
+      star.id,
+      new Set(star.evidence.map((e) => e.sessionId).filter(Boolean)),
+    ])
+  );
+  const related: StarMap["related"] = {};
+  for (const star of all) {
+    const mine = sessions.get(star.id) ?? new Set<string>();
+    star.related = all
+      .filter((o) => o.id !== star.id)
+      .map((o) => ({
+        id: o.id,
+        n: [...(sessions.get(o.id) ?? [])].filter((x) => mine.has(x)).length,
+      }))
+      .filter((x) => x.n > 0)
+      .toSorted((a, b) => b.n - a.n)
+      .slice(0, MAX_RELATED)
+      .map((x) => x.id);
+    related[star.id] = star.related;
+    if (star.kind === "outside" && mine.size < 2) {
+      star.light = "gray";
+      lights[star.id] = "gray";
+    }
+    star.evidence = star.evidence.slice(0, MAX_EVIDENCE).map((e) => ({
+      ...e,
+      chat: input.chats?.[e.sessionId],
+      course: courseOf.get(e.sessionId),
+    }));
   }
 
   return {
@@ -199,6 +256,7 @@ export function buildStarMap(input: {
     },
     lights,
     progress,
+    related,
     stars,
   };
 }

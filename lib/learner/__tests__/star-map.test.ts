@@ -161,4 +161,55 @@ describe("我的星图", () => {
       { from: "pc_9", mergeId: "m1", name: "锁头" },
     ]);
   });
+
+  it("回链：出处标上哪次对话、哪门课；同一次对话里出现过的算一起出现", () => {
+    const map = buildStarMap({
+      chats: { s2: "并发控制入门" },
+      courses: [course],
+      personal: personal(),
+      states: [stateWithLock()],
+    });
+    expect(map.stars.pc_2.evidence[0]).toMatchObject({
+      chat: "并发控制入门",
+      course: "COMP5348",
+    });
+    expect(map.stars.kp_dead.evidence[0].chat).toBeUndefined();
+    expect(map.stars.pc_2.related).toEqual(["kp_lock"]);
+    expect(map.related.kp_lock).toEqual(["pc_2"]);
+    expect(map.stars.pc_1.related).toEqual([]);
+  });
+
+  it("课外概念只在一次对话里出现过就暗着，两次对话以上才亮", () => {
+    const base = personal();
+    const once = buildStarMap({
+      courses: [course],
+      personal: base,
+      states: [],
+    });
+    expect(once.lights.pc_1).toBe("gray");
+    expect(once.stars.pc_1.light).toBe("gray");
+    const [harness, ...rest] = base.concepts;
+    const twice = buildStarMap({
+      courses: [course],
+      personal: {
+        ...base,
+        concepts: [
+          {
+            ...harness,
+            evidence: [
+              ...harness.evidence,
+              {
+                at: "2026-10-22T00:00:00Z",
+                quote: "harness 管循环",
+                sessionId: "s4",
+              },
+            ],
+          },
+          ...rest,
+        ],
+      },
+      states: [],
+    });
+    expect(twice.lights.pc_1).toBe("half");
+  });
 });

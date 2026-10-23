@@ -232,6 +232,28 @@ export async function getChatsByUserId({
   }
 }
 
+// 我的星图的回链：一批对话的标题（只查这个学生自己的）
+export async function getChatTitles({
+  userId,
+  ids,
+}: {
+  userId: string;
+  ids: string[];
+}): Promise<Record<string, string>> {
+  if (ids.length === 0) {
+    return {};
+  }
+  try {
+    const rows = await db
+      .select({ id: chat.id, title: chat.title })
+      .from(chat)
+      .where(and(eq(chat.userId, userId), inArray(chat.id, ids)));
+    return Object.fromEntries(rows.map((r) => [r.id, r.title]));
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
 export async function getChatById({ id }: { id: string }) {
   try {
     const [selectedChat] = await db.select().from(chat).where(eq(chat.id, id));

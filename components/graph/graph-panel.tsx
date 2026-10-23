@@ -37,6 +37,7 @@ const LINE = "#26262b";
 const LIT_LINE = "rgba(255, 238, 205, 0.55)";
 const CHAIN = "#8d8a83";
 const CONFUSABLE = "#d9a066";
+const RELATED = "rgba(156, 200, 255, 0.6)";
 
 // 星心在节点里的位置：左边 32px 宽的一格的正中
 const STAR_X = 16;
@@ -519,6 +520,7 @@ export function GraphPanel({
   progress,
   focusId,
   plainTitles,
+  related,
 }: {
   graph: CourseGraph;
   selectedId: string | null;
@@ -530,6 +532,8 @@ export function GraphPanel({
   focusId?: string;
   // 块标题不加“第 N 课”（我的星图）
   plainTitles?: boolean;
+  // 常一起出现的（我的星图）：选中一颗星时画蓝色虚线连到它们
+  related?: Record<string, string[]>;
 }) {
   // 亮度比上次高的点闪一下（点亮动画，D12）
   const previous = useRef<Record<string, Light> | undefined>(undefined);
@@ -652,55 +656,67 @@ export function GraphPanel({
   const edges = useMemo<StarEdgeType[]>(() => {
     const lessonOf = new Map(graph.points.map((p) => [p.id, p.lessonId]));
     const chain = selectedId ? chainOf(graph.edges, selectedId) : new Set();
-    return graph.edges.flatMap<StarEdgeType>((edge) => {
-      const touched =
-        selectedId !== null &&
-        (edge.from === selectedId || edge.to === selectedId);
-      // 跨课的线和“易混”线默认收起，选中相关的点时才画
-      const crossLesson = lessonOf.get(edge.from) !== lessonOf.get(edge.to);
-      if ((edge.type === "confusable" || crossLesson) && !touched) {
-        return [];
-      }
-      const id = `${edge.type}:${edge.from}:${edge.to}`;
-      if (edge.type === "confusable") {
+    const together: StarEdgeType[] = (
+      selectedId ? (related?.[selectedId] ?? []) : []
+    ).map((to) => ({
+      data: { label: "一起出现" },
+      id: `related:${selectedId}:${to}`,
+      source: selectedId ?? "",
+      style: { stroke: RELATED, strokeDasharray: "4 4", strokeWidth: 1.2 },
+      target: to,
+      type: "star",
+    }));
+    return together.concat(
+      graph.edges.flatMap<StarEdgeType>((edge) => {
+        const touched =
+          selectedId !== null &&
+          (edge.from === selectedId || edge.to === selectedId);
+        // 跨课的线和“易混”线默认收起，选中相关的点时才画
+        const crossLesson = lessonOf.get(edge.from) !== lessonOf.get(edge.to);
+        if ((edge.type === "confusable" || crossLesson) && !touched) {
+          return [];
+        }
+        const id = `${edge.type}:${edge.from}:${edge.to}`;
+        if (edge.type === "confusable") {
+          return [
+            {
+              data: { label: "易混" },
+              id,
+              source: edge.from,
+              style: {
+                stroke: CONFUSABLE,
+                strokeDasharray: "1 4",
+                strokeLinecap: "round" as const,
+                strokeWidth: 1.2,
+              },
+              target: edge.to,
+              type: "star",
+            },
+          ];
+        }
+        const bothLit = isLit(edge.from) && isLit(edge.to);
+        const inChain = chain.has(edge.from) && chain.has(edge.to);
         return [
           {
-            data: { label: "易混" },
             id,
             source: edge.from,
             style: {
-              stroke: CONFUSABLE,
-              strokeDasharray: "1 4",
-              strokeLinecap: "round" as const,
-              strokeWidth: 1.2,
+              stroke: bothLit ? LIT_LINE : inChain || touched ? CHAIN : LINE,
+              strokeDasharray:
+                edge.type === "part_of"
+                  ? "3 3"
+                  : inChain && !bothLit
+                    ? "5 3"
+                    : undefined,
+              strokeWidth: bothLit ? 1.4 : inChain || touched ? 1.2 : 1,
             },
             target: edge.to,
             type: "star",
           },
         ];
-      }
-      const bothLit = isLit(edge.from) && isLit(edge.to);
-      const inChain = chain.has(edge.from) && chain.has(edge.to);
-      return [
-        {
-          id,
-          source: edge.from,
-          style: {
-            stroke: bothLit ? LIT_LINE : inChain || touched ? CHAIN : LINE,
-            strokeDasharray:
-              edge.type === "part_of"
-                ? "3 3"
-                : inChain && !bothLit
-                  ? "5 3"
-                  : undefined,
-            strokeWidth: bothLit ? 1.4 : inChain || touched ? 1.2 : 1,
-          },
-          target: edge.to,
-          type: "star",
-        },
-      ];
-    });
-  }, [graph, selectedId, isLit]);
+      })
+    );
+  }, [graph, selectedId, isLit, related]);
 
   // 数据或视野变了，按当前力场重画一帧（边的位置由 React Flow 重新给出）
   useEffect(() => {

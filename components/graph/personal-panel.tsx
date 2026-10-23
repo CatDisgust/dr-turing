@@ -136,6 +136,12 @@ export function PersonalPanel() {
                 你学过、聊过的所有概念，不分哪门课。亮度是答题答出来的，这里只能看。
               </DialogDescription>
             </div>
+            <ul className="pointer-events-none absolute bottom-4 left-20 z-[5] flex flex-wrap gap-x-4 gap-y-1 text-stone-400 text-xs">
+              <li>全亮：真会了</li>
+              <li>半亮：看懂了 / 课外在两次以上对话里聊过</li>
+              <li>暗：只出现过一次</li>
+              <li className="text-sky-300/80">蓝色虚线：选中星常一起出现的</li>
+            </ul>
             {data && data.graph.points.length > 0 ? (
               <GraphPanel
                 graph={data.graph}
@@ -143,6 +149,7 @@ export function PersonalPanel() {
                 onSelect={select}
                 plainTitles
                 progress={data.progress}
+                related={data.related}
                 selectedId={selectedId}
               />
             ) : (
@@ -175,6 +182,7 @@ export function PersonalPanel() {
                 onSplit={split}
                 onToggleMerge={toggleMerge}
                 star={star}
+                stars={data?.stars ?? {}}
               />
             ) : (
               <Overview abilities={data?.abilities ?? []} />
@@ -238,8 +246,10 @@ function StarDetail({
   onSplit,
   onMarkWrong,
   onSelect,
+  stars,
 }: {
   star: Star;
+  stars: Record<string, Star>;
   merging: boolean;
   candidates: MergeTarget[];
   onToggleMerge: () => void;
@@ -275,7 +285,9 @@ function StarDetail({
         ) : null}
         <span className="text-sm text-stone-300">
           {outside
-            ? `聊过 ${star.evidence.length} 次（课外概念没有检查题，不打分）`
+            ? star.light === "gray"
+              ? "只在一次对话里出现过，先暗着；在别的对话里再出现一次就亮"
+              : "在好几次对话里聊过（课外概念没有检查题，不打分）"
             : STATUS[star.light]}
         </span>
       </div>
@@ -294,11 +306,36 @@ function StarDetail({
             <span className="text-sky-300 text-xs">
               {day(e.at)} · {HOW[e.how]}
               {e.correct === undefined ? "" : e.correct ? " · 答对" : " · 答错"}
+              {e.course ? ` · ${e.course}` : ""}
             </span>
+            {e.chat ? (
+              <a
+                className="text-stone-400 text-xs underline-offset-2 hover:text-stone-200 hover:underline"
+                data-testid="backlink"
+                href={`/chat/${e.sessionId}`}
+              >
+                对话「{e.chat}」
+              </a>
+            ) : null}
             <span className="text-sm leading-relaxed">你：「{e.quote}」</span>
           </div>
         ))}
       </section>
+
+      {star.related.length > 0 ? (
+        <section className="flex flex-col gap-2" data-testid="related">
+          <h3 className="font-medium text-stone-400 text-xs">常一起出现</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {star.related.flatMap((id) =>
+              stars[id] ? (
+                <RelatedChip key={id} onSelect={onSelect} star={stars[id]} />
+              ) : (
+                []
+              )
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {star.merged.length > 0 ? (
         <section className="flex flex-col gap-2">
@@ -411,5 +448,24 @@ function CandidateButton({
         {c.aliases.length > 0 ? `，也叫 ${c.aliases.join("、")}` : ""}
       </span>
     </Button>
+  );
+}
+
+function RelatedChip({
+  star,
+  onSelect,
+}: {
+  star: Star;
+  onSelect: (id: string | null) => void;
+}) {
+  const pick = useCallback(() => onSelect(star.id), [star.id, onSelect]);
+  return (
+    <button
+      className="min-h-8 rounded-full border border-white/15 px-3 text-sm hover:bg-white/10"
+      onClick={pick}
+      type="button"
+    >
+      {star.name}
+    </button>
   );
 }
