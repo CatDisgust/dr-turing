@@ -104,7 +104,7 @@ export async function endSession(input: {
   // 复核要跑一阵子，这期间学生可能在别的对话里又答了题：落状态前重新读一次
   const fresh = (await getLearnerState(input)) ?? before;
   const applied = applyReview(fresh, course.graph, input.chatId, verdicts, now);
-  let state = applied.state;
+  let { state } = applied;
   await saveLearnerState({ state });
   // 撤销、改判也是原始记录：Transaction 只追加不改，复核结论记成事件
   await saveEvents(
