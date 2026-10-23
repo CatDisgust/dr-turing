@@ -1,0 +1,9 @@
+{
+  "name": "dr-turing-demo-video",
+  "private": true,
+  "type": "module",
+  "description": "录演示视频：在本机用 Playwright 驱动线上网站并录屏（不进主项目依赖）",
+  "dependencies": {
+    "playwright": "1.49.1"
+  }
+}
