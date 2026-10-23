@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { GraphPanel } from "@/components/graph/graph-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  CLUSTER,
+  collapseCourses,
   type MergeTarget,
   mergeCandidates,
   type Star,
@@ -46,6 +48,12 @@ export function PersonalPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // 展开了哪几门课（课内每门课先收成一团）
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const shown = useMemo(
+    () => (data ? collapseCourses(data, expanded) : null),
+    [data, expanded]
+  );
 
   const load = useCallback(() => {
     fetch("/api/personal/map")
@@ -61,10 +69,38 @@ export function PersonalPanel() {
   }, [open, load]);
 
   const show = useCallback(() => setOpen(true), []);
-  const select = useCallback((id: string | null) => {
-    setSelectedId(id);
-    setMerging(false);
-  }, []);
+  // 点星云就展开那门课；选中收起的课里的星（比如从“常一起出现”点过去）也先展开
+  const select = useCallback(
+    (id: string | null) => {
+      setMerging(false);
+      if (id?.startsWith(CLUSTER)) {
+        const block = id.slice(CLUSTER.length);
+        setExpanded((e) => new Set([...e, block]));
+        setSelectedId(null);
+        return;
+      }
+      const block = data?.graph.points.find((p) => p.id === id)?.lessonId;
+      if (block) {
+        setExpanded((e) => new Set([...e, block]));
+      }
+      setSelectedId(id);
+    },
+    [data]
+  );
+  const fold = useCallback(() => {
+    const block = data?.graph.points.find((p) => p.id === selectedId)?.lessonId;
+    setExpanded((e) => new Set([...e].filter((b) => b !== block)));
+    setSelectedId(null);
+  }, [data, selectedId]);
+  const unlink = useCallback(
+    (linkId: string, name: string) => {
+      fetch(`/api/personal/links/${linkId}`, { method: "DELETE" }).then(() => {
+        setNotice(`记下了：和「${name}」的这条关系是连错的，不再显示`);
+        load();
+      });
+    },
+    [load]
+  );
   const toggleMerge = useCallback(() => setMerging((m) => !m), []);
 
   const star = selectedId ? data?.stars[selectedId] : undefined;
@@ -136,13 +172,23 @@ export function PersonalPanel() {
                 你学过、聊过的所有概念，不分哪门课。亮度是答题答出来的，这里只能看。
               </DialogDescription>
             </div>
+            <ul className="pointer-events-none absolute bottom-4 left-20 z-[5] flex flex-wrap gap-x-4 gap-y-1 text-stone-400 text-xs">
+              <li>全亮：真会了</li>
+              <li>半亮：看懂了 / 课外在两次以上对话里聊过</li>
+              <li>课内每门课先收成一团，点开看</li>
+              <li>暗：只出现过一次</li>
+              <li className="text-sky-300/80">
+                选中一颗星：蓝色实线是意思上有关系，虚线是常一起出现
+              </li>
+            </ul>
             {data && data.graph.points.length > 0 ? (
               <GraphPanel
-                graph={data.graph}
-                lights={data.lights}
+                graph={shown?.graph ?? data.graph}
+                lights={shown?.lights}
                 onSelect={select}
                 plainTitles
                 progress={data.progress}
+                related={shown?.related}
                 selectedId={selectedId}
               />
             ) : (
@@ -169,12 +215,15 @@ export function PersonalPanel() {
                   merging && data ? mergeCandidates(data, star.id) : []
                 }
                 merging={merging}
+                onFold={fold}
                 onMarkWrong={markWrong}
                 onMerge={mergeInto}
                 onSelect={select}
                 onSplit={split}
                 onToggleMerge={toggleMerge}
+                onUnlink={unlink}
                 star={star}
+                stars={data?.stars ?? {}}
               />
             ) : (
               <Overview abilities={data?.abilities ?? []} />
@@ -238,8 +287,14 @@ function StarDetail({
   onSplit,
   onMarkWrong,
   onSelect,
+  onFold,
+  onUnlink,
+  stars,
 }: {
+  onFold: () => void;
+  onUnlink: (linkId: string, name: string) => void;
   star: Star;
+  stars: Record<string, Star>;
   merging: boolean;
   candidates: MergeTarget[];
   onToggleMerge: () => void;
@@ -275,7 +330,9 @@ function StarDetail({
         ) : null}
         <span className="text-sm text-stone-300">
           {outside
-            ? `聊过 ${star.evidence.length} 次（课外概念没有检查题，不打分）`
+            ? star.light === "gray"
+              ? "只在一次对话里出现过，先暗着；在别的对话里再出现一次就亮"
+              : "在好几次对话里聊过（课外概念没有检查题，不打分）"
             : STATUS[star.light]}
         </span>
       </div>
@@ -294,11 +351,50 @@ function StarDetail({
             <span className="text-sky-300 text-xs">
               {day(e.at)} · {HOW[e.how]}
               {e.correct === undefined ? "" : e.correct ? " · 答对" : " · 答错"}
+              {e.course ? ` · ${e.course}` : ""}
             </span>
+            {e.chat ? (
+              <a
+                className="text-stone-400 text-xs underline-offset-2 hover:text-stone-200 hover:underline"
+                data-testid="backlink"
+                href={`/chat/${e.sessionId}`}
+              >
+                对话「{e.chat}」
+              </a>
+            ) : null}
             <span className="text-sm leading-relaxed">你：「{e.quote}」</span>
           </div>
         ))}
       </section>
+
+      {star.links.length > 0 ? (
+        <section className="flex flex-col gap-2" data-testid="links">
+          <h3 className="font-medium text-stone-400 text-xs">有关系</h3>
+          {star.links.map((l) => (
+            <LinkRow
+              key={l.linkId}
+              link={l}
+              onSelect={onSelect}
+              onUnlink={onUnlink}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {star.related.length > 0 ? (
+        <section className="flex flex-col gap-2" data-testid="related">
+          <h3 className="font-medium text-stone-400 text-xs">常一起出现</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {star.related.flatMap((id) =>
+              stars[id] ? (
+                <RelatedChip key={id} onSelect={onSelect} star={stars[id]} />
+              ) : (
+                []
+              )
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {star.merged.length > 0 ? (
         <section className="flex flex-col gap-2">
@@ -351,9 +447,17 @@ function StarDetail({
       ) : null}
 
       {outside ? null : (
-        <p className="text-stone-500 text-xs">
+        <div className="flex items-center gap-2 text-stone-500 text-xs">
           课内知识点的亮度只看你答题，这里改不了。
-        </p>
+          <button
+            className="ml-auto shrink-0 hover:text-stone-300"
+            data-testid="fold"
+            onClick={onFold}
+            type="button"
+          >
+            收起这门课
+          </button>
+        </div>
       )}
       <button
         className="self-start text-stone-500 text-xs hover:text-stone-300"
@@ -411,5 +515,59 @@ function CandidateButton({
         {c.aliases.length > 0 ? `，也叫 ${c.aliases.join("、")}` : ""}
       </span>
     </Button>
+  );
+}
+
+function RelatedChip({
+  star,
+  onSelect,
+}: {
+  star: Star;
+  onSelect: (id: string | null) => void;
+}) {
+  const pick = useCallback(() => onSelect(star.id), [star.id, onSelect]);
+  return (
+    <button
+      className="min-h-8 rounded-full border border-white/15 px-3 text-sm hover:bg-white/10"
+      onClick={pick}
+      type="button"
+    >
+      {star.name}
+    </button>
+  );
+}
+
+function LinkRow({
+  link,
+  onSelect,
+  onUnlink,
+}: {
+  link: Star["links"][number];
+  onSelect: (id: string | null) => void;
+  onUnlink: (linkId: string, name: string) => void;
+}) {
+  const pick = useCallback(() => onSelect(link.to), [link.to, onSelect]);
+  const remove = useCallback(
+    () => onUnlink(link.linkId, link.name),
+    [link, onUnlink]
+  );
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-sm">
+      <button
+        className="text-left hover:underline"
+        onClick={pick}
+        type="button"
+      >
+        {link.label}
+      </button>
+      <button
+        className="ml-auto shrink-0 text-red-300/80 text-xs hover:text-red-300"
+        data-testid="unlink"
+        onClick={remove}
+        type="button"
+      >
+        连错了
+      </button>
+    </div>
   );
 }

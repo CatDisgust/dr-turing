@@ -3,6 +3,7 @@ import type {
   ConceptEvent,
   ConceptEventPayload,
   ConceptEventType,
+  ConceptLink,
   CourseGraph,
   PersonalConcept,
   PersonalGraph,
@@ -242,6 +243,39 @@ export function personalFromEvents(
       name: own,
     });
   }
+  // 意思上的关系：两头按合并后的编号算；连到自己的、连到已作废概念的都不要，同一对只留最新一条。
+  // 学生说连错了，这一对就再也不连（复核以后再判一次也不算，学生的更正优先）
+  const pairOf = (e: ConceptEvent) =>
+    [rootOf(e.conceptId, into), rootOf(e.payload.to ?? "", into)]
+      .sort()
+      .join("|");
+  const unlinkedIds = new Set(
+    events.filter((e) => e.type === "unlink").map((e) => e.payload.linkId)
+  );
+  const unlinked = new Set(
+    events.filter((e) => e.type === "link" && unlinkedIds.has(e.id)).map(pairOf)
+  );
+  const alive = (id: string) =>
+    !isPersonalId(id) || concepts.get(id)?.status === "unanchored";
+  const linkByPair = new Map<string, ConceptLink>();
+  for (const e of events) {
+    if (e.type !== "link" || !e.payload.to || unlinked.has(pairOf(e))) {
+      continue;
+    }
+    const from = rootOf(e.conceptId, into);
+    const to = rootOf(e.payload.to, into);
+    if (from === to || !alive(from) || !alive(to)) {
+      continue;
+    }
+    linkByPair.set(pairOf(e), {
+      from,
+      how: e.payload.how ?? "related",
+      id: e.id,
+      to,
+      why: e.payload.why ?? "",
+    });
+  }
+
   // 学生合并过哪些（界面上可以拆开）；并进课程知识点的记在 anchored 上
   const undone = new Set(
     events.filter((e) => e.type === "split").map((e) => e.payload.mergeId)
@@ -268,6 +302,7 @@ export function personalFromEvents(
     anchored,
     concepts: [...concepts.values()],
     courseMentions,
+    links: [...linkByPair.values()],
     log,
     studentId,
   };
@@ -461,6 +496,33 @@ export function identityEvents(
       type: "mention",
     });
   });
+  // 意思上的关系：to 认成编号（已有的 id、这次一起列出的概念、课程知识点的名字），认不出就不连；同一对只记一条
+  const linked = new Set<string>();
+  changes.forEach((c, i) => {
+    const from = resolved.get(i);
+    if (!from) {
+      return;
+    }
+    for (const link of c.links ?? []) {
+      const sibling = changes.findIndex(
+        (d, j) =>
+          j !== i && d.op !== "invalidate" && norm(d.name) === norm(link.to)
+      );
+      const to = known.has(link.to)
+        ? link.to
+        : (resolved.get(sibling) ??
+          pool.find((p) => p.names.some((n) => norm(n) === norm(link.to)))?.id);
+      if (!to || to === from || linked.has(`${from}|${to}`)) {
+        continue;
+      }
+      linked.add(`${from}|${to}`);
+      drafts.push({
+        conceptId: from,
+        payload: { by: "review", how: link.how, to, why: link.why },
+        type: "link",
+      });
+    }
+  });
   return drafts;
 }
 
@@ -478,6 +540,14 @@ export function splitDraft(mergeEvent: ConceptEvent) {
     conceptId: mergeEvent.conceptId,
     payload: { by: "student" as const, mergeId: mergeEvent.id },
     type: "split" as const,
+  };
+}
+
+export function unlinkDraft(linkEvent: ConceptEvent) {
+  return {
+    conceptId: linkEvent.conceptId,
+    payload: { by: "student" as const, linkId: linkEvent.id },
+    type: "unlink" as const,
   };
 }
 
