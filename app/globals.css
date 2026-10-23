@@ -47,38 +47,52 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.12 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.12 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.12 0 0);
-  --primary: oklch(0.12 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.965 0 0);
-  --secondary-foreground: oklch(0.38 0 0);
-  --muted: oklch(0.94 0 0);
-  --muted-foreground: oklch(0.58 0 0);
-  --accent: oklch(0.965 0 0);
-  --accent-foreground: oklch(0.12 0 0);
-  --destructive: oklch(0.55 0.15 25);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.5 0 0);
+  --radius: 0.75rem;
+  --background: #ffffff;
+  --foreground: #252e3c;
+  --card: #ffffff;
+  --card-foreground: #252e3c;
+  --popover: #ffffff;
+  --popover-foreground: #252e3c;
+  --primary: #252e3c;
+  --primary-foreground: #ffffff;
+  --secondary: #eff3f9;
+  --secondary-foreground: #252e3c;
+  --muted: #f5f8fc;
+  --muted-foreground: #566172;
+  --accent: #eff3f9;
+  --accent-foreground: #252e3c;
+  --destructive: #ea2b2b;
+  --border: #dee3ec;
+  --input: #dee3ec;
+  --ring: #84d8ff;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.97 0 0);
-  --sidebar-foreground: oklch(0.38 0 0);
-  --sidebar-primary: oklch(0.12 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.12 0 0 / 0.06);
-  --sidebar-accent-foreground: oklch(0.12 0 0);
-  --sidebar-border: oklch(0.88 0 0);
-  --sidebar-ring: oklch(0.5 0 0);
+  --sidebar: #f5f8fc;
+  --sidebar-foreground: #566172;
+  --sidebar-primary: #252e3c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eff3f9;
+  --sidebar-accent-foreground: #252e3c;
+  --sidebar-border: #dee3ec;
+  --sidebar-ring: #84d8ff;
+
+  /* 冷灰加蓝（整体视觉 D）：绿 = 主按钮和答对，红 = 答错，蓝 = 你选的、可以点的 */
+  --duo-green: #58cc02;
+  --duo-green-edge: #46a302;
+  --duo-green-soft: #d7ffb8;
+  --duo-green-ink: #3d7a00;
+  --duo-red: #ff4b4b;
+  --duo-red-edge: #d42a2a;
+  --duo-red-soft: #ffdfe0;
+  --duo-red-ink: #a3161b;
+  --duo-blue-ink: #0071a5;
+  --duo-blue-soft: #ddf4ff;
+  --duo-blue-edge: #84d8ff;
+  --placeholder: #8a93a0;
 
   --shadow-card: 0 1px 3px oklch(0 0 0 / 0.05), 0 1px 1px oklch(0 0 0 / 0.03);
   --shadow-float:
@@ -145,6 +159,9 @@
     @apply border-border ring-0;
   }
   body {
+    font-family:
+      var(--font-geist), "PingFang SC", "Noto Sans SC", "Microsoft YaHei",
+      system-ui, sans-serif;
     font-feature-settings: "ss01", "ss02", "cv01";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
