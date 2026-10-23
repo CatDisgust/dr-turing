@@ -3,7 +3,6 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
-import { ArrowUpIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
@@ -462,7 +461,7 @@ function PureMultimodalInput({
       </div>
 
       <PromptInput
-        className="[&>div]:rounded-2xl [&>div]:border [&>div]:border-border/30 [&>div]:bg-card/70 [&>div]:shadow-[var(--shadow-composer)] [&>div]:transition-shadow [&>div]:duration-300 [&>div]:focus-within:shadow-[var(--shadow-composer-focus)]"
+        className="[&>div]:rounded-xl [&>div]:border-2 [&>div]:border-border [&>div]:bg-background [&>div]:shadow-none [&>div]:focus-within:border-[var(--duo-blue-edge)]"
         onSubmit={handlePromptSubmit}
       >
         {(attachments.length > 0 || uploadQueue.length > 0) && (
@@ -493,7 +492,7 @@ function PureMultimodalInput({
           </div>
         )}
         <PromptInputTextarea
-          className="min-h-24 text-[13px] leading-relaxed px-4 pt-3.5 pb-1.5 placeholder:text-muted-foreground/35"
+          className="min-h-16 px-3.5 pt-2.5 pb-1 text-[15px] leading-[1.6] placeholder:text-[var(--placeholder)]"
           data-testid="multimodal-input"
           onChange={handleInput}
           onKeyDown={handleTextareaKeyDown}
@@ -501,25 +500,20 @@ function PureMultimodalInput({
           ref={textareaRef}
           value={input}
         />
-        <PromptInputFooter className="px-3 pb-3">
+        <PromptInputFooter className="px-2.5 pb-2.5">
           <PromptInputTools />
 
           {status === "submitted" ? (
             <StopButton setMessages={setMessages} stop={stop} />
           ) : (
             <PromptInputSubmit
-              className={cn(
-                "h-7 w-7 rounded-xl transition-all duration-200",
-                input.trim()
-                  ? "bg-foreground text-background hover:opacity-85 active:scale-95"
-                  : "bg-muted text-muted-foreground/25 cursor-not-allowed"
-              )}
+              className="dt-btn dt-btn-sm h-9 w-auto px-3.5"
               data-testid="send-button"
               disabled={!input.trim() || uploadQueue.length > 0}
               status={status}
               variant="secondary"
             >
-              <ArrowUpIcon className="size-4" />
+              发送
             </PromptInputSubmit>
           )}
         </PromptInputFooter>
@@ -598,11 +592,12 @@ function PureStopButton({
 
   return (
     <Button
-      className="h-7 w-7 rounded-xl bg-foreground p-1 text-background transition-all duration-200 hover:opacity-85 active:scale-95 disabled:bg-muted disabled:text-muted-foreground/25 disabled:cursor-not-allowed"
+      className="dt-btn dt-btn-sm h-9 w-auto gap-1.5 px-3.5"
       data-testid="stop-button"
       onClick={handleClick}
     >
-      <StopIcon size={14} />
+      <StopIcon size={12} />
+      停止
     </Button>
   );
 }

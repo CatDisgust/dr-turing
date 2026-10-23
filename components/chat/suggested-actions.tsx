@@ -55,7 +55,7 @@ function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
           }}
         >
           <Suggestion
-            className="h-auto w-full whitespace-nowrap rounded-xl border border-border/50 bg-card/30 px-4 py-3 text-left text-[12px] leading-relaxed text-muted-foreground transition-all duration-200 sm:whitespace-normal sm:p-4 sm:text-[13px] hover:-translate-y-0.5 hover:bg-card/60 hover:text-foreground hover:shadow-[var(--shadow-card)]"
+            className="h-auto w-full whitespace-nowrap rounded-xl border-2 border-border bg-background px-4 py-3 text-left font-bold text-[14px] text-foreground leading-normal shadow-[0_2px_0_var(--border)] transition-transform duration-100 hover:bg-background active:translate-y-0.5 active:shadow-none sm:whitespace-normal"
             onClick={handleSuggestionClick}
             suggestion={suggestedAction}
           >

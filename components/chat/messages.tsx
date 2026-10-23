@@ -20,15 +20,11 @@ function RetryNotice({
   }, [onRetry]);
   return (
     <div
-      className="mx-auto flex items-center gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-700 text-sm dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+      className="flex items-center gap-3 rounded-2xl bg-[var(--duo-red-soft)] px-4 py-2.5 text-[15px] text-[var(--duo-red-ink)]"
       data-testid="retry-notice"
     >
       这一轮没有完成，可能是网络或服务器出了问题。
-      <button
-        className="rounded border border-current px-2 py-0.5"
-        onClick={retry}
-        type="button"
-      >
+      <button className="dt-btn dt-btn-sm" onClick={retry} type="button">
         重试
       </button>
     </div>
@@ -102,7 +98,7 @@ function PureMessages({
         ref={messagesContainerRef}
         style={isArtifactVisible ? { scrollbarWidth: "none" } : undefined}
       >
-        <div className="mx-auto flex min-h-full min-w-0 max-w-4xl flex-col gap-5 px-2 py-6 md:gap-7 md:px-4">
+        <div className="mx-auto flex min-h-full min-w-0 max-w-[760px] flex-col gap-[18px] px-4 pt-[22px] pb-6 md:px-10">
           {messages.map((message, index) => (
             <PreviewMessage
               addToolApprovalResponse={addToolApprovalResponse}

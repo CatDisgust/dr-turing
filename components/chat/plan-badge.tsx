@@ -2,7 +2,7 @@
 
 import type { TurnTiming, TutorPlan } from "@/lib/types";
 
-// 助手消息下面的一行小字：这一轮规划器定的动作，展开看全部字段
+// 回答上方的一行小字（视觉规范 TutorReply 的来源行）：这一轮规划器定的动作，展开看理由、耗时和全部字段
 
 const ACTION = {
   diagnose_misconception: "反例诊断",
@@ -33,8 +33,8 @@ export function TimingLine({ timing }: { timing: TurnTiming }) {
     <span
       className={
         timing.firstTokenMs > FIRST_TOKEN_LIMIT_MS
-          ? "text-red-600 text-xs"
-          : "text-muted-foreground text-xs"
+          ? "text-[13px] text-[var(--duo-red-ink)]"
+          : "text-[13px] text-muted-foreground"
       }
       data-testid="timing"
     >
@@ -51,22 +51,21 @@ export function PlanBadge({
   timing?: TurnTiming;
 }) {
   return (
-    <details className="text-muted-foreground text-xs" data-testid="plan">
-      <summary className="cursor-pointer select-none">
-        规划：{ACTION[plan.next_action]} · {DISCLOSURE[plan.disclosure_level]}
-        {plan.elicits_production ? " · 要学生产出" : ""}
-        {timing ? (
-          <>
-            {" · "}
-            <TimingLine timing={timing} />
-          </>
-        ) : null}
+    <details
+      className="text-[13px] text-muted-foreground leading-normal"
+      data-testid="plan"
+    >
+      <summary className="cursor-pointer list-none select-none">
+        Dr.Turing · {ACTION[plan.next_action]} ·{" "}
+        {DISCLOSURE[plan.disclosure_level]}
+        {plan.elicits_production ? " · 要你说出来" : ""}
       </summary>
+      {timing ? <TimingLine timing={timing} /> : null}
       <p className="mt-1">
         {plan.rationale}
         {plan.filled_by === "rules" ? "（Claude 没填上，这是规则默认值）" : ""}
       </p>
-      <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 text-[11px]">
+      <pre className="mt-1 overflow-x-auto rounded-lg bg-muted p-2 text-[11px]">
         {JSON.stringify(plan, null, 2)}
       </pre>
     </details>

@@ -10,7 +10,6 @@ import { useDataStream } from "./data-stream-provider";
 import { DeadlockSim } from "./deadlock-sim";
 import { FollowUps } from "./follow-ups";
 import { GradedLine } from "./graded-line";
-import { SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
 import { MessageReasoning } from "./message-reasoning";
 import { PlanBadge, TimingLine } from "./plan-badge";
@@ -21,7 +20,7 @@ function WaitingText() {
   const waitingText = waitingStatus?.message ?? "思考中…";
 
   return (
-    <div className="flex min-h-[calc(13px*1.65)] min-w-0 items-center text-[13px] leading-[1.65]">
+    <div className="flex min-h-[calc(16px*1.75)] min-w-0 items-center text-[15px] text-muted-foreground leading-[1.75]">
       <Shimmer
         as="span"
         className="font-medium whitespace-normal break-words"
@@ -127,8 +126,9 @@ const PurePreviewMessage = ({
       return null;
     }
 
+    // 批改结果单独放在最上面，见下面的 verdict
     if (type === "data-graded") {
-      return <GradedLine graded={part.data} key={key} />;
+      return null;
     }
 
     if (type === "data-sim") {
@@ -136,22 +136,17 @@ const PurePreviewMessage = ({
     }
 
     if (type === "data-check") {
-      return (
-        <CheckCardView
-          active={isLatest && !isLoading && !isReadonly}
-          card={part.data}
-          key={key}
-        />
-      );
+      return <CheckCardView card={part.data} key={key} />;
     }
 
     if (type === "text") {
       return (
         <MessageContent
-          className={cn("text-[13px] leading-[1.65]", {
-            "w-fit max-w-[min(80%,56ch)] overflow-hidden break-words rounded-2xl rounded-br-lg border border-border/30 bg-gradient-to-br from-secondary to-muted px-3.5 py-2 shadow-[var(--shadow-card)]":
-              message.role === "user",
-          })}
+          className={cn(
+            isUser
+              ? "w-fit max-w-[70%] overflow-hidden break-words rounded-2xl bg-secondary px-4 py-2 text-[15px] leading-[1.6] [&_p]:leading-[1.6]"
+              : "text-[16px] leading-[1.75] [&_p]:leading-[1.75] [&_strong]:font-bold"
+          )}
           data-quote-source={isAssistant ? "导师刚才说的" : undefined}
           data-testid="message-content"
           key={key}
@@ -163,6 +158,12 @@ const PurePreviewMessage = ({
 
     return null;
   });
+
+  const verdict = message.parts?.map((part) =>
+    part.type === "data-graded" ? (
+      <GradedLine graded={part.data} key={`graded-${part.data.kpId}`} />
+    ) : null
+  );
 
   const actions = !isReadonly && (
     <MessageActions
@@ -188,8 +189,7 @@ const PurePreviewMessage = ({
     <WaitingText />
   ) : (
     <>
-      {attachments}
-      {parts}
+      {verdict}
       {message.metadata?.plan ? (
         <PlanBadge
           plan={message.metadata.plan}
@@ -198,6 +198,8 @@ const PurePreviewMessage = ({
       ) : message.metadata?.timing ? (
         <TimingLine timing={message.metadata.timing} />
       ) : null}
+      {attachments}
+      {parts}
       {showFollowUps ? <FollowUps /> : null}
       {actions}
     </>
@@ -217,15 +219,8 @@ const PurePreviewMessage = ({
           isUser ? "flex flex-col items-end gap-2" : "flex items-start gap-3"
         )}
       >
-        {isAssistant && (
-          <div className="flex h-[calc(13px*1.65)] shrink-0 items-center">
-            <div className="flex size-7 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground ring-1 ring-border/50">
-              <SparklesIcon size={13} />
-            </div>
-          </div>
-        )}
         {isAssistant ? (
-          <div className="flex min-w-0 flex-1 flex-col gap-2">{content}</div>
+          <div className="flex min-w-0 flex-1 flex-col gap-2.5">{content}</div>
         ) : (
           content
         )}
@@ -242,14 +237,6 @@ export const ThinkingMessage = () => (
     data-role="assistant"
     data-testid="message-assistant-loading"
   >
-    <div className="flex items-start gap-3">
-      <div className="flex h-[calc(13px*1.65)] shrink-0 items-center">
-        <div className="flex size-7 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground ring-1 ring-border/50">
-          <SparklesIcon size={13} />
-        </div>
-      </div>
-
-      <WaitingText />
-    </div>
+    <WaitingText />
   </div>
 );

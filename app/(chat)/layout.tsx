@@ -32,7 +32,7 @@ async function SidebarShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider defaultOpen={!isCollapsed}>
       <AppSidebar user={session?.user} />
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <Toaster
           position="top-center"
           theme="system"
