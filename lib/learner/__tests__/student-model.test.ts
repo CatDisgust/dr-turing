@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Attempt } from "@/lib/types";
+import type { Attempt, TeachingNote } from "@/lib/types";
 import { BKT } from "../config";
 import { rebuildStudentModel } from "../student-model";
 
@@ -22,6 +22,18 @@ const attempt = (
   },
   kpId: "kp",
 });
+
+const note: TeachingNote = {
+  createdAt: "2026-10-22T00:00:00.000Z",
+  evidence: ["a"],
+  expect: "feel_bad",
+  hits: 0,
+  id: "n1",
+  misses: 0,
+  status: "active",
+  text: "他先看例子",
+  when: { order: "definition_first" },
+};
 
 // 学生建模方案 F：学生模型整份从 Transaction + Event 重算
 describe("rebuildStudentModel", () => {
@@ -51,11 +63,12 @@ describe("rebuildStudentModel", () => {
         { payload: {}, type: "give_up" },
         { payload: {}, type: "thumbs_up" },
       ],
-      ["他先看例子"]
+      [note]
     );
     expect(model.answers).toEqual({ independentCorrect: 1, total: 3 });
     expect(model.reactions).toEqual({ give_up: 2, thumbs_up: 1 });
-    expect(model.notes).toEqual(["他先看例子"]);
+    // 笔记文字原样带过来；之后没有讲解，检验次数为 0
+    expect(model.notes).toEqual([note]);
     expect(model.rebuiltFrom).toEqual({ events: 3, transactions: 4 });
   });
 

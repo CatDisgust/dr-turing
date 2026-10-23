@@ -19,14 +19,21 @@ import {
 } from "@/lib/db/queries";
 import { engagementOf } from "@/lib/learner/events";
 import {
+  applyNoteOps,
+  mispredictions,
+  trustedNotes,
+} from "@/lib/learner/notes";
+import {
   applyConceptChanges,
   emptyPersonalGraph,
 } from "@/lib/learner/personal";
-import { populationPrior } from "@/lib/learner/preference";
+import { reviewedAttempts } from "@/lib/learner/predict";
+import { armOutcomes, populationPrior } from "@/lib/learner/preference";
 import { applyReview, sessionReport } from "@/lib/learner/review";
 import { rebuildStudentModel } from "@/lib/learner/student-model";
 import { learnRateOf, relearn } from "@/lib/learner/update";
-import type { SessionReport } from "@/lib/types";
+import type { CourseGraph, SessionReport } from "@/lib/types";
+import { writeNotes } from "./notes";
 import { reviewSession, type TranscriptLine } from "./review";
 
 // 结束一次会话：复核 → 证据转正或撤销 → 算会话报告 → 记在 Chat 上。
@@ -125,13 +132,23 @@ export async function endSession(input: {
     }))
   );
   // 学生模型从原始记录整份重算（方案 F），学习率 ℓ 变了就按新 ℓ 重算各点的 M、O（方案 B）；
-  // 讲法得分带进学生状态，下一轮规划直接读（方案 C）
+  // 讲法得分、检验过的教学笔记带进学生状态，下一轮规划直接读（方案 C、E）
   try {
-    const { model, prior } = await refreshStudentModel(input.studentId);
+    const { model, prior } = await refreshStudentModel({
+      chatId: input.chatId,
+      graph: course.graph,
+      now,
+      studentId: input.studentId,
+      transcript,
+    });
     if (model.learnRate !== learnRateOf(state)) {
       state = relearn(state, course.graph, model.learnRate);
     }
-    state = { ...state, arms: { own: model.arms, prior } };
+    state = {
+      ...state,
+      arms: { own: model.arms, prior },
+      teachingNotes: trustedNotes(model.notes),
+    };
     await saveLearnerState({ state });
   } catch (error) {
     console.error("rebuild student model failed:", error);
@@ -170,8 +187,16 @@ export async function endSession(input: {
   return report;
 }
 
-// 学生模型每次结束学习都从原始记录整份重算（学生建模方案 F）；文字笔记原样保留
-async function refreshStudentModel(studentId: string) {
+// 学生模型每次结束学习都从原始记录整份重算（学生建模方案 F）；文字笔记原样保留、重新检验。
+// 这次会话里猜错过，就让 Claude 改一次笔记（方案 E）
+async function refreshStudentModel(input: {
+  studentId: string;
+  chatId: string;
+  graph: CourseGraph;
+  transcript: TranscriptLine[];
+  now: string;
+}) {
+  const { studentId, graph } = input;
   const [transactions, events, old, messages, others] = await Promise.all([
     getTransactionsByStudent({ studentId }),
     getEventsByStudent({ studentId }),
@@ -179,7 +204,36 @@ async function refreshStudentModel(studentId: string) {
     getPlanMessagesByStudent({ studentId }),
     getOtherStudentModels({ studentId }),
   ]);
-  const data = rebuildStudentModel(transactions, events, old?.notes, messages);
+  const kinds = Object.fromEntries(graph.points.map((p) => [p.id, p.kind]));
+  const data = rebuildStudentModel(
+    transactions,
+    events,
+    old?.notes,
+    messages,
+    kinds
+  );
+  try {
+    const rows = reviewedAttempts(transactions, events);
+    const outcomes = armOutcomes(
+      messages,
+      rows,
+      events.map((e) => ({ messageId: e.messageId ?? "", type: e.type }))
+    );
+    const misses = mispredictions(input.chatId, rows, outcomes);
+    if (misses.length > 0) {
+      const { ops, evidenceIds } = await writeNotes({
+        graph,
+        misses,
+        notes: data.notes,
+        transcript: input.transcript,
+      });
+      data.notes = applyNoteOps(data.notes, ops, evidenceIds, input.now, () =>
+        crypto.randomUUID()
+      );
+    }
+  } catch (error) {
+    console.error("write teaching notes failed:", error);
+  }
   await saveStudentModel({ data, studentId });
   // 冷启动先验：其他学生每种讲法的平均效果（经验贝叶斯，方案 C）
   return {
