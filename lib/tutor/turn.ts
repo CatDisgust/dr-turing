@@ -19,6 +19,7 @@ import {
 } from "@/lib/learner/update";
 import type {
   Attempt,
+  Confidence,
   CourseGraph,
   KnowledgePoint,
   LearnerState,
@@ -91,7 +92,7 @@ export function signalTurn(turn: Turn, signal: TurnSignal): TurnResult {
   return {
     note: revealed
       ? `学生想直接看这道题的答案：「${pending.question}」。把答案讲清楚，讲完请他用自己的话复述一遍。`
-      : `学生要提示。题目是：「${pending.question}」。只给最小的一步提示，不要给出答案，最后把题目原样再问一遍。`,
+      : `学生要提示。题目是：「${pending.question}」。只给最小的一步提示，不要给出答案。题目会在你这段话之后由系统再给出一次，你不用复述题目。`,
     state: {
       ...state,
       pendingQuestion: {
@@ -104,7 +105,11 @@ export function signalTurn(turn: Turn, signal: TurnSignal): TurnResult {
 }
 
 // 上一轮留了题：先批改。学生其实在问别的就返回 null，按新问题走
-export async function answerTurn(turn: Turn): Promise<TurnResult | null> {
+// confidence 是检查题卡片上学生交卷前选的把握，只记进证据
+export async function answerTurn(
+  turn: Turn,
+  confidence?: Confidence
+): Promise<TurnResult | null> {
   const open = pendingOf(turn);
   if (!open) {
     return null;
@@ -117,12 +122,15 @@ export async function answerTurn(turn: Turn): Promise<TurnResult | null> {
   if (!grading.isAnswer) {
     return null;
   }
-  const attempt = attemptFromGrading(pending, grading, {
-    at: turn.now,
-    id: generateUUID(),
-    quote: turn.text,
-    turnId: turn.turnId,
-  });
+  const attempt: Attempt = {
+    ...attemptFromGrading(pending, grading, {
+      at: turn.now,
+      id: generateUUID(),
+      quote: turn.text,
+      turnId: turn.turnId,
+    }),
+    ...(confidence ? { confidence } : {}),
+  };
   const state = applyEvidence(turn.state, turn.graph, point.id, attempt);
   const { misconception } = attempt;
   if (grading.correct) {
@@ -220,6 +228,75 @@ function withBurden(note: string | null, state: LearnerState): string | null {
     .join("");
 }
 
+export type PlanStep = {
+  plan?: TutorPlan;
+  question?: string;
+  state: LearnerState;
+  note: string | null;
+};
+
+// 回答下点了“我懂了，考我”（交互方案 E）：学生说懂了，不信，直接出一道独立题。
+// 这是学生自己的要求，和“直接告诉我”一样先于规则；动作固定为独立题，其余照规则默认值
+export function quizTurn(
+  turn: Turn,
+  kpId: string
+): { result: TurnResult; step: PlanStep } | null {
+  const point = turn.graph.points.find((p) => p.id === kpId);
+  if (!point) {
+    return null;
+  }
+  const state = touchNode(turn.state, point.id, turn.sessionId);
+  const result: TurnResult = { note: null, state, touched: point };
+  const plan: TutorPlan = {
+    ...planTurn({
+      graph: turn.graph,
+      kpId: point.id,
+      sessionId: turn.sessionId,
+      state,
+    }),
+    action_type: "ask",
+    disclosure_level: "question",
+    elicits_production: true,
+    next_action: "independent_check",
+    prompt: "question",
+    rationale: "学生说自己懂了，要求考他：不讲解，直接出一道独立题核实",
+    reveals_answer: false,
+    target_kc: point.id,
+  };
+  const open = state.pendingQuestion;
+  if (open?.sessionId === turn.sessionId && open.kpId === point.id) {
+    return {
+      result,
+      step: {
+        note: "学生说他懂了，想被考一下。上一道题他还没答，系统会在你这段话之后再给出这道题。",
+        plan,
+        question: open.question,
+        state,
+      },
+    };
+  }
+  const asked = askQuestion(turn, state, point, plan.expect_like);
+  if (!asked) {
+    return {
+      result,
+      step: {
+        note: "学生说他懂了，想被考一下，但这个点这次的题都做完了。用一两句话总结他今天弄懂了什么，再问他接下来想弄懂什么。",
+        plan,
+        state,
+      },
+    };
+  }
+  return {
+    result,
+    step: {
+      note: "学生说他懂了，想被考一下。",
+      plan,
+      question: asked.question,
+      state: asked.state,
+    },
+  };
+}
+
 // 这一轮讲法用得上的教学笔记（检验过的，学生建模方案 E）：只影响怎么讲
 function withNotes(
   note: string | null,
@@ -245,12 +322,7 @@ export async function planAndAsk(
   turn: Turn,
   result: TurnResult,
   signal?: TurnSignal
-): Promise<{
-  plan?: TutorPlan;
-  question?: string;
-  state: LearnerState;
-  note: string | null;
-}> {
+): Promise<PlanStep> {
   const { touched } = result;
   if (!touched || signal === "skip") {
     return { note: result.note, state: result.state };

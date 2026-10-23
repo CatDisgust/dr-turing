@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LearnerGraph } from "@/components/graph/learner-graph";
 import {
   AlertDialog,
@@ -19,7 +19,6 @@ import {
   useArtifactSelector,
 } from "@/hooks/use-artifact";
 import { COURSE_ID, LEARNER_REFRESH_EVENT } from "@/lib/constants";
-import type { TurnSignal } from "@/lib/learner/policy";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Artifact } from "./artifact";
@@ -29,9 +28,9 @@ import { MaterialPane } from "./material-pane";
 import { submitEditedMessage } from "./message-editor";
 import { Messages } from "./messages";
 import { MultimodalInput } from "./multimodal-input";
-import { QuickActions } from "./quick-actions";
 import { ASK_QUESTION, SelectionMenu } from "./selection-menu";
 import { SideDrawer } from "./side-drawer";
+import { type SendBody, TutorActionsProvider } from "./tutor-actions";
 
 export function ChatShell() {
   const {
@@ -151,15 +150,29 @@ export function ChatShell() {
     [fillInput]
   );
 
-  // 快捷按钮：发一句话，同时告诉服务端这是哪种求助
-  const handleSignal = useCallback(
-    (text: string, signal: TurnSignal) => {
+  // 回答里的部件（检查题卡片、追问按钮）：发一句话，同时告诉服务端是哪种操作
+  const handleSend = useCallback(
+    (text: string, body?: SendBody) => {
       sendMessage(
         { parts: [{ text, type: "text" }], role: "user" },
-        { body: { signal } }
+        body ? { body } : undefined
       );
     },
     [sendMessage]
+  );
+  // 小模拟做完：把句子开头放进输入框，学生接着写
+  const handleFill = useCallback(
+    (text: string) => fillInput(text, ""),
+    [fillInput]
+  );
+  const busy = status === "submitted" || status === "streaming";
+  const tutorActions = useMemo(
+    () => ({
+      disabled: isReadonly || busy,
+      fillInput: handleFill,
+      send: handleSend,
+    }),
+    [busy, handleFill, handleSend, isReadonly]
   );
 
   // 图谱上点“开始学习”：发一句话，并告诉服务端目标点，不用再归类
@@ -203,28 +216,23 @@ export function ChatShell() {
           />
 
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background md:rounded-tl-[12px] md:border-t md:border-l md:border-border/40">
-            <Messages
-              addToolApprovalResponse={addToolApprovalResponse}
-              chatId={chatId}
-              isArtifactVisible={isArtifactVisible}
-              isLoading={isLoading}
-              isReadonly={isReadonly}
-              messages={messages}
-              onEditMessage={handleEditMessage}
-              regenerate={regenerate}
-              setMessages={setMessages}
-              status={status}
-              votes={votes}
-            />
+            <TutorActionsProvider value={tutorActions}>
+              <Messages
+                addToolApprovalResponse={addToolApprovalResponse}
+                chatId={chatId}
+                isArtifactVisible={isArtifactVisible}
+                isLoading={isLoading}
+                isReadonly={isReadonly}
+                messages={messages}
+                onEditMessage={handleEditMessage}
+                regenerate={regenerate}
+                setMessages={setMessages}
+                status={status}
+                votes={votes}
+              />
+            </TutorActionsProvider>
 
             <div className="sticky bottom-0 z-1 mx-auto flex w-full max-w-4xl flex-col gap-2 border-t-0 bg-background px-2 pb-3 md:px-4 md:pb-4">
-              {!isReadonly && (
-                <QuickActions
-                  disabled={status === "submitted" || status === "streaming"}
-                  onSignal={handleSignal}
-                  sessionId={chatId}
-                />
-              )}
               {!isReadonly && (
                 <MultimodalInput
                   attachments={attachments}

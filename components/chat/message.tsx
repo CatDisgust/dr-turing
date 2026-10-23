@@ -5,7 +5,11 @@ import type { ChatMessage } from "@/lib/types";
 import { cn, sanitizeText } from "@/lib/utils";
 import { MessageContent, MessageResponse } from "../ai-elements/message";
 import { Shimmer } from "../ai-elements/shimmer";
+import { CheckCardView } from "./check-card";
 import { useDataStream } from "./data-stream-provider";
+import { DeadlockSim } from "./deadlock-sim";
+import { FollowUps } from "./follow-ups";
+import { GradedLine } from "./graded-line";
 import { SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
 import { MessageReasoning } from "./message-reasoning";
@@ -40,6 +44,7 @@ const PurePreviewMessage = ({
   isReadonly,
   requiresScrollPadding: _requiresScrollPadding,
   onEdit,
+  isLatest = false,
 }: {
   addToolApprovalResponse: UseChatHelpers<ChatMessage>["addToolApprovalResponse"];
   chatId: string;
@@ -51,6 +56,8 @@ const PurePreviewMessage = ({
   isReadonly: boolean;
   requiresScrollPadding: boolean;
   onEdit?: (message: ChatMessage) => void;
+  // 最后一条消息：只有它里面的检查题卡片能答、下面才有追问按钮
+  isLatest?: boolean;
 }) => {
   const attachmentsFromMessage = message.parts.filter(
     (part) => part.type === "file"
@@ -120,6 +127,24 @@ const PurePreviewMessage = ({
       return null;
     }
 
+    if (type === "data-graded") {
+      return <GradedLine graded={part.data} key={key} />;
+    }
+
+    if (type === "data-sim") {
+      return <DeadlockSim key={key} />;
+    }
+
+    if (type === "data-check") {
+      return (
+        <CheckCardView
+          active={isLatest && !isLoading && !isReadonly}
+          card={part.data}
+          key={key}
+        />
+      );
+    }
+
     if (type === "text") {
       return (
         <MessageContent
@@ -150,6 +175,15 @@ const PurePreviewMessage = ({
     />
   );
 
+  // 讲完、没留题的回答下面摆追问按钮（交互方案 E）
+  const showFollowUps =
+    isAssistant &&
+    isLatest &&
+    !isLoading &&
+    !isReadonly &&
+    Boolean(message.metadata?.plan) &&
+    !message.parts.some((part) => part.type === "data-check");
+
   const content = isThinking ? (
     <WaitingText />
   ) : (
@@ -164,6 +198,7 @@ const PurePreviewMessage = ({
       ) : message.metadata?.timing ? (
         <TimingLine timing={message.metadata.timing} />
       ) : null}
+      {showFollowUps ? <FollowUps /> : null}
       {actions}
     </>
   );

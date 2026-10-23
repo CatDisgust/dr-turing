@@ -21,9 +21,13 @@ const userMessageSchema = z.object({
 });
 
 export const postRequestBodySchema = z.object({
+  // 检查题卡片上选的把握
+  confidence: z.enum(["guess", "somewhat", "sure"]).optional(),
   courseId: z.string().max(64).optional(),
   id: z.uuid(),
   message: userMessageSchema.optional(),
+  // 回答下点了“我懂了，考我”：直接出一道独立题
+  quizMe: z.boolean().optional(),
   selectedVisibilityType: z.enum(["public", "private"]),
   // 快捷按钮：给提示、直接告诉我、先不做题
   signal: z.enum(["hint", "just_tell_me", "skip"]).optional(),

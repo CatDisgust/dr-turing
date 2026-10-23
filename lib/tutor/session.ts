@@ -37,6 +37,7 @@ import { learnRateOf, relearn } from "@/lib/learner/update";
 import type { CourseGraph, SessionReport } from "@/lib/types";
 import { identify } from "./identify";
 import { writeNotes } from "./notes";
+import { partText } from "./parts";
 import { appendPersonal, loadPersonal } from "./personal-store";
 import { reviewSession, type TranscriptLine } from "./review";
 
@@ -50,14 +51,7 @@ function textOf(parts: unknown): string {
   if (!Array.isArray(parts)) {
     return "";
   }
-  return parts
-    .map((part) =>
-      part && typeof part === "object" && "text" in part
-        ? String((part as { text: unknown }).text)
-        : ""
-    )
-    .join("")
-    .trim();
+  return parts.map(partText).join("").trim();
 }
 
 export async function endSession(input: {
