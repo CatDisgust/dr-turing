@@ -171,6 +171,25 @@ export function seedStudents(
       type: "check_wrong",
     })
   );
+  // 第 1 课也补上历史，图谱上看得出两人的差别；死锁的规划只看它自己、前置和易混点，这些点不碰，A/B 对比不受影响
+  const { confusable } = plannerContext(graph, empty, target.id);
+  const keep = new Set([
+    target.id,
+    ...prereqs.map((p) => p.id),
+    ...confusable.map((p) => p.id),
+  ]);
+  const [first] = lessonPoints(graph);
+  for (const [i, p] of (first ?? []).filter((q) => !keep.has(q.id)).entries()) {
+    const at = t0 - 7 * DAY + i * 60_000;
+    // A：多数学过且隔天复习过 → 全亮
+    if (i < 20) {
+      a = learnFull(a, graph, p, at, "seed-a-l1");
+    }
+    // B：隔两个学一个，还要提示才答对 → 只到半亮或更低
+    if (i % 3 === 0) {
+      b = learnHalf(b, graph, p, at, "seed-b-l1", true);
+    }
+  }
   // 预置历史是一周前的事，投入度按现在算
   a = { ...a, engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 } };
   b = { ...b, engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 } };
@@ -260,5 +279,160 @@ export function seedScene2(
       engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 },
     },
     target,
+  };
+}
+
+// 课程里各课的知识点，按课的顺序；课内先放前置，后放依赖它的点（点亮时先亮前置，看着自然）
+export function lessonPoints(graph: CourseGraph): KnowledgePoint[][] {
+  const lessons = [...graph.lessons].sort((x, y) => x.index - y.index);
+  return lessons.map((lesson) => {
+    const points = graph.points.filter((p) => p.lessonId === lesson.id);
+    const ids = new Set(points.map((p) => p.id));
+    const before = new Map(points.map((p) => [p.id, new Set<string>()]));
+    for (const e of graph.edges) {
+      if (e.type === "prereq" && ids.has(e.from) && ids.has(e.to)) {
+        before.get(e.to)?.add(e.from);
+      }
+    }
+    const ordered: KnowledgePoint[] = [];
+    const done = new Set<string>();
+    let rest = points;
+    while (rest.length > 0) {
+      const ready = rest.filter((p) =>
+        [...(before.get(p.id) ?? [])].every((id) => done.has(id))
+      );
+      // 有环就按原顺序放下一个，别卡住
+      const next = ready.length > 0 ? ready : rest.slice(0, 1);
+      for (const p of next) {
+        ordered.push(p);
+        done.add(p.id);
+      }
+      rest = rest.filter((p) => !done.has(p.id));
+    }
+    return ordered;
+  });
+}
+
+// 学过并且隔两天复习也独立答对 → 全亮
+function learnFull(
+  state: LearnerState,
+  graph: CourseGraph,
+  p: KnowledgePoint,
+  at: number,
+  session: string
+): LearnerState {
+  const learned = learnHalf(state, graph, p, at, session, false);
+  return applyEvidence(
+    learned,
+    graph,
+    p.id,
+    attempt(`${session}-review`, at + 2 * DAY, {
+      correct: true,
+      d: 1,
+      hinted: false,
+      producedStep: true,
+      questionKind: "review",
+      quote: `（预置）隔天复习「${p.name}」独立答对`,
+      type: "review_correct",
+    })
+  );
+}
+
+// 检查题和变式题都答对 → 半亮；hinted 时是看了提示才答对的
+function learnHalf(
+  state: LearnerState,
+  graph: CourseGraph,
+  p: KnowledgePoint,
+  at: number,
+  session: string,
+  hinted: boolean
+): LearnerState {
+  const checked = applyEvidence(
+    state,
+    graph,
+    p.id,
+    attempt(session, at, {
+      correct: true,
+      d: hinted ? 0.5 : 1,
+      hinted,
+      producedStep: !hinted,
+      questionKind: "check",
+      quote: hinted
+        ? `（预置）看了提示后答对「${p.name}」`
+        : `（预置）自己讲清了「${p.name}」`,
+      type: "check_correct",
+    })
+  );
+  return applyEvidence(
+    checked,
+    graph,
+    p.id,
+    attempt(session, at + 5 * 60_000, {
+      correct: true,
+      d: hinted ? 0.5 : 1,
+      hinted,
+      producedStep: !hinted,
+      questionKind: "variant",
+      quote: `（预置）「${p.name}」的变式题也答对了`,
+      type: "transfer_correct",
+    })
+  );
+}
+
+// 演示学生的整体起点（用户 2026-10-23 定）：一周前学完第 1 课，这几天在学第 2 课，第 3 课还没开始。
+// 第 1 课约 20 全亮、4 半亮；第 2 课 3 全亮、约 9 半亮、2 个答错过（其中一个记下错误想法），
+// 死锁不碰（留给“开始学习”），丢失更新由 seedScene2 放成半亮；第 3 课全灰，诊断和画面一从零点亮
+const DEMO_WRONG = {
+  answer: "（预置）演示学生的回答：加了锁就不会有任何并发问题了",
+  idea: "加了锁就不会有任何并发问题",
+};
+
+export function seedDemoStudent(
+  graph: CourseGraph,
+  courseId: string,
+  now: Date
+): LearnerState {
+  let s = emptyLearnerState(DEMO_STUDENT.id, courseId);
+  const [l1 = [], l2 = []] = lessonPoints(graph);
+  const t1 = now.getTime() - 7 * DAY;
+  for (const [i, p] of l1.entries()) {
+    if (i < 20) {
+      s = learnFull(s, graph, p, t1 + i * 60_000, "seed-demo-l1");
+    } else if (i < 24) {
+      s = learnHalf(s, graph, p, t1 + i * 60_000, "seed-demo-l1", false);
+    }
+  }
+  const skip = new Set(
+    [demoTarget(graph), scene2Target(graph)].flatMap((p) => (p ? [p.id] : []))
+  );
+  const t2 = now.getTime() - 3 * DAY;
+  for (const [i, p] of l2.filter((q) => !skip.has(q.id)).entries()) {
+    const at = t2 + i * 60_000;
+    if (i < 3) {
+      s = learnFull(s, graph, p, at, "seed-demo-l2");
+    } else if (i < 12) {
+      s = learnHalf(s, graph, p, at, "seed-demo-l2", false);
+    } else if (i < 14) {
+      s = applyEvidence(
+        s,
+        graph,
+        p.id,
+        attempt("seed-demo-l2", at, {
+          correct: false,
+          d: 0,
+          hinted: false,
+          producedStep: false,
+          questionKind: "check",
+          ...(i === 12
+            ? { misconception: DEMO_WRONG.idea, quote: DEMO_WRONG.answer }
+            : { quote: `（预置）「${p.name}」的题答错了` }),
+          type: "check_wrong",
+        })
+      );
+    }
+  }
+  return {
+    ...s,
+    engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 },
   };
 }

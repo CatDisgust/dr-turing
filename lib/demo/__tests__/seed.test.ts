@@ -9,6 +9,8 @@ import { compareRuns } from "../compare";
 import {
   DEMO_STUDENT,
   demoTarget,
+  lessonPoints,
+  seedDemoStudent,
   seedScene2,
   seedStudents,
   seedSummary,
@@ -255,5 +257,95 @@ describe("画面二预置（D12）", () => {
 
   it("图里没有丢失更新就不写", () => {
     expect(seedScene2(graph, other, now)).toBeNull();
+  });
+});
+
+// 用户 2026-10-23 定的演示学生起点：第 1 课学完、第 2 课学一半、第 3 课全灰
+describe("演示学生的预置起点", () => {
+  const at = new Date("2026-10-23T09:00:00Z");
+  const lesson = (n: number, size: number) =>
+    Array.from({ length: size }, (_, i) =>
+      point(`l${n}-${i}`, `第${n}课点${i}`, { lessonId: `l${n}` })
+    );
+  const g3: CourseGraph = {
+    ...graph,
+    edges: [pre("l1-1", "l1-0")],
+    lessons: [1, 2, 3].map((n) => ({
+      fileIds: [],
+      id: `l${n}`,
+      index: n,
+      title: `W${n}`,
+    })),
+    points: [
+      ...lesson(1, 26),
+      ...lesson(2, 23),
+      point("dl", "死锁", { lessonId: "l2" }),
+      point("lost", "丢失更新", { lessonId: "l2" }),
+      ...lesson(3, 23),
+    ],
+  };
+  const count = (state: ReturnType<typeof seedDemoStudent>, n: number) => {
+    const c = { full: 0, gray: 0, half: 0 } as Record<string, number>;
+    for (const p of g3.points.filter((q) => q.lessonId === `l${n}`)) {
+      c[nodeLight(state.nodes[p.id]).light] += 1;
+    }
+    return c;
+  };
+
+  it("第 1 课 20 全亮 4 半亮，第 2 课 3 全亮 9 半亮，第 3 课全灰", () => {
+    const s = seedDemoStudent(g3, "comp5348", at);
+    expect(count(s, 1)).toEqual({ full: 20, gray: 2, half: 4 });
+    expect(count(s, 2)).toEqual({ full: 3, gray: 13, half: 9 });
+    expect(count(s, 3)).toEqual({ full: 0, gray: 23, half: 0 });
+  });
+
+  it("死锁不碰；丢失更新交给画面二，放成半亮", () => {
+    const s = seedDemoStudent(g3, "comp5348", at);
+    expect(s.nodes.dl).toBeUndefined();
+    expect(s.nodes.lost).toBeUndefined();
+    const scene2 = seedScene2(g3, s, at);
+    expect(nodeLight(scene2?.state.nodes.lost).light).toBe("half");
+    expect(count(scene2?.state ?? s, 2).half).toBe(10);
+  });
+
+  it("课内先亮前置", () => {
+    const [first] = lessonPoints(g3);
+    expect(first.findIndex((p) => p.id === "l1-1")).toBeLessThan(
+      first.findIndex((p) => p.id === "l1-0")
+    );
+  });
+
+  it("第 2 课有一个答错的点记下了错误想法", () => {
+    const s = seedDemoStudent(g3, "comp5348", at);
+    const ideas = Object.values(s.nodes).flatMap((n) => n.misconceptions);
+    expect(ideas.map((m) => m.text)).toContain("加了锁就不会有任何并发问题");
+  });
+});
+
+describe("A、B 补上第 1 课后，死锁的规划输入不变", () => {
+  it("目标点、前置、易混点的状态和只重放前置时一样", () => {
+    const g = {
+      ...graph,
+      lessons: [
+        { fileIds: [], id: "l1", index: 1, title: "W1" },
+        ...graph.lessons,
+      ],
+      points: [
+        ...graph.points,
+        ...Array.from({ length: 6 }, (_, i) =>
+          point(`w1-${i}`, `第一课点${i}`, { lessonId: "l1" })
+        ),
+      ],
+    };
+    const at = new Date("2026-10-23T09:00:00Z");
+    const before = seedStudents(graph, "comp5348", at);
+    const after = seedStudents(g, "comp5348", at);
+    // 死锁自己、一跳前置加锁、两跳前置并发及其问题和并发控制
+    for (const id of ["dl", "lock", "conc", "ctrl"]) {
+      expect(after?.a.nodes[id]).toEqual(before?.a.nodes[id]);
+      expect(after?.b.nodes[id]).toEqual(before?.b.nodes[id]);
+    }
+    expect(nodeLight(after?.a.nodes["w1-0"]).light).toBe("full");
+    expect(nodeLight(after?.b.nodes["w1-0"]).light).not.toBe("full");
   });
 });

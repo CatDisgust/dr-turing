@@ -1,18 +1,14 @@
+import { getCourseById, saveLearnerState } from "@/lib/db/queries";
 import {
-  getCourseById,
-  getLearnerState,
-  saveLearnerState,
-} from "@/lib/db/queries";
-import {
-  DEMO_STUDENT,
+  seedDemoStudent,
   seedScene2,
   seedStudents,
   seedSummary,
 } from "@/lib/demo/seed";
-import { emptyLearnerState } from "@/lib/learner/update";
+import { nodeLight } from "@/lib/learner/light";
 
 // 写入演示用的预置数据：画面三的学生 A、B（覆盖他们在这门课上的状态），
-// 画面二演示学生的「丢失更新」（只换这一个点，他别的记录不动）
+// 演示学生整体重置成预置起点，画面二的「丢失更新」放成半亮
 export async function POST(request: Request) {
   try {
     return await writeSeed(request);
@@ -46,15 +42,21 @@ async function writeSeed(request: Request) {
   }
   await saveLearnerState({ state: seed.a });
   await saveLearnerState({ state: seed.b });
-  const demo =
-    (await getLearnerState({ courseId, studentId: DEMO_STUDENT.id })) ??
-    emptyLearnerState(DEMO_STUDENT.id, courseId);
+  // 演示学生整体重置到预置起点（第 1 课学完、第 2 课学一半），再放画面二的「丢失更新」
+  const demo = seedDemoStudent(course.graph, courseId, new Date());
   const scene2 = seedScene2(course.graph, demo, new Date());
   if (scene2) {
     await saveLearnerState({ state: scene2.state });
   }
   const scene2Node = scene2?.state.nodes[scene2.target.id];
+  const lights = Object.values((scene2?.state ?? demo).nodes).map(
+    (n) => nodeLight(n).light
+  );
   return Response.json({
+    demo: {
+      full: lights.filter((l) => l === "full").length,
+      half: lights.filter((l) => l === "half").length,
+    },
     misconception: seed.misconception ?? null,
     prereqs: seedSummary(seed),
     scene2:
