@@ -108,6 +108,9 @@
   --sky-star-dim: #5c6573;
   --sky-warn: #ff9a9a;
   --sky-warn-ring: #ff7a7a;
+  --star-blue: #ccdbff;
+  --star-white: #fffffe;
+  --star-orange: #ffe1bf;
 
   --shadow-card: 0 1px 3px oklch(0 0 0 / 0.05), 0 1px 1px oklch(0 0 0 / 0.03);
   --shadow-float:

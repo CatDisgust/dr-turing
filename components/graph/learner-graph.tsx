@@ -1,13 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  GraphPanel,
-  LIGHT_LEGEND,
-  lightSwatch,
-} from "@/components/graph/graph-panel";
 import { NodeDrawer } from "@/components/graph/node-drawer";
 import { PersonalPanel } from "@/components/graph/personal-panel";
+import { SkyMap } from "@/components/graph/sky-map";
 import { useLearnerState } from "@/hooks/use-learner-state";
 import { COURSE_ID, GRADED_EVENT, NODE_TOUCHED_EVENT } from "@/lib/constants";
 import { type Light, nodeLight } from "@/lib/learner/light";
@@ -18,10 +14,11 @@ type Graded = {
   name: string;
   correct: boolean;
   misconception?: string;
+  confidence?: "guess" | "somewhat" | "sure";
 };
 
-// 聊天右边的图谱：按当前学生的状态点亮。归类一到就先把那个点虚线亮，批改完、回答结束再从库里刷新。
-// 点一个节点打开抽屉，看证据原话
+// 聊天右边的图谱：按当前学生的状态点亮，画成星图（sky-map.tsx）。归类一到就先把那个点当“正在学”，
+// 批改完、回答结束再从库里刷新。很确定却答错的那颗标成“以为会了”。点一颗星打开抽屉，看证据原话
 export function LearnerGraph({
   sessionId,
   onStartLearning,
@@ -94,10 +91,14 @@ export function LearnerGraph({
   }, [state]);
 
   const openPoint = graph?.points.find((p) => p.id === openId);
+  const warnId =
+    graded && !graded.correct && graded.confidence === "sure"
+      ? graded.kpId
+      : undefined;
 
   if (!graph) {
     return (
-      <div className="p-4 text-muted-foreground text-sm">
+      <div className="p-4 text-[14px] text-[var(--sky-ink-2)]">
         这门课的图谱还没生成。
       </div>
     );
@@ -105,33 +106,15 @@ export function LearnerGraph({
 
   return (
     <div className="relative h-full w-full" data-testid="learner-graph">
-      <GraphPanel
-        focusId={touched?.kpId}
+      <SkyMap
+        currentId={touched?.kpId}
         graph={graph}
         lights={lights}
         onSelect={select}
         progress={progress}
         selectedId={selectedId}
+        warnId={warnId}
       />
-      {touched ? (
-        <div
-          className="absolute top-3 left-3 rounded-md border bg-background/90 px-2 py-1 text-xs"
-          data-testid="touched-node"
-        >
-          这次在问：{touched.name}
-          {graded?.kpId === touched.kpId ? (
-            <span
-              className={graded.correct ? "text-emerald-600" : "text-red-600"}
-              data-testid="graded"
-            >
-              {graded.correct ? " · 答对了" : " · 没答对"}
-              {graded.misconception
-                ? `，像这个误解：${graded.misconception}`
-                : ""}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
       <PersonalPanel />
       {openPoint ? (
         <NodeDrawer
@@ -142,15 +125,6 @@ export function LearnerGraph({
           sessionId={sessionId}
         />
       ) : null}
-      <div className="absolute right-3 bottom-3 flex flex-col gap-1 rounded-md border border-white/10 bg-black/80 p-2 text-stone-200 text-xs">
-        {LIGHT_LEGEND.map((item) => (
-          <div className="flex items-center gap-2" key={item.light}>
-            <span style={lightSwatch(item.light)} />
-            {item.label}
-          </div>
-        ))}
-        <div className="text-stone-400">外圈细弧：离全亮还差多少</div>
-      </div>
     </div>
   );
 }

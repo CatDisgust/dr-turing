@@ -149,15 +149,14 @@ export function PersonalPanel() {
 
   return (
     <>
-      <Button
-        className="absolute top-3 right-3 z-[5]"
+      <button
+        className="absolute top-3.5 right-[22px] z-[5] text-[13px] text-[var(--sky-ink-2)] hover:text-[var(--sky-ink)]"
         data-testid="open-personal"
         onClick={show}
-        size="sm"
-        variant="outline"
+        type="button"
       >
-        我的星图
-      </Button>
+        我的星图 ↗
+      </button>
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent
           className="flex h-[92vh] w-[96vw] max-w-none gap-0 overflow-hidden bg-[#050506] p-0 text-stone-100 sm:max-w-none"

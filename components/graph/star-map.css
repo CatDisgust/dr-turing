@@ -47,3 +47,42 @@
     animation: none;
   }
 }
+
+/* 聊天右边的星图（sky-map.tsx，视觉规范「我的星图」） */
+.sky-star .sky-hover {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sky-star:hover .sky-hover,
+.sky-star:focus-visible .sky-hover {
+  opacity: 1;
+}
+.sky-star:focus-visible,
+.sky-lesson:focus-visible {
+  outline: none;
+}
+.sky-lesson:focus-visible {
+  stroke: var(--sky-ink);
+  stroke-width: 2;
+}
+
+/* 正在学的星：透明度在 0.2 和 0.65 之间来回，一个来回 3.2 秒 */
+@keyframes sky-breathe {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+.sky-breathe {
+  animation: sky-breathe 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sky-breathe {
+    opacity: 0.5;
+    animation: none;
+  }
+}
