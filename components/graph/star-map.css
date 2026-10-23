@@ -1,0 +1,49 @@
+/* 星图（用户 2026-10-23 选定的“天文馆”样式）：悬停细圈、正在问的点呼吸、点亮时一圈涟漪 */
+
+.star-node .star-hover {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.star-node:hover .star-hover,
+.react-flow__node:focus-visible .star-hover {
+  opacity: 1;
+}
+.star-node:hover .star-label {
+  color: #f3efe6;
+  opacity: 1;
+}
+
+@keyframes star-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.star-breathe {
+  animation: star-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes star-ripple {
+  0% {
+    r: 6px;
+    opacity: 0.95;
+  }
+  100% {
+    r: 40px;
+    opacity: 0;
+  }
+}
+.star-ripple {
+  opacity: 0;
+  animation: star-ripple 0.8s ease-out 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .star-breathe,
+  .star-ripple {
+    animation: none;
+  }
+}

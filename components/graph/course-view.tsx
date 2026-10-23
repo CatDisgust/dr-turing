@@ -13,9 +13,9 @@ const KIND_LABEL = {
 } as const;
 
 const LEGEND_COLOR = {
-  confusable: "#f59e0b",
-  part_of: "#94a3b8",
-  prereq: "#64748b",
+  confusable: "#d9a066",
+  part_of: "#8d8a83",
+  prereq: "#8d8a83",
 } as const;
 
 // 课程图谱页：看图，点节点看详情，审阅（合并 / 改名 / 删除）
