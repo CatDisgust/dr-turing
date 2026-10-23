@@ -29,7 +29,7 @@ const reviewSchema = z.object({
     z.object({
       attemptId: z.string(),
       reason: z.string(),
-      verdict: z.enum(["confirm", "retract"]),
+      verdict: z.enum(["confirm", "retract", "flip"]),
     })
   ),
 });
@@ -46,8 +46,9 @@ const SYSTEM = [
   "一、逐条复核暂定证据。每条证据是学生对导师一道题的回答，快速批改已经判了对错、有没有提示、像哪个误解。",
   "结合上下文判断这条结论站不站得住：",
   "- confirm：结论成立。",
-  "- retract：结论不成立，比如学生其实在问别的、只是照抄了导师刚说的话、答案是导师前一句已经说出来的、或者批改把对的判成错（错的判成对）。",
-  "  reason 用一句中文写清楚为什么推翻，引用对话原话。",
+  "- retract：这条根本不算一次作答，比如学生其实在问别的、只是照抄了导师刚说的话、答案是导师前一句已经说出来的。",
+  "- flip：确实是在作答，但对错判反了：把对的判成了错，或把错的判成了对。",
+  "  retract 和 flip 的 reason 都用一句中文写清楚原因，引用对话原话。",
   "拿不准就 confirm。每条证据都要给结论。",
   "",
   "二、找答案泄漏：导师在学生作答之前、学生也没要求的情况下，自己把题目的答案说了出来。把这些助手消息的 id 放进 leakedMessageIds；没有就给空数组。",

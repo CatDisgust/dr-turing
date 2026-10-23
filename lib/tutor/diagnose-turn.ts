@@ -190,7 +190,7 @@ export async function diagnosisAnswer(turn: Turn): Promise<Diagnosed | null> {
     pendingQuestion: undefined,
   };
   let lead = "学生说不会这道题，没关系，别讲解。";
-  if (graded?.graded) {
+  if (graded?.graded && !graded.graded.dontKnow) {
     lead = graded.graded.correct
       ? "学生答对了上一道诊断题，一句话肯定即可。"
       : "学生答错了上一道诊断题。不要纠正、不要讲解，一句话说“记下了，待会儿会讲到”。";

@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Attempt, CourseGraph, LearnerState } from "@/lib/types";
-import { BKT } from "../config";
+import { BKT, FULL_O } from "../config";
 import { plannerContext } from "../context";
+import { sessionEngagement } from "../engagement";
 import { nodeLight } from "../light";
-import { bktUpdate } from "../mastery";
+import { bktUpdate, masteryFromAttempts } from "../mastery";
 import {
   applyEvidence,
   applySignal,
@@ -333,10 +334,10 @@ describe("撤销、讲解、投入度", () => {
   });
 
   it("放弃、直接告诉我、跳题各记一笔；独立做对后清零", () => {
-    let s = applySignal(start(), "give_up", "t");
-    s = applySignal(s, "skip", "t");
-    s = applySignal(s, "just_tell_me", "t");
-    s = applySignal(s, "hint", "t");
+    let s = applySignal(start(), "give_up", "t", "s1");
+    s = applySignal(s, "skip", "t", "s1");
+    s = applySignal(s, "just_tell_me", "t", "s1");
+    s = applySignal(s, "hint", "t", "s1");
     expect(s.engagement).toMatchObject({
       giveUps: 1,
       justTellMe: 1,
@@ -348,6 +349,23 @@ describe("撤销、讲解、投入度", () => {
       justTellMe: 0,
       skippedQuestions: 0,
     });
+  });
+
+  // 建模审查第 1 条：投入度只算这一次学习，换一次学习从零算
+  it("投入度按会话算：换一次学习从零开始，旧数据没记会话也从零算", () => {
+    let s = applySignal(start(), "give_up", "t", "s1");
+    s = applySignal(s, "give_up", "t", "s1");
+    s = applySignal(s, "give_up", "t", "s1");
+    expect(sessionEngagement(s.engagement, "s1").giveUps).toBe(3);
+    expect(sessionEngagement(s.engagement, "s2").giveUps).toBe(0);
+    s = applySignal(s, "skip", "t", "s2");
+    expect(s.engagement).toMatchObject({
+      giveUps: 0,
+      sessionId: "s2",
+      skippedQuestions: 1,
+    });
+    const old = { giveUps: 5, justTellMe: 0, skippedQuestions: 0 };
+    expect(sessionEngagement(old, "s1").giveUps).toBe(0);
   });
 });
 
@@ -402,5 +420,43 @@ describe("快路径归类：虚线亮", () => {
       type: "check_wrong",
     });
     expect(s.nodes.kp_mutex.touchedInSession).toBe("chat1");
+  });
+});
+
+// 建模审查第 4 条：O 只吃 M 创新高的涨幅，全亮只能靠隔天复习
+describe("O 不会被对错交替刷高", () => {
+  const step = (correct: boolean, i: number): Attempt => ({
+    at: `2026-10-23T0${i % 10}:00:00.000Z`,
+    correct,
+    d: 1,
+    hinted: false,
+    id: `x${i}`,
+    producedStep: true,
+    provisional: false,
+    quote: "",
+    sessionId: "s1",
+    source: "slow",
+    turnId: `x${i}`,
+    type: correct ? "check_correct" : "check_wrong",
+  });
+
+  it("对错交替 9 次，O 不超过连续答对，也到不了全亮", () => {
+    const alternating = Array.from({ length: 9 }, (_, i) =>
+      step(i % 2 === 0, i)
+    );
+    const straight = Array.from({ length: 5 }, (_, i) => step(true, i));
+    const alt = masteryFromAttempts(alternating);
+    const run = masteryFromAttempts(straight);
+    expect(alt.O).toBeLessThanOrEqual(run.O);
+    expect(alt.O).toBeLessThan(FULL_O);
+    expect(run.O).toBeLessThan(FULL_O);
+  });
+
+  it("隔天复习独立答对仍能全亮", () => {
+    const attempts = [
+      ...Array.from({ length: 3 }, (_, i) => step(true, i)),
+      { ...step(true, 9), type: "review_correct" as const },
+    ];
+    expect(masteryFromAttempts(attempts).O).toBeGreaterThanOrEqual(FULL_O);
   });
 });

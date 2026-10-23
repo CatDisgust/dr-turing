@@ -241,13 +241,15 @@ def bkt(m: float, correct: bool, learn: float = L) -> float:
 
 
 def replay(steps: list[dict]) -> list[dict]:
-    m, o, out = PRIOR, 0.0, []
+    m, o, peak, out = PRIOR, 0.0, PRIOR, []
     for step in steps:
         if "correct" in step:
             correct, d = step["correct"], step["d"]
             # 答案被揭示后照着做对：学习率减半
             nm = bkt(m, correct, L * REVEALED_LEARN_FACTOR if correct and d == 0 else L)
-            no = min(nm, o + d * max(nm - m, 0.0))
+            # O 只吃 M 创新高的涨幅（建模审查第 4 条，2026-10-23）
+            no = min(nm, o + d * max(nm - peak, 0.0))
+            peak = max(peak, nm)
             # 隔天复习独立做对：O 向 M 靠拢
             if step.get("review") and correct and d == 1:
                 no = min(nm, max(no, o + REVIEW_PULL * (nm - o)))
@@ -369,7 +371,8 @@ PLAN_TABLE = {
         {"M": 0.71, "O": 0.41},
         {"M": 0.93, "O": 0.52},
         {"M": 0.68, "O": 0.52},
-        {"M": 0.92, "O": 0.76},
+        # 原表是 0.76：M 跌了又涨回来那段被重复计入，不复习就全亮。2026-10-23 改为只吃创新高的涨幅
+        {"M": 0.92, "O": 0.52},
     ],
 }
 
