@@ -21,6 +21,7 @@ type SeedResult = {
 };
 
 type NextDayResult = { name: string; M: number; O: number; light: string };
+type ResetResult = { name: string; full: number; half: number };
 
 const FIELD_LABELS: Record<ComparedField, string> = {
   check_misconception_first: "先查误解吗",
@@ -88,6 +89,7 @@ export default function ComparePage() {
   const [seed, setSeed] = useState<SeedResult | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [nextDay, setNextDay] = useState<NextDayResult | null>(null);
+  const [showNote, setShowNote] = useState("");
 
   const writeSeed = useCallback(async () => {
     setBusy("seed");
@@ -107,6 +109,39 @@ export default function ComparePage() {
     setError("");
     try {
       setNextDay(await post<NextDayResult>("/api/demo/next-day", {}));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy("");
+    }
+  }, []);
+
+  // 产品演示学生（录视频用）：清空重来，或者给他写“第二天”
+  const resetShow = useCallback(async () => {
+    setBusy("show-reset");
+    setError("");
+    try {
+      const r = await post<ResetResult>("/api/demo/reset", {});
+      setShowNote(
+        `${r.name}已清空重来：旧对话、个人星图、学生模型都删了，课内 ${r.full} 个全亮、${r.half} 个半亮（丢失更新昨天半亮，死锁没碰）。`
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy("");
+    }
+  }, []);
+
+  const showNextDay = useCallback(async () => {
+    setBusy("show-next-day");
+    setError("");
+    try {
+      const r = await post<NextDayResult>("/api/demo/next-day", {
+        student: "show",
+      });
+      setShowNote(
+        `产品演示学生的“第二天”已写入：「${r.name}」昨天学过（M ${r.M.toFixed(2)}，O ${r.O.toFixed(2)}，${r.light === "half" ? "半亮" : r.light}），今天问到它会出复习题。`
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -190,7 +225,35 @@ export default function ComparePage() {
           {busy === "compare5" ? "跑着呢…" : "连跑 5 次"}
         </button>
       </div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground">
+          产品演示学生（录视频用）：
+        </span>
+        <button
+          className="rounded-md border px-3 py-1.5 disabled:opacity-50"
+          data-testid="show-reset"
+          disabled={busy !== ""}
+          onClick={resetShow}
+          type="button"
+        >
+          {busy === "show-reset" ? "重置中…" : "清空重来"}
+        </button>
+        <button
+          className="rounded-md border px-3 py-1.5 disabled:opacity-50"
+          data-testid="show-next-day"
+          disabled={busy !== ""}
+          onClick={showNextDay}
+          type="button"
+        >
+          {busy === "show-next-day" ? "写入中…" : "写入“第二天”（死锁）"}
+        </button>
+      </div>
       {error ? <p className="mb-3 text-destructive">{error}</p> : null}
+      {showNote ? (
+        <p className="mb-4 text-muted-foreground" data-testid="show-result">
+          {showNote}
+        </p>
+      ) : null}
 
       {seed ? (
         <p className="mb-4 text-muted-foreground" data-testid="seed-result">

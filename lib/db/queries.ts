@@ -970,3 +970,21 @@ export async function saveConceptEvents(events: ConceptEvent[]) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }
 }
+
+// 产品演示学生一键重来：这个学生的对话、课内状态、作答和事件记录、学生模型、个人知识库全部删掉。
+// 只追加的表平时从不删，这里是演示专用的例外，只给产品演示学生用
+export async function resetStudent({ studentId }: { studentId: string }) {
+  try {
+    await deleteAllChatsByUserId({ userId: studentId });
+    await db.delete(learnerState).where(eq(learnerState.studentId, studentId));
+    await db.delete(transaction).where(eq(transaction.studentId, studentId));
+    await db.delete(event).where(eq(event.studentId, studentId));
+    await db.delete(studentModel).where(eq(studentModel.studentId, studentId));
+    await db.delete(conceptEvent).where(eq(conceptEvent.studentId, studentId));
+    await db
+      .delete(personalGraph)
+      .where(eq(personalGraph.studentId, studentId));
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}

@@ -20,7 +20,7 @@ export const DEMO_QUESTION = "加锁为什么会死锁？";
 // 原定的加锁本身没有前置（它 part_of 并发控制），A、B 拉不开。按名字和别名找，不认死 id
 const TARGET = /死锁|deadlock/i;
 
-export const [DEMO_STUDENT, STUDENT_A, STUDENT_B] = STUDENTS;
+export const [DEMO_STUDENT, STUDENT_A, STUDENT_B, SHOW_STUDENT] = STUDENTS;
 
 export function demoTarget(graph: CourseGraph): KnowledgePoint | null {
   return (
@@ -442,9 +442,10 @@ const DEMO_WRONG = {
 export function seedDemoStudent(
   graph: CourseGraph,
   courseId: string,
-  now: Date
+  now: Date,
+  studentId: string = DEMO_STUDENT.id
 ): LearnerState {
-  let s = emptyLearnerState(DEMO_STUDENT.id, courseId);
+  let s = emptyLearnerState(studentId, courseId);
   const [l1 = [], l2 = []] = lessonPoints(graph);
   const t1 = now.getTime() - 7 * DAY;
   for (const [i, p] of l1.entries()) {

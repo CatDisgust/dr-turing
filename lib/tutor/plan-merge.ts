@@ -29,10 +29,25 @@ export function mergePlan(
     elicits_production: disclosure_level !== "full",
     filled_by: "claude",
     rationale: filled.rationale.trim() || rulePlan.rationale,
+    // 规则算出的已会先修一定留着（录视频时“从你会的…讲起”不能时有时无），Claude 只能往上加
     start_from: [
-      ...new Set(
-        filled.start_from.filter((id) => limits.prereqIds.includes(id))
-      ),
+      ...new Set([
+        ...rulePlan.start_from,
+        ...filled.start_from.filter((id) => limits.prereqIds.includes(id)),
+      ]),
     ],
+  };
+}
+
+// 回复标签上要写“从你会的「X」讲起”：把起点的名字一起存进 plan，旧消息重新打开也能显示
+export function nameStartFrom(
+  plan: TutorPlan,
+  points: { id: string; name: string }[]
+): TutorPlan {
+  return {
+    ...plan,
+    start_from_names: plan.start_from.map(
+      (id) => points.find((p) => p.id === id)?.name ?? id
+    ),
   };
 }

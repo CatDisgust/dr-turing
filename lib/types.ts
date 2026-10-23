@@ -428,6 +428,7 @@ export type TutorPlan = {
   elicits_production: boolean;
   reveals_answer: boolean;
   start_from: string[]; // 跳过哪些已掌握的先修（kp id）
+  start_from_names?: string[]; // 同上的名字，给回复标签显示（旧记录没有）
   representation: "analogy" | "code" | "formula" | "diagram";
   // 先例子还是先定义（方案 C）；和 representation 一起由代码按得分挑（Message_v2 里的旧记录没有）
   order: "example_first" | "definition_first";
