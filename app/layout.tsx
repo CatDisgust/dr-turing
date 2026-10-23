@@ -68,9 +68,10 @@ export default function RootLayout({
       <body className="antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="light"
           disableTransitionOnChange
-          enableSystem
+          // 整体视觉按浅色页面 + 深色星图设计，不跟系统切暗色
+          forcedTheme="light"
         >
           <TooltipProvider>{children}</TooltipProvider>
         </ThemeProvider>

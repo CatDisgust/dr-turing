@@ -23,14 +23,10 @@ export function FollowUps() {
     return null;
   }
   return (
-    <div className="flex flex-wrap gap-2" data-testid="follow-ups">
+    <div className="flex flex-wrap gap-2 pt-1" data-testid="follow-ups">
       {FOLLOW_UPS.map((f) => (
         <PickButton
-          className={
-            f.body?.quizMe
-              ? "rounded-full border border-foreground/30 px-3 py-1 text-foreground text-xs hover:bg-muted disabled:opacity-50"
-              : "rounded-full border px-3 py-1 text-muted-foreground text-xs hover:bg-muted hover:text-foreground disabled:opacity-50"
-          }
+          className="dt-btn dt-btn-sm"
           disabled={actions.disabled}
           key={f.label}
           onPick={send}

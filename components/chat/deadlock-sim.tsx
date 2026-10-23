@@ -66,30 +66,27 @@ export function DeadlockSim() {
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-3.5 text-[13px]"
+      className="flex flex-col gap-2.5 rounded-2xl border-2 px-[18px] py-3.5 text-[14px] leading-normal"
       data-testid="deadlock-sim"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-        <span className="text-muted-foreground">动手试试 · 你来当调度器</span>
-        <span className="flex gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="font-bold text-[15px]">动手试试：你来当调度器</span>
+        <span className="flex gap-3 text-[13px]">
           <Goal done={hit.deadlock} label="造出一次死锁" />
           <Goal done={hit.finished} label="让两个都做完" />
         </span>
       </div>
-      <p>
+      <p className="leading-[1.6]">
         每次点一下，让 T1 或 T2
         走一步。先试着让它们卡死，再换一种顺序让它们都做完。
       </p>
       <div className="grid grid-cols-2 gap-2.5">
         {TXNS.map((t) => (
-          <div
-            className="flex min-w-0 flex-col gap-1.5 rounded-lg border bg-background p-2.5"
-            key={t}
-          >
-            <div className="flex items-center justify-between font-mono text-xs">
-              <span>T{t}</span>
+          <div className="flex min-w-0 flex-col gap-1.5" key={t}>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">T{t}</span>
               <PickButton
-                className="rounded-full border border-foreground/30 px-2.5 py-0.5 hover:bg-muted disabled:opacity-40"
+                className="dt-btn dt-btn-sm"
                 data-testid={`sim-step-${t}`}
                 disabled={sim.outcome !== "running" || sim.pc[t] >= 3}
                 onPick={step}
@@ -104,13 +101,11 @@ export function DeadlockSim() {
               return (
                 <div
                   className={cn(
-                    "rounded-md border px-2 py-1 font-mono text-xs",
-                    done &&
-                      "border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                    "rounded-[10px] px-2.5 py-[5px]",
+                    done && "bg-muted",
                     stuck &&
-                      (sim.outcome === "deadlock"
-                        ? "border-red-500/60 bg-red-500/10 text-red-700 dark:text-red-400"
-                        : "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400")
+                      "border-[1.5px] border-[var(--placeholder)] border-dashed py-1",
+                    !(done || stuck) && "text-muted-foreground"
                   )}
                   key={label}
                 >
@@ -122,14 +117,14 @@ export function DeadlockSim() {
           </div>
         ))}
       </div>
-      <div className="flex flex-wrap items-center gap-4 font-mono text-muted-foreground text-xs">
+      <div className="flex flex-wrap items-center gap-4 text-[13px] text-muted-foreground">
         {LOCKS.map((l) => (
           <span key={l}>
             锁 {l}：{sim.owner[l] ? `T${sim.owner[l]}` : "空"}
           </span>
         ))}
         <button
-          className="ml-auto rounded-md border px-2.5 py-0.5 hover:bg-muted"
+          className="dt-text-btn ml-auto h-8"
           onClick={reset}
           type="button"
         >
@@ -138,23 +133,22 @@ export function DeadlockSim() {
       </div>
       <p
         className={cn(
-          "rounded-lg px-3 py-2",
-          sim.outcome === "deadlock"
-            ? "bg-red-500/10 text-red-700 dark:text-red-400"
-            : sim.outcome === "finished"
-              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-              : "bg-background"
+          "flex items-start gap-2 leading-[1.6]",
+          sim.outcome === "running" && "text-muted-foreground"
         )}
         data-testid="sim-status"
       >
-        {statusText(sim, last)}
+        {sim.outcome === "running" ? null : <Check />}
+        <span>{statusText(sim, last)}</span>
       </p>
       {both ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <span>两种你都做出来了。用一句话说说：第二次为什么没卡死？</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="flex-1">
+            两种你都做出来了。用一句话说说：第二次为什么没卡死？
+          </span>
           {actions ? (
             <button
-              className="rounded-full border px-3 py-1 text-muted-foreground text-xs hover:bg-muted hover:text-foreground disabled:opacity-50"
+              className="dt-btn dt-btn-sm"
               disabled={actions.disabled}
               onClick={explain}
               type="button"
@@ -168,22 +162,39 @@ export function DeadlockSim() {
   );
 }
 
+// 达成了就是“对”：绿色对勾（视觉规范：做出死锁也是做对了，不用红）
+function Check() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="mt-[3px] shrink-0"
+      fill="none"
+      height="18"
+      stroke="var(--duo-green-check)"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="3"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
 function Goal({ done, label }: { done: boolean; label: string }) {
   return (
     <span
       className={cn(
-        "flex items-center gap-1.5",
-        done
-          ? "text-emerald-700 dark:text-emerald-400"
-          : "text-muted-foreground"
+        "flex items-center gap-1",
+        done ? "text-foreground" : "text-muted-foreground"
       )}
     >
-      <span
-        className={cn(
-          "inline-block size-2.5 rounded-full border-2",
-          done ? "border-emerald-500 bg-emerald-500" : "border-current"
-        )}
-      />
+      {done ? (
+        <Check />
+      ) : (
+        <span className="inline-block size-2.5 rounded-full border-2 border-current" />
+      )}
       {label}
     </span>
   );

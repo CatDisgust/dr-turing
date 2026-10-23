@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 type Tab = "material" | "graph";
 
-// 右边的侧拉框：课件和我的图谱两个标签页，可收起。
+// 右边的侧拉框：课件和我的星图两个标签页，可收起。标签栏是一条夜空（视觉规范 StarMap），和白页面之间是直边。
 // 两页都一直挂着（图谱要接收点亮事件、课件要留住打开的 PDF），只是叠在一起切换显示
 export function SideDrawer({
   material,
@@ -59,25 +59,27 @@ export function SideDrawer({
     <>
       {open ? null : (
         <button
-          className="fixed top-1/2 right-0 z-30 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-md border border-r-0 bg-background px-1.5 py-3 text-xs shadow-sm [writing-mode:vertical-rl] hover:bg-muted"
+          className="fixed top-1/2 right-0 z-30 flex -translate-y-1/2 flex-col items-center gap-1 rounded-l-xl bg-[var(--sky)] px-2 py-3.5 text-[13px] text-[var(--sky-ink)] [writing-mode:vertical-rl]"
           data-testid="drawer-open"
           onClick={show}
           type="button"
         >
-          {showMaterial ? "课件 · 我的图谱" : "我的图谱"}
-          {news ? <span className="size-2 rounded-full bg-red-500" /> : null}
+          {showMaterial ? "课件 · 我的星图" : "我的星图"}
+          {news ? (
+            <span className="size-2 rounded-full bg-[var(--duo-blue-edge)]" />
+          ) : null}
         </button>
       )}
       <aside
         className={cn(
-          "flex min-w-0 shrink-0 flex-col border-l bg-background",
+          "flex min-w-0 shrink-0 flex-col bg-[var(--sky)]",
           "max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:w-[92vw] max-lg:shadow-xl",
-          "lg:w-[44%]",
+          "lg:w-[440px]",
           !open && "hidden"
         )}
         data-testid="side-drawer"
       >
-        <div className="flex items-center gap-1 border-b px-2 py-1.5 text-sm">
+        <div className="flex h-14 shrink-0 items-center gap-[22px] px-[22px] text-[14px]">
           {showMaterial ? (
             <TabButton
               active={current === "material"}
@@ -88,13 +90,13 @@ export function SideDrawer({
             </TabButton>
           ) : null}
           <TabButton active={current === "graph"} onPick={pick} tab="graph">
-            我的图谱
+            我的星图
             {news ? (
-              <span className="ml-1 inline-block size-2 rounded-full bg-red-500" />
+              <span className="ml-1.5 inline-block size-2 rounded-full bg-[var(--duo-blue-edge)]" />
             ) : null}
           </TabButton>
           <button
-            className="ml-auto rounded-md px-2 py-1 text-muted-foreground text-xs hover:bg-muted"
+            className="ml-auto text-[13px] text-[var(--sky-ink-2)] hover:text-[var(--sky-ink)]"
             data-testid="drawer-close"
             onClick={hide}
             type="button"
@@ -144,8 +146,10 @@ function TabButton({
   return (
     <button
       className={cn(
-        "flex items-center rounded-md px-3 py-1",
-        active ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted"
+        "flex items-center",
+        active
+          ? "font-medium text-white"
+          : "text-[var(--sky-ink-2)] hover:text-[var(--sky-ink)]"
       )}
       data-testid={`tab-${tab}`}
       onClick={onClick}

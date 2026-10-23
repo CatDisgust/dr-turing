@@ -59,7 +59,7 @@ export function StudentSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          className="h-8 gap-1.5 px-2 text-[13px]"
+          className="h-9 gap-1.5 px-2 font-normal text-[14px] text-muted-foreground"
           data-testid="student-switcher"
           variant="ghost"
         >

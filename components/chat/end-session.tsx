@@ -63,12 +63,11 @@ export function EndSession({
   return (
     <>
       <Button
-        className="md:ml-auto"
+        className="h-9 px-2 font-normal text-[14px] text-muted-foreground"
         data-testid="end-session"
         disabled={disabled}
         onClick={end}
-        size="sm"
-        variant="outline"
+        variant="ghost"
       >
         结束本次学习
       </Button>

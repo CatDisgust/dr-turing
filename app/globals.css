@@ -47,38 +47,67 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.12 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.12 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.12 0 0);
-  --primary: oklch(0.12 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.965 0 0);
-  --secondary-foreground: oklch(0.38 0 0);
-  --muted: oklch(0.94 0 0);
-  --muted-foreground: oklch(0.58 0 0);
-  --accent: oklch(0.965 0 0);
-  --accent-foreground: oklch(0.12 0 0);
-  --destructive: oklch(0.55 0.15 25);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.5 0 0);
+  --radius: 0.75rem;
+  --background: #ffffff;
+  --foreground: #252e3c;
+  --card: #ffffff;
+  --card-foreground: #252e3c;
+  --popover: #ffffff;
+  --popover-foreground: #252e3c;
+  --primary: #252e3c;
+  --primary-foreground: #ffffff;
+  --secondary: #eff3f9;
+  --secondary-foreground: #252e3c;
+  --muted: #f5f8fc;
+  --muted-foreground: #566172;
+  --accent: #eff3f9;
+  --accent-foreground: #252e3c;
+  --destructive: #ea2b2b;
+  --border: #dee3ec;
+  --input: #dee3ec;
+  --ring: #84d8ff;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.97 0 0);
-  --sidebar-foreground: oklch(0.38 0 0);
-  --sidebar-primary: oklch(0.12 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.12 0 0 / 0.06);
-  --sidebar-accent-foreground: oklch(0.12 0 0);
-  --sidebar-border: oklch(0.88 0 0);
-  --sidebar-ring: oklch(0.5 0 0);
+  --sidebar: #f5f8fc;
+  --sidebar-foreground: #566172;
+  --sidebar-primary: #252e3c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eff3f9;
+  --sidebar-accent-foreground: #252e3c;
+  --sidebar-border: #dee3ec;
+  --sidebar-ring: #84d8ff;
+
+  /* 冷灰加蓝（整体视觉 D）：绿 = 主按钮和答对，红 = 答错，蓝 = 你选的、可以点的 */
+  --duo-green: #58cc02;
+  --duo-green-edge: #46a302;
+  --duo-green-soft: #d7ffb8;
+  --duo-green-ink: #3d7a00;
+  --duo-red: #ff4b4b;
+  --duo-red-edge: #d42a2a;
+  --duo-red-soft: #ffdfe0;
+  --duo-red-ink: #a3161b;
+  --duo-blue-ink: #0071a5;
+  --duo-blue-soft: #ddf4ff;
+  --duo-blue-edge: #84d8ff;
+  --placeholder: #8a93a0;
+  --duo-green-check: #58a700;
+  --duo-green-half: #c6efa0;
+  --duo-red-ink-2: #7a1e21;
+  --duo-red-icon: #ea2b2b;
+
+  /* 右侧抽屉的夜空（星图），不随主题变 */
+  --sky: #05070b;
+  --sky-ink: #e0e5ed;
+  --sky-ink-2: #9ca5b3;
+  --sky-ink-3: #78818e;
+  --sky-line: #b6becb;
+  --sky-star-near: #8c96a6;
+  --sky-star-dim: #5c6573;
+  --sky-warn: #ff9a9a;
+  --sky-warn-ring: #ff7a7a;
 
   --shadow-card: 0 1px 3px oklch(0 0 0 / 0.05), 0 1px 1px oklch(0 0 0 / 0.03);
   --shadow-float:
@@ -145,7 +174,9 @@
     @apply border-border ring-0;
   }
   body {
-    font-feature-settings: "ss01", "ss02", "cv01";
+    /* 视觉规范：中文和英文数字同一套字体，Mac 上是苹方 */
+    font-family:
+      "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -194,6 +225,98 @@ select:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
   outline: none;
+}
+
+/* 视觉规范（https://claude.ai/artifact/JbACSHZLoKA4sLg3zFqyr8）里的按钮：
+   厚度是正下方一条实色边，按下时往下移一个边的高度。一屏只有一个 dt-btn-primary */
+/* 不放进 @layer：要压过上面全局的 button:focus-visible { outline: none } */
+.dt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--foreground);
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--background);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 2px 0 var(--border);
+  transition:
+    transform 0.1s,
+    box-shadow 0.1s;
+}
+.dt-btn:active:not(:disabled) {
+  box-shadow: none;
+  transform: translateY(2px);
+}
+.dt-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.dt-btn-sm {
+  height: 36px;
+}
+.dt-btn[aria-checked="true"],
+.dt-btn[aria-pressed="true"] {
+  color: var(--duo-blue-ink);
+  background: var(--duo-blue-soft);
+  border-color: var(--duo-blue-edge);
+  box-shadow: 0 2px 0 var(--duo-blue-edge);
+}
+.dt-btn-primary {
+  height: 46px;
+  padding: 0 30px;
+  font-size: 16px;
+  color: #ffffff;
+  letter-spacing: 0.06em;
+  background: var(--duo-green);
+  border: 0;
+  border-radius: 14px;
+  box-shadow: 0 4px 0 var(--duo-green-edge);
+}
+.dt-btn-primary:active:not(:disabled) {
+  transform: translateY(4px);
+}
+.dt-text-btn {
+  height: 40px;
+  padding: 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--duo-blue-ink);
+  cursor: pointer;
+  background: transparent;
+  border-radius: 8px;
+}
+.dt-text-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.dt-btn:focus-visible,
+.dt-text-btn:focus-visible,
+.dt-input:focus-visible {
+  outline: 2px solid var(--duo-blue-ink);
+  outline-offset: 2px;
+}
+.dt-input {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--foreground);
+  background: var(--background);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+}
+.dt-input::placeholder {
+  color: var(--placeholder);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dt-btn {
+    transition: none;
+  }
 }
 
 @utility text-balance {
