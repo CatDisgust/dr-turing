@@ -5,8 +5,9 @@ import type {
   ReviewVerdict,
   SessionReport,
 } from "@/lib/types";
+import { BKT } from "./config";
 import { isGraded, masteryFromAttempts } from "./mastery";
-import { retractEvidence, reviseEvidence } from "./update";
+import { learnRateOf, retractEvidence, reviseEvidence } from "./update";
 
 // 会后复核落到状态上：复核确认的暂定证据转正，推翻的撤掉并留下原因，判反了的改判后重放。
 // 复核没提到的暂定证据按确认处理（检查题有服务端答案，推翻的本来就少）
@@ -142,7 +143,9 @@ export function sessionReport(input: {
     }
     graded.push(...mine);
     const before = masteryFromAttempts(
-      node.attempts.filter((a) => a.sessionId !== sessionId)
+      node.attempts.filter((a) => a.sessionId !== sessionId),
+      BKT.prior,
+      learnRateOf(state)
     ).O;
     oGain.push({
       after: round(node.O),

@@ -22,6 +22,7 @@ import {
 } from "@/lib/learner/personal";
 import { applyReview, sessionReport } from "@/lib/learner/review";
 import { rebuildStudentModel } from "@/lib/learner/student-model";
+import { learnRateOf, relearn } from "@/lib/learner/update";
 import type { SessionReport } from "@/lib/types";
 import { reviewSession, type TranscriptLine } from "./review";
 
@@ -103,7 +104,8 @@ export async function endSession(input: {
   // 复核要跑一阵子，这期间学生可能在别的对话里又答了题：落状态前重新读一次
   const fresh = (await getLearnerState(input)) ?? before;
   const applied = applyReview(fresh, course.graph, input.chatId, verdicts, now);
-  await saveLearnerState({ state: applied.state });
+  let { state } = applied;
+  await saveLearnerState({ state });
   // 撤销、改判也是原始记录：Transaction 只追加不改，复核结论记成事件
   await saveEvents(
     applied.changes.map((c) => ({
@@ -119,6 +121,16 @@ export async function endSession(input: {
       type: c.type,
     }))
   );
+  // 学生模型从原始记录整份重算（方案 F），学习率 ℓ 变了就按新 ℓ 重算各点的 M、O（方案 B）
+  try {
+    const model = await refreshStudentModel(input.studentId);
+    if (model.learnRate !== learnRateOf(state)) {
+      state = relearn(state, course.graph, model.learnRate);
+      await saveLearnerState({ state });
+    }
+  } catch (error) {
+    console.error("rebuild student model failed:", error);
+  }
   // 个人图谱：课外概念的新增 / 更新 / 作废，同样在落库前重新读一次
   const freshPersonal =
     (await getPersonalGraph({ studentId: input.studentId })) ?? personal;
@@ -145,16 +157,11 @@ export async function endSession(input: {
     now,
     retracted: applied.retracted,
     sessionId: input.chatId,
-    state: applied.state,
+    state,
   });
   report.concepts = changed;
   report.revised = applied.revised;
   await saveChatReport({ id: input.chatId, report });
-  try {
-    await refreshStudentModel(input.studentId);
-  } catch (error) {
-    console.error("rebuild student model failed:", error);
-  }
   return report;
 }
 
@@ -165,10 +172,9 @@ async function refreshStudentModel(studentId: string) {
     getEventsByStudent({ studentId }),
     getStudentModel({ studentId }),
   ]);
-  await saveStudentModel({
-    data: rebuildStudentModel(transactions, events, old?.notes),
-    studentId,
-  });
+  const data = rebuildStudentModel(transactions, events, old?.notes);
+  await saveStudentModel({ data, studentId });
+  return data;
 }
 
 // 开新对话时补跑：之前没点“结束本次学习”的会话，挨个复核。失败的下次再补

@@ -1,5 +1,5 @@
 import type { Attempt, StudentEventType, StudentModelData } from "@/lib/types";
-import { BKT } from "./config";
+import { fitLearnRate } from "./fit";
 import { calibrate, reviewedAttempts } from "./predict";
 
 // 学生模型（学生建模方案 F）：从两张只追加的表——作答 Transaction、反应 Event——整份重算。
@@ -29,7 +29,7 @@ export function rebuildStudentModel(
     },
     arms: {},
     calibration: calibrate(rows),
-    learnRate: BKT.learn,
+    learnRate: fitLearnRate(rows),
     notes,
     reactions,
     rebuiltFrom: { events: events.length, transactions: transactions.length },

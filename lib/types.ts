@@ -343,6 +343,8 @@ export type LearnerState = {
     recent: { type: StudentEventType; turn: number }[];
   };
   nodes: Record<string, NodeState>;
+  // 这个学生的学习率 ℓ（学生建模方案 B），每次结束学习时从全部作答拟合；没有就用全局 0.15
+  learnRate?: number;
   pendingQuestion?: PendingQuestion;
   // 诊断入口进行中：这一课、还没问的前置
   diagnosis?: {

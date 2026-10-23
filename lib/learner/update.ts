@@ -126,7 +126,8 @@ const carryOf = (node: NodeState): Carry => ({
 export function deriveNode(
   attempts: Attempt[],
   kind: KnowledgeKind,
-  carry: Carry = { explained: false }
+  carry: Carry = { explained: false },
+  learn: number = BKT.learn
 ): NodeState {
   const node: NodeState = { ...emptyNode(), ...carry, attempts };
   const wrongBySession = new Map<string, number>();
@@ -162,7 +163,7 @@ export function deriveNode(
     }
   }
 
-  const { M, O } = masteryFromAttempts(attempts);
+  const { M, O } = masteryFromAttempts(attempts, BKT.prior, learn);
   node.M = M;
   node.O = O;
   node.stage = learningStage(attempts, node.explained);
@@ -202,6 +203,26 @@ function flagPrereqs(
   return next;
 }
 
+// 这个学生的学习率 ℓ（学生建模方案 B）；还没拟合时用全局值
+export function learnRateOf(state: Pick<LearnerState, "learnRate">): number {
+  return state.learnRate ?? BKT.learn;
+}
+
+// 换了学习率：所有点按新 ℓ 重放一遍
+export function relearn(
+  state: LearnerState,
+  graph: CourseGraph,
+  learn: number
+): LearnerState {
+  const nodes = Object.fromEntries(
+    Object.entries(state.nodes).map(([kpId, node]) => [
+      kpId,
+      deriveNode(node.attempts, kindOf(graph, kpId), carryOf(node), learn),
+    ])
+  );
+  return { ...state, learnRate: learn, nodes };
+}
+
 // 一条证据进来：重放这个节点，再做先修传播
 export function applyEvidence(
   state: LearnerState,
@@ -213,7 +234,8 @@ export function applyEvidence(
   const derived = deriveNode(
     [...node.attempts, attempt],
     kindOf(graph, kpId),
-    carryOf(node)
+    carryOf(node),
+    learnRateOf(state)
   );
   return {
     ...state,
@@ -235,7 +257,8 @@ export function retractEvidence(
   const derived = deriveNode(
     node.attempts.filter((a) => a.id !== attemptId),
     kindOf(graph, kpId),
-    carryOf(node)
+    carryOf(node),
+    learnRateOf(state)
   );
   return { ...state, nodes: { ...state.nodes, [kpId]: derived } };
 }
@@ -263,7 +286,12 @@ export function reviseEvidence(
       type: gradedType(a.questionKind, a.hinted, correct),
     };
   });
-  const derived = deriveNode(attempts, kindOf(graph, kpId), carryOf(node));
+  const derived = deriveNode(
+    attempts,
+    kindOf(graph, kpId),
+    carryOf(node),
+    learnRateOf(state)
+  );
   return { ...state, nodes: { ...state.nodes, [kpId]: derived } };
 }
 
@@ -274,10 +302,12 @@ export function markExplained(
   kpId: string
 ): LearnerState {
   const node = state.nodes[kpId] ?? emptyNode();
-  const derived = deriveNode(node.attempts, kindOf(graph, kpId), {
-    ...carryOf(node),
-    explained: true,
-  });
+  const derived = deriveNode(
+    node.attempts,
+    kindOf(graph, kpId),
+    { ...carryOf(node), explained: true },
+    learnRateOf(state)
+  );
   return { ...state, nodes: { ...state.nodes, [kpId]: derived } };
 }
 
