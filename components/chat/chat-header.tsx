@@ -15,8 +15,10 @@ function PureChatHeader({
   chatId,
   isReadonly,
   canEnd,
+  targetId,
 }: {
   chatId: string;
+  targetId?: string;
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
   canEnd: boolean;
@@ -38,7 +40,7 @@ function PureChatHeader({
         Dr.Turing
       </span>
 
-      <LessonProgress />
+      <LessonProgress key={chatId} targetId={targetId} />
 
       <div className="ml-auto flex items-center gap-1">
         <StudentSwitcher />
@@ -54,5 +56,6 @@ export const ChatHeader = memo(
     prevProps.chatId === nextProps.chatId &&
     prevProps.selectedVisibilityType === nextProps.selectedVisibilityType &&
     prevProps.isReadonly === nextProps.isReadonly &&
-    prevProps.canEnd === nextProps.canEnd
+    prevProps.canEnd === nextProps.canEnd &&
+    prevProps.targetId === nextProps.targetId
 );

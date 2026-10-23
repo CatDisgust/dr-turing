@@ -9,13 +9,14 @@ import type {
   NodeState,
 } from "@/lib/types";
 
-// 点一个节点看它为什么是现在这个亮度：M、O、每条证据的原话、记下的误解
+// 点一个节点看它为什么是现在这个亮度：M、O、每条证据的原话、记下的误解。
+// 颜色和说法跟视觉规范走：看懂 = 浅绿，真会 = 绿，“开始学习”是这一屏唯一的绿色主按钮
 
 const LIGHT_LABEL = {
   dashed: "这次问到了",
-  full: "全亮：隔天还会",
-  gray: "没学过",
-  half: "半亮：理解了",
+  full: "真会：隔天还会",
+  gray: "还没开始",
+  half: "看懂：理解了",
 } as const;
 
 const STAGE_LABEL: Record<LearningStage, string> = {
@@ -53,21 +54,23 @@ function Bar({
   label,
   value,
   mark,
+  color,
 }: {
   label: string;
   value: number;
   mark: number;
+  color: string;
 }) {
   return (
     <div className="flex items-center gap-2">
       <span className="w-20 shrink-0">{label}</span>
-      <div className="relative h-2 flex-1 rounded bg-muted">
+      <div className="relative h-2.5 flex-1 rounded-[5px] bg-border">
         <div
-          className="h-2 rounded bg-amber-500"
-          style={{ width: `${Math.round(value * 100)}%` }}
+          className="h-2.5 rounded-[5px]"
+          style={{ background: color, width: `${Math.round(value * 100)}%` }}
         />
         <div
-          className="absolute top-[-3px] h-3.5 w-px bg-foreground/60"
+          className="absolute top-[-3px] h-4 w-0.5 bg-foreground/60"
           style={{ left: `${mark * 100}%` }}
         />
       </div>
@@ -94,13 +97,13 @@ export function NodeDrawer({
   const attempts = [...(node?.attempts ?? [])].reverse();
   return (
     <aside
-      className="absolute inset-y-0 right-0 z-10 flex w-[85%] max-w-sm flex-col gap-4 overflow-y-auto border-l bg-background p-4 text-sm shadow-lg"
+      className="absolute inset-y-0 right-0 z-10 flex w-[85%] max-w-sm flex-col gap-4 overflow-y-auto border-l-2 bg-background p-5 text-[14px] shadow-lg"
       data-testid="node-drawer"
     >
       <div className="flex items-start gap-2">
         <div className="flex-1">
-          <h3 className="font-semibold text-base">{point.name}</h3>
-          <p className="text-muted-foreground text-xs">
+          <h3 className="font-bold text-[18px]">{point.name}</h3>
+          <p className="text-[13px] text-muted-foreground">
             {LIGHT_LABEL[light]}
             {provisional ? " · 有暂定证据，会后复核" : ""}
             {node ? ` · ${STAGE_LABEL[node.stage]}` : ""}
@@ -117,7 +120,7 @@ export function NodeDrawer({
 
       {onStart ? (
         <button
-          className="rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-sm disabled:opacity-50"
+          className="dt-btn dt-btn-primary w-full"
           data-testid="start-learning"
           onClick={onStart}
           type="button"
@@ -127,10 +130,20 @@ export function NodeDrawer({
       ) : null}
 
       <div className="flex flex-col gap-1.5 text-xs">
-        <Bar label="表面掌握 M" mark={HALF_M} value={node?.M ?? 0} />
-        <Bar label="自主掌握 O" mark={FULL_O} value={node?.O ?? 0} />
+        <Bar
+          color="var(--duo-green-half)"
+          label="表面掌握 M"
+          mark={HALF_M}
+          value={node?.M ?? 0}
+        />
+        <Bar
+          color="var(--duo-green)"
+          label="自主掌握 O"
+          mark={FULL_O}
+          value={node?.O ?? 0}
+        />
         <p className="text-muted-foreground">
-          竖线是门槛：M 过 {HALF_M} 半亮，O 过 {FULL_O} 全亮。
+          竖线是门槛：M 过 {HALF_M} 算看懂，O 过 {FULL_O} 算真会。
         </p>
       </div>
 
@@ -143,13 +156,13 @@ export function NodeDrawer({
         ) : (
           <ul className="flex flex-col gap-2" data-testid="evidence">
             {attempts.map((attempt) => (
-              <li className="rounded-md border p-2" key={attempt.id}>
+              <li className="rounded-xl border-2 p-3" key={attempt.id}>
                 <div className="flex flex-wrap gap-x-2 text-muted-foreground text-xs">
                   <span
                     className={
                       attempt.correct === false
-                        ? "text-red-600"
-                        : "text-emerald-600"
+                        ? "font-bold text-[var(--duo-red-ink)]"
+                        : "font-bold text-[var(--duo-green-ink)]"
                     }
                   >
                     {TYPE_LABEL[attempt.type]}

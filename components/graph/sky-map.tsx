@@ -181,8 +181,8 @@ export function SkyMap({
       }
       const zoom = {
         height: height - ZOOM_TOP - INFO_HEIGHT - 16,
-        width: width - 150,
-        x: 36,
+        width: width - 84,
+        x: 30,
         y: ZOOM_TOP,
       };
       const at = lessons.findIndex((l) => l.id === target);
@@ -307,46 +307,84 @@ export function SkyMap({
     [zoomed, frame, lessonOf, currentId, warnId, selectedId]
   );
 
-  // 名字摆哪边：先试右边，压到别的名字就试左边、下面、上面（视图停稳了才算，动画中都写右边）
+  // 名字摆哪边：每颗星试 8 个位置，挑压到别的名字、别的星、星座连线最少的那个；
+  // 怎么摆都会压到别的名字或星，就先不写名字（悬停能看到，点了会写出来）。
+  // 正在学、答错、选中的星先摆，保证它们的名字一定在。视图停稳了才算，动画中都写右边
   const placements = useMemo(() => {
-    const result: Record<string, Placement> = {};
+    const result: Record<string, Placement | null> = {};
     if (anim.t < 1) {
       return result;
     }
-    const boxes: Box[] = [];
+    const shown = (id: string) =>
+      (frame[lessonOf.get(id) ?? ""]?.opacity ?? 0) > 0.5;
     const visible = graph.points
       .map((p) => ({ id: p.id, name: p.name, p: pos(p.id) }))
       .filter(
         (v): v is { id: string; name: string; p: SkyPoint } =>
-          v.p !== null && (frame[lessonOf.get(v.id) ?? ""]?.opacity ?? 0) > 0.5
+          v.p !== null && shown(v.id)
       );
-    for (const v of visible) {
-      boxes.push({
-        x1: v.p.x - 5,
-        x2: v.p.x + 5,
-        y1: v.p.y - 5,
-        y2: v.p.y + 5,
-      });
-    }
-    const labelled = visible
-      .filter((v) => showLabel(v.id))
-      .sort((a, b) => a.p.y - b.p.y || a.p.x - b.p.x);
-    for (const v of labelled) {
-      const w = textWidth(v.name);
-      const options = PLACEMENTS.map((placement) => ({
-        box: labelBox(placement, v.p, w),
-        placement,
-      })).filter(({ box }) => box.x1 >= 4 && box.x2 <= width - 8);
-      const free =
-        options.find(({ box }) => !boxes.some((b) => overlaps(b, box))) ??
-        options[0];
-      if (free) {
-        result[v.id] = free.placement;
-        boxes.push(free.box);
+    const stars: Box[] = visible.map((v) => around(v.p, STAR_GAP));
+    const segments: [SkyPoint, SkyPoint][] = [];
+    for (const lesson of layout.lessons) {
+      for (const [a, b] of lesson.lines) {
+        const pa = pos(a);
+        const pb = pos(b);
+        if (pa && pb && shown(a) && shown(b)) {
+          segments.push([pa, pb]);
+        }
       }
     }
+    const labels: Box[] = [];
+    const first = (id: string) =>
+      id === currentId || id === warnId || id === selectedId ? 0 : 1;
+    const labelled = visible
+      .filter((v) => showLabel(v.id))
+      .sort(
+        (a, b) => first(a.id) - first(b.id) || a.p.y - b.p.y || a.p.x - b.p.x
+      );
+    for (const v of labelled) {
+      const big = v.id === currentId || v.id === warnId;
+      const w = textWidth(v.name) * (big ? 1.12 : 1);
+      const lines = v.id === warnId ? 2 : 1;
+      let best: { box: Box; cost: number; placement: Placement } | null = null;
+      for (const [rank, placement] of PLACEMENTS.entries()) {
+        const box = labelBox(placement, v.p, w, lines);
+        if (box.x1 < 4 || box.x2 > width - 6) {
+          continue;
+        }
+        const crowd =
+          labels.filter((l) => overlaps(l, box)).length +
+          stars.filter((st, i) => visible[i].id !== v.id && overlaps(st, box))
+            .length;
+        const crossed = segments.filter(([pa, pb]) =>
+          segmentHits(pa, pb, box)
+        ).length;
+        const cost = crowd * 100 + crossed * 20 + rank;
+        if (!best || cost < best.cost) {
+          best = { box, cost, placement };
+        }
+      }
+      if (!best || (best.cost >= 100 && first(v.id) === 1)) {
+        result[v.id] = null;
+        continue;
+      }
+      result[v.id] = best.placement;
+      labels.push(best.box);
+    }
     return result;
-  }, [anim.t, graph, pos, frame, lessonOf, width, showLabel]);
+  }, [
+    anim.t,
+    graph,
+    layout,
+    pos,
+    frame,
+    lessonOf,
+    width,
+    showLabel,
+    currentId,
+    warnId,
+    selectedId,
+  ]);
 
   return (
     <div
@@ -471,7 +509,11 @@ export function SkyMap({
                 id={point.id}
                 key={point.id}
                 kind={kinds[point.id]}
-                label={showLabel(point.id) ? point.name : undefined}
+                label={
+                  showLabel(point.id) && placements[point.id] !== null
+                    ? point.name
+                    : undefined
+                }
                 name={point.name}
                 o={progress[point.id]}
                 onSelect={onSelect}
@@ -535,21 +577,53 @@ export function SkyMap({
   );
 }
 
-type Placement = "right" | "left" | "below" | "above";
+type Placement =
+  | "right"
+  | "left"
+  | "below"
+  | "above"
+  | "ne"
+  | "se"
+  | "nw"
+  | "sw";
 type Box = { x1: number; x2: number; y1: number; y2: number };
 
-const PLACEMENTS: Placement[] = ["right", "left", "below", "above"];
+// 先右后左，再上下，最后斜着放；排在前面的同样干净时优先
+const PLACEMENTS: Placement[] = [
+  "right",
+  "left",
+  "below",
+  "above",
+  "ne",
+  "se",
+  "nw",
+  "sw",
+];
 const LABEL_AT: Record<
   Placement,
   { x: number; y: number; anchor: "start" | "end" | "middle" }
 > = {
-  above: { anchor: "middle", x: 0, y: -13 },
-  below: { anchor: "middle", x: 0, y: 22 },
-  left: { anchor: "end", x: -11, y: 4 },
-  right: { anchor: "start", x: 11, y: 4 },
+  above: { anchor: "middle", x: 0, y: -14 },
+  below: { anchor: "middle", x: 0, y: 24 },
+  left: { anchor: "end", x: -12, y: 4 },
+  ne: { anchor: "start", x: 8, y: -11 },
+  nw: { anchor: "end", x: -8, y: -11 },
+  right: { anchor: "start", x: 12, y: 4 },
+  se: { anchor: "start", x: 8, y: 20 },
+  sw: { anchor: "end", x: -8, y: 20 },
 };
 
-// 估名字宽度：汉字 12px，字母数字 7px
+// 名字离别的星至少隔这么远（星本身加选中圈的大小）
+const STAR_GAP = 10;
+
+const around = (p: SkyPoint, r: number): Box => ({
+  x1: p.x - r,
+  x2: p.x + r,
+  y1: p.y - r,
+  y2: p.y + r,
+});
+
+// 估名字宽度：汉字和全角标点 12.5px，字母数字 7px
 function textWidth(text: string) {
   let w = 0;
   for (const ch of text) {
@@ -558,7 +632,12 @@ function textWidth(text: string) {
   return w;
 }
 
-function labelBox(placement: Placement, p: SkyPoint, w: number): Box {
+function labelBox(
+  placement: Placement,
+  p: SkyPoint,
+  w: number,
+  lines = 1
+): Box {
   const at = LABEL_AT[placement];
   const left =
     at.anchor === "start"
@@ -567,11 +646,33 @@ function labelBox(placement: Placement, p: SkyPoint, w: number): Box {
         ? p.x + at.x - w
         : p.x - w / 2;
   return {
-    x1: left - 2,
-    x2: left + w + 2,
-    y1: p.y + at.y - 12,
-    y2: p.y + at.y + 4,
+    x1: left - 3,
+    x2: left + w + 3,
+    y1: p.y + at.y - 13,
+    y2: p.y + at.y + 4 + (lines - 1) * 17,
   };
+}
+
+// 一条连线有没有穿过名字的框：端点在框里，或者和框的四条边相交
+function segmentHits(a: SkyPoint, b: SkyPoint, box: Box) {
+  const inside = (p: SkyPoint) =>
+    p.x > box.x1 && p.x < box.x2 && p.y > box.y1 && p.y < box.y2;
+  if (inside(a) || inside(b)) {
+    return true;
+  }
+  const corners: SkyPoint[] = [
+    { x: box.x1, y: box.y1 },
+    { x: box.x2, y: box.y1 },
+    { x: box.x2, y: box.y2 },
+    { x: box.x1, y: box.y2 },
+  ];
+  return corners.some((c, i) => crosses(a, b, c, corners[(i + 1) % 4]));
+}
+
+function crosses(a: SkyPoint, b: SkyPoint, c: SkyPoint, d: SkyPoint) {
+  const side = (p: SkyPoint, q: SkyPoint, r: SkyPoint) =>
+    Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  return side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
 }
 
 const overlaps = (a: Box, b: Box) =>
@@ -729,6 +830,7 @@ function SkyStar({
       tabIndex={0}
       transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`}
     >
+      {label ? null : <title>{name}</title>}
       <circle fill="transparent" r={14} />
       <circle
         className="sky-hover"
