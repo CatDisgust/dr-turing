@@ -5,7 +5,9 @@ import {
   getEventsByStudent,
   getLearnerState,
   getMessagesByChatId,
+  getOtherStudentModels,
   getPersonalGraph,
+  getPlanMessagesByStudent,
   getStudentModel,
   getTransactionsByStudent,
   getUnreviewedChats,
@@ -20,6 +22,7 @@ import {
   applyConceptChanges,
   emptyPersonalGraph,
 } from "@/lib/learner/personal";
+import { populationPrior } from "@/lib/learner/preference";
 import { applyReview, sessionReport } from "@/lib/learner/review";
 import { rebuildStudentModel } from "@/lib/learner/student-model";
 import { learnRateOf, relearn } from "@/lib/learner/update";
@@ -121,13 +124,15 @@ export async function endSession(input: {
       type: c.type,
     }))
   );
-  // 学生模型从原始记录整份重算（方案 F），学习率 ℓ 变了就按新 ℓ 重算各点的 M、O（方案 B）
+  // 学生模型从原始记录整份重算（方案 F），学习率 ℓ 变了就按新 ℓ 重算各点的 M、O（方案 B）；
+  // 讲法得分带进学生状态，下一轮规划直接读（方案 C）
   try {
-    const model = await refreshStudentModel(input.studentId);
+    const { model, prior } = await refreshStudentModel(input.studentId);
     if (model.learnRate !== learnRateOf(state)) {
       state = relearn(state, course.graph, model.learnRate);
-      await saveLearnerState({ state });
     }
+    state = { ...state, arms: { own: model.arms, prior } };
+    await saveLearnerState({ state });
   } catch (error) {
     console.error("rebuild student model failed:", error);
   }
@@ -167,14 +172,20 @@ export async function endSession(input: {
 
 // 学生模型每次结束学习都从原始记录整份重算（学生建模方案 F）；文字笔记原样保留
 async function refreshStudentModel(studentId: string) {
-  const [transactions, events, old] = await Promise.all([
+  const [transactions, events, old, messages, others] = await Promise.all([
     getTransactionsByStudent({ studentId }),
     getEventsByStudent({ studentId }),
     getStudentModel({ studentId }),
+    getPlanMessagesByStudent({ studentId }),
+    getOtherStudentModels({ studentId }),
   ]);
-  const data = rebuildStudentModel(transactions, events, old?.notes);
+  const data = rebuildStudentModel(transactions, events, old?.notes, messages);
   await saveStudentModel({ data, studentId });
-  return data;
+  // 冷启动先验：其他学生每种讲法的平均效果（经验贝叶斯，方案 C）
+  return {
+    model: data,
+    prior: populationPrior(others.map((o) => o.arms ?? {})),
+  };
 }
 
 // 开新对话时补跑：之前没点“结束本次学习”的会话，挨个复核。失败的下次再补

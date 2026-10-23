@@ -36,6 +36,11 @@ const REPRESENTATION = {
   formula: "公式",
 } as const;
 
+const ORDER = {
+  definition_first: "先给定义，再用例子说明",
+  example_first: "先举一个具体例子，再引出定义",
+} as const;
+
 // 把 plan 写成导师能照着做的几行话，放在本轮短提示词后面
 export function describePlan(
   plan: TutorPlan,
@@ -47,6 +52,7 @@ export function describePlan(
     `- 知识点：「${nameOf(plan.target_kc)}」`,
     `- 披露程度：${DISCLOSURE[plan.disclosure_level]}`,
     `- 表征：优先用${REPRESENTATION[plan.representation]}`,
+    `- 顺序：${ORDER[plan.order]}`,
     plan.elicits_production
       ? "- 让学生自己说出或推出至少一步，不要替他说完"
       : "- 学生现在需要的是讲清楚，先别逼他产出",

@@ -1,13 +1,9 @@
-import type {
-  CourseGraph,
-  KnowledgePoint,
-  LearnerState,
-  TutorPlan,
-} from "@/lib/types";
+import type { CourseGraph, LearnerState, TutorPlan } from "@/lib/types";
 import { HALF_M } from "./config";
 import { plannerContext } from "./context";
 import { engagementOf } from "./events";
 import { type ActionDecision, nextAction, type TurnSignal } from "./policy";
+import { defaultArm, pickRepresentation } from "./preference";
 
 // 规划器第一步：七条规则定下一步（policy.nextAction）。其余字段这里按规则给一份默认值，
 // 正常由 Claude 改填（lib/tutor/plan.ts），Claude 调用失败时就用这份
@@ -27,36 +23,14 @@ const ACTION_TYPE: Record<ActionDecision["action"], TutorPlan["action_type"]> =
     variant: "ask",
   };
 
-// 学生说过的偏好优先；没说过就按知识类型
-function representationOf(
-  point: KnowledgePoint,
-  preferences: string[]
-): TutorPlan["representation"] {
-  const said = preferences.join(" ");
-  if (/代码|code/i.test(said)) {
-    return "code";
-  }
-  if (/公式|数学/.test(said)) {
-    return "formula";
-  }
-  if (/图|画/.test(said)) {
-    return "diagram";
-  }
-  if (/类比|比喻|例子/.test(said)) {
-    return "analogy";
-  }
-  if (point.kind === "procedure") {
-    return "code";
-  }
-  return point.kind === "design" ? "diagram" : "analogy";
-}
-
 export function planTurn(input: {
   graph: CourseGraph;
   state: LearnerState;
   kpId: string;
   sessionId: string;
   signal?: TurnSignal;
+  // 讲法抽样用的随机数，测试和画面三对比时固定
+  random?: () => number;
 }): TutorPlan {
   const { graph, state, signal } = input;
   const ctx = plannerContext(graph, state, input.kpId, input.sessionId);
@@ -141,19 +115,33 @@ export function planTurn(input: {
     why.push(`先排查误解「${check_misconception_first}」`);
   }
 
+  // 讲法由代码按他的得分挑（学生建模方案 C）
+  const style = pickRepresentation({
+    arms: state.arms,
+    fallback: defaultArm(
+      point,
+      state.profile.statedPreferences.map((p) => p.text)
+    ),
+    random: input.random,
+  });
+  if (style.sampled) {
+    why.push(
+      `讲法按他的得分抽中${style.representation}、${style.order === "example_first" ? "先例子" : "先定义"}`
+    );
+  }
+
   return {
     action_type,
     check_misconception_first,
     disclosure_level,
     elicits_production,
+    expect_like: style.expectLike,
     filled_by: "rules",
     next_action: decision.action,
+    order: style.order,
     prompt: decision.prompt,
     rationale: why.join("；"),
-    representation: representationOf(
-      point,
-      state.profile.statedPreferences.map((p) => p.text)
-    ),
+    representation: style.representation,
     reveals_answer,
     rule: decision.rule,
     start_from,

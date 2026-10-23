@@ -1,17 +1,21 @@
 import type { Attempt, StudentEventType, StudentModelData } from "@/lib/types";
 import { fitLearnRate } from "./fit";
 import { calibrate, reviewedAttempts } from "./predict";
+import { armOutcomes, countArms } from "./preference";
 
-// 学生模型（学生建模方案 F）：从两张只追加的表——作答 Transaction、反应 Event——整份重算。
+// 学生模型（学生建模方案 F）：从两张只追加的表——作答 Transaction、反应 Event——整份重算，
+// 讲法的效果还要对上每条回复用了哪种讲法（Message_v2.plan）。
 // notes 是 Claude 写的文字，没法重算，原样带过来
 
 export function rebuildStudentModel(
   transactions: readonly { attempt: Attempt; kpId: string }[],
   events: readonly {
     type: StudentEventType;
+    messageId?: string;
     payload: { attemptId?: string };
   }[],
-  notes: unknown[] = []
+  notes: unknown[] = [],
+  messages: Parameters<typeof armOutcomes>[0] = []
 ): StudentModelData {
   const reactions: Partial<Record<StudentEventType, number>> = {};
   for (const e of events) {
@@ -27,7 +31,13 @@ export function rebuildStudentModel(
       ).length,
       total: graded.length,
     },
-    arms: {},
+    arms: countArms(
+      armOutcomes(
+        messages,
+        rows,
+        events.map((e) => ({ messageId: e.messageId ?? "", type: e.type }))
+      )
+    ),
     calibration: calibrate(rows),
     learnRate: fitLearnRate(rows),
     notes,

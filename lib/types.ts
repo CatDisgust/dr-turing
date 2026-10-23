@@ -251,11 +251,18 @@ export type Calibration = {
   baseline: { logLoss: number; brier: number };
 };
 
+// 一种讲法的原始计数（方案 C）：学得好 = 讲完后同一点下一道批改题独立答对；
+// 感受好 = 之后 2 轮内没有负面反应
+export type ArmCounts = {
+  learn: { n: number; k: number };
+  feel: { n: number; k: number };
+};
+
 export type StudentModelData = {
   // 个人化 BKT 的学习率（方案 B）；还没拟合时用全局值
   learnRate: number;
-  // 每种讲法的得分（方案 C）
-  arms: Record<string, unknown>;
+  // 每种讲法用了几次、效果如何（方案 C），键是 "representation:order"
+  arms: Record<string, ArmCounts>;
   // 预测准不准（方案 D）：没有可核对的题时为 null
   calibration: Calibration | null;
   style: null;
@@ -345,6 +352,12 @@ export type LearnerState = {
   nodes: Record<string, NodeState>;
   // 这个学生的学习率 ℓ（学生建模方案 B），每次结束学习时从全部作答拟合；没有就用全局 0.15
   learnRate?: number;
+  // 讲法的得分（方案 C），结束学习时从 StudentModel 带过来：own 是他自己的计数，
+  // prior 是全体学生每种讲法的平均效果（经验贝叶斯先验）
+  arms?: {
+    own: Record<string, ArmCounts>;
+    prior: Record<string, { learn: number; feel: number }>;
+  };
   pendingQuestion?: PendingQuestion;
   // 诊断入口进行中：这一课、还没问的前置
   diagnosis?: {
@@ -373,6 +386,10 @@ export type TutorPlan = {
   reveals_answer: boolean;
   start_from: string[]; // 跳过哪些已掌握的先修（kp id）
   representation: "analogy" | "code" | "formula" | "diagram";
+  // 先例子还是先定义（方案 C）；和 representation 一起由代码按得分挑（Message_v2 里的旧记录没有）
+  order: "example_first" | "definition_first";
+  // 所选讲法“感受好”的后验均值，出题时写进预测的 expectLike（方案 D）
+  expect_like?: number;
   check_misconception_first?: string; // 误解原文
   rationale: string;
   // 动作永远由规则定；其余字段正常由 Claude 填，调用失败时退回规则默认值
