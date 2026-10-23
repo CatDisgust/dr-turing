@@ -197,7 +197,7 @@ export const personalGraph = pgTable("PersonalGraph", {
 });
 
 // 学生的反应事件（学生建模方案 A）：放弃、跳题、听不懂、点赞点踩……只追加，从不更新、不删除。
-// payload.turn 是这门课里学生的第几条消息，投入度按它衰减
+// payload.turn 是这门课里学生的第几条消息，投入度按它衰减；复核撤销、改判带 payload.attemptId
 export const event = pgTable(
   "Event",
   {
@@ -206,7 +206,9 @@ export const event = pgTable(
     id: uuid("id").primaryKey().notNull().defaultRandom(),
     kpId: text("kpId"),
     messageId: uuid("messageId").notNull(),
-    payload: jsonb("payload").$type<{ turn: number }>().notNull(),
+    payload: jsonb("payload")
+      .$type<{ turn: number; attemptId?: string }>()
+      .notNull(),
     sessionId: uuid("sessionId").notNull(),
     studentId: uuid("studentId").notNull(),
     type: varchar("type", { length: 32 }).$type<StudentEventType>().notNull(),

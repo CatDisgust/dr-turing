@@ -22,12 +22,25 @@ export function applyReview(
   confirmed: number;
   retracted: SessionReport["retracted"];
   revised: NonNullable<SessionReport["revised"]>;
+  // 撤销、改判了哪些证据：记进 Event 表，学生模型重算时用（学生建模方案 F）
+  changes: {
+    attemptId: string;
+    turnId: string;
+    kpId: string;
+    type: "review_retract" | "review_flip";
+  }[];
 } {
   const byId = new Map(verdicts.map((v) => [v.attemptId, v]));
   let next = state;
   let confirmed = 0;
   const retracted: SessionReport["retracted"] = [];
   const revised: NonNullable<SessionReport["revised"]> = [];
+  const changes: {
+    attemptId: string;
+    turnId: string;
+    kpId: string;
+    type: "review_retract" | "review_flip";
+  }[] = [];
   const nameOf = (kpId: string) =>
     graph.points.find((p) => p.id === kpId)?.name ?? kpId;
 
@@ -53,6 +66,12 @@ export function applyReview(
             },
           },
         };
+        changes.push({
+          attemptId: attempt.id,
+          kpId,
+          turnId: attempt.turnId,
+          type: "review_retract",
+        });
         retracted.push({
           kpId,
           name: nameOf(kpId),
@@ -61,6 +80,12 @@ export function applyReview(
         });
       } else if (verdict?.verdict === "flip" && attempt.correct !== undefined) {
         next = reviseEvidence(next, graph, kpId, attempt.id);
+        changes.push({
+          attemptId: attempt.id,
+          kpId,
+          turnId: attempt.turnId,
+          type: "review_flip",
+        });
         revised.push({
           correct: !attempt.correct,
           kpId,
@@ -88,7 +113,7 @@ export function applyReview(
       },
     ])
   );
-  return { confirmed, retracted, revised, state: { ...next, nodes } };
+  return { changes, confirmed, retracted, revised, state: { ...next, nodes } };
 }
 
 const ratio = (k: number, n: number) => (n === 0 ? null : k / n);

@@ -12,6 +12,8 @@ export const EVENT_TYPES = [
   "thumbs_up",
   "thumbs_down",
   "asked_followup",
+  "review_retract",
+  "review_flip",
 ] as const satisfies readonly StudentEventType[];
 
 export type EventType = StudentEventType;

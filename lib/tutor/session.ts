@@ -10,10 +10,12 @@ import {
   getTransactionsByStudent,
   getUnreviewedChats,
   saveChatReport,
+  saveEvents,
   saveLearnerState,
   savePersonalGraph,
   saveStudentModel,
 } from "@/lib/db/queries";
+import { engagementOf } from "@/lib/learner/events";
 import {
   applyConceptChanges,
   emptyPersonalGraph,
@@ -102,6 +104,21 @@ export async function endSession(input: {
   const fresh = (await getLearnerState(input)) ?? before;
   const applied = applyReview(fresh, course.graph, input.chatId, verdicts, now);
   await saveLearnerState({ state: applied.state });
+  // 撤销、改判也是原始记录：Transaction 只追加不改，复核结论记成事件
+  await saveEvents(
+    applied.changes.map((c) => ({
+      courseId: input.courseId,
+      kpId: c.kpId,
+      messageId: c.turnId,
+      payload: {
+        attemptId: c.attemptId,
+        turn: engagementOf(applied.state).turn,
+      },
+      sessionId: input.chatId,
+      studentId: input.studentId,
+      type: c.type,
+    }))
+  );
   // 个人图谱：课外概念的新增 / 更新 / 作废，同样在落库前重新读一次
   const freshPersonal =
     (await getPersonalGraph({ studentId: input.studentId })) ?? personal;
