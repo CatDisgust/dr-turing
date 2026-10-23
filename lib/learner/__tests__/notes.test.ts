@@ -7,6 +7,7 @@ import {
   mispredictions,
   type NoteOp,
   notesFor,
+  readyMisses,
   trustedNotes,
 } from "../notes";
 import type { ArmOutcome } from "../preference";
@@ -129,14 +130,12 @@ describe("mispredictions", () => {
     ...over,
   });
 
-  it("猜会答对却答错、猜会舒服却难受，都算猜错；别的会话、要过提示的不算", () => {
+  it("猜会答对却答错、猜会舒服却难受，都算猜错；要过提示的不算", () => {
     const misses = mispredictions(
-      "c2",
       [
         { attempt: attempt({}), kpId: "kp_a" },
         { attempt: attempt({ correct: true, id: "a2" }), kpId: "kp_a" },
         { attempt: attempt({ hinted: true, id: "a3" }), kpId: "kp_a" },
-        { attempt: attempt({ id: "a4", sessionId: "c1" }), kpId: "kp_a" },
       ],
       [
         outcome({ expectLike: 0.6, feel: false }),
@@ -146,12 +145,14 @@ describe("mispredictions", () => {
     );
     expect(misses).toEqual([
       {
+        arm: "code:definition_first", // 答题之前最近一次讲解用的讲法
         attemptId: "a1",
         correct: false,
         kind: "learn",
         kpId: "kp_a",
         predicted: 0.8,
         quote: "不太清楚",
+        sessionId: "c2",
       },
       {
         arm: "code:definition_first",
@@ -160,8 +161,45 @@ describe("mispredictions", () => {
         kpId: "kp_a",
         messageId: "m1",
         predicted: 0.6,
+        sessionId: "c2",
       },
     ]);
+  });
+
+  it("同一种讲法下攒够 2 次、这次又猜错了才写；笔记用过的证据不再算", () => {
+    const miss = (id: string, sessionId: string, arm: string | null) => ({
+      arm,
+      feel: false,
+      kind: "feel" as const,
+      kpId: "kp_a",
+      messageId: id,
+      predicted: 0.6,
+      sessionId,
+    });
+    // 只有一次：先攒着
+    expect(
+      readyMisses([miss("m1", "c2", "code:example_first")], [], "c2")
+    ).toEqual([]);
+    // demo 门槛 1：一次就写
+    expect(
+      readyMisses([miss("m1", "c2", "code:example_first")], [], "c2", 1)
+    ).toHaveLength(1);
+    // 上次攒了一次、这次又一次：两次一起交给 Claude；别的讲法的一次不带
+    const pile = [
+      miss("m0", "c1", "code:example_first"),
+      miss("m1", "c2", "code:example_first"),
+      miss("m9", "c2", "formula:example_first"),
+    ];
+    expect(readyMisses(pile, [], "c2").map((m) => m.sessionId)).toEqual([
+      "c1",
+      "c2",
+    ]);
+    // 这次没猜错：不写
+    expect(readyMisses(pile.slice(0, 2), [], "c3")).toEqual([]);
+    // 已经被笔记引用过的不再算
+    expect(readyMisses(pile, [{ ...note, evidence: ["m0"] }], "c2")).toEqual(
+      []
+    );
   });
 });
 

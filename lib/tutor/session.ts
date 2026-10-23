@@ -20,7 +20,9 @@ import {
 import { engagementOf } from "@/lib/learner/events";
 import {
   applyNoteOps,
+  MIN_MISSES,
   mispredictions,
+  readyMisses,
   trustedNotes,
 } from "@/lib/learner/notes";
 import {
@@ -187,6 +189,12 @@ export async function endSession(input: {
   return report;
 }
 
+// 写笔记的门槛：demo 在 Vercel 上设 NOTES_MIN_MISSES=1，一轮就能演出来；没设就是正式版的 2
+function notesMinMisses(): number {
+  const n = Number(process.env.NOTES_MIN_MISSES);
+  return Number.isInteger(n) && n >= 1 ? n : MIN_MISSES;
+}
+
 // 学生模型每次结束学习都从原始记录整份重算（学生建模方案 F）；文字笔记原样保留、重新检验。
 // 这次会话里猜错过，就让 Claude 改一次笔记（方案 E）
 async function refreshStudentModel(input: {
@@ -219,7 +227,13 @@ async function refreshStudentModel(input: {
       rows,
       events.map((e) => ({ messageId: e.messageId ?? "", type: e.type }))
     );
-    const misses = mispredictions(input.chatId, rows, outcomes);
+    // 同一种讲法下攒够几次猜错才写，一次可能只是偶然
+    const misses = readyMisses(
+      mispredictions(rows, outcomes),
+      data.notes,
+      input.chatId,
+      notesMinMisses()
+    );
     if (misses.length > 0) {
       const { ops, evidenceIds } = await writeNotes({
         graph,

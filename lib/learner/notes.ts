@@ -103,13 +103,18 @@ export function notesFor(
   );
 }
 
-// ---- 这次会话里猜错了什么：交给 Claude 写笔记的材料 ----
+// ---- 猜错了什么：交给 Claude 写笔记的材料 ----
 
-export type Miss =
+// 同一种讲法下猜错累计到这么多次，才交给 Claude 总结；一次可能只是偶然（用户 2026-10-23）。
+// demo 可以调成 1（环境变量 NOTES_MIN_MISSES），正式版不能低于 2
+export const MIN_MISSES = 2;
+
+// arm 是猜错时用的讲法：“感受”就是那轮讲解的讲法；“学得”是答这道题之前、同一个点上最近一次讲解的讲法，
+// 之前没讲过就是 null
+export type Miss = { sessionId: string; arm: string | null; kpId: string } & (
   | {
       kind: "learn";
       attemptId: string;
-      kpId: string;
       predicted: number;
       correct: boolean;
       quote: string;
@@ -117,42 +122,40 @@ export type Miss =
   | {
       kind: "feel";
       messageId: string;
-      kpId: string;
-      arm: string;
       predicted: number;
       feel: boolean;
-    };
+    }
+);
 
-// 答对概率 ≥ 0.5 算猜他会答对；预计喜欢 ≥ 0.5 算猜他会觉得舒服
+export const missId = (m: Miss) =>
+  m.kind === "learn" ? m.attemptId : m.messageId;
+
+// 全部记录里猜错的地方。答对概率 ≥ 0.5 算猜他会答对；预计喜欢 ≥ 0.5 算猜他会觉得舒服
 export function mispredictions(
-  sessionId: string,
   rows: readonly { attempt: Attempt; kpId: string }[],
   outcomes: readonly ArmOutcome[]
 ): Miss[] {
   const learn: Miss[] = rows
     .filter(
       ({ attempt: a }) =>
-        a.sessionId === sessionId &&
         a.prediction !== undefined &&
         !a.hinted &&
         a.correct !== undefined &&
         a.prediction.pCorrect >= 0.5 !== a.correct
     )
     .map(({ attempt: a, kpId }) => ({
+      arm:
+        outcomes.findLast((o) => o.kpId === kpId && o.at < a.at)?.arm ?? null,
       attemptId: a.id,
       correct: a.correct === true,
       kind: "learn",
       kpId,
       predicted: a.prediction?.pCorrect ?? 0,
       quote: a.quote,
+      sessionId: a.sessionId,
     }));
   const feel: Miss[] = outcomes
-    .filter(
-      (o) =>
-        o.chatId === sessionId &&
-        o.expectLike !== undefined &&
-        o.expectLike >= 0.5 !== o.feel
-    )
+    .filter((o) => o.expectLike !== undefined && o.expectLike >= 0.5 !== o.feel)
     .map((o) => ({
       arm: o.arm,
       feel: o.feel,
@@ -160,8 +163,31 @@ export function mispredictions(
       kpId: o.kpId,
       messageId: o.messageId,
       predicted: o.expectLike ?? 0,
+      sessionId: o.chatId,
     }));
   return [...learn, ...feel];
+}
+
+// 这次结束学习该不该写笔记、拿哪些材料：还没被任何笔记引用过的猜错先攒着，
+// 某种讲法下攒够 min 次、而且这次会话里又猜错了，才把这一组交给 Claude
+export function readyMisses(
+  misses: readonly Miss[],
+  notes: readonly TeachingNote[],
+  sessionId: string,
+  min: number = MIN_MISSES
+): Miss[] {
+  const used = new Set(notes.flatMap((n) => n.evidence));
+  const groups = new Map<string, Miss[]>();
+  for (const m of misses) {
+    if (used.has(missId(m))) {
+      continue;
+    }
+    const key = m.arm ?? "none";
+    groups.set(key, [...(groups.get(key) ?? []), m]);
+  }
+  return [...groups.values()]
+    .filter((g) => g.length >= min && g.some((m) => m.sessionId === sessionId))
+    .flat();
 }
 
 // ---- 把 Claude 给的增删改落到笔记上 ----

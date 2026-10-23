@@ -5,6 +5,7 @@ import {
   activeNotes,
   MAX_NOTES,
   type Miss,
+  missId,
   type NoteOp,
 } from "@/lib/learner/notes";
 import type { CourseGraph, TeachingNote } from "@/lib/types";
@@ -36,7 +37,7 @@ const REPRESENTATION = {
 const ORDER = { definition_first: "先定义", example_first: "先例子" } as const;
 
 const SYSTEM = [
-  "你是 Dr.Turing 的教学笔记员。系统每次讲解前都会猜两件事：学生接下来能不能独立答对，以及他对这种讲法舒不舒服。这次会话里有几次猜错了。",
+  "你是 Dr.Turing 的教学笔记员。系统每次讲解前都会猜两件事：学生接下来能不能独立答对，以及他对这种讲法舒不舒服。下面是同一种讲法下累计猜错的几次，可能跨了几次学习；对话原文只给了这一次的。",
   "你的任务：从猜错的地方找出关于这个学生“怎么讲对他更有效”的规律，写成可以检验的笔记，或者修改、删除已有笔记。",
   "",
   "每条笔记：",
@@ -71,8 +72,8 @@ export async function writeNotes(input: {
   };
   const lines = input.misses.map((m) =>
     m.kind === "learn"
-      ? `- 证据 ${m.attemptId}｜${nameOf(m.kpId)}｜猜他${m.predicted >= 0.5 ? "能" : "不能"}独立答对（${m.predicted.toFixed(2)}），实际${m.correct ? "答对了" : "答错了"}｜学生原话：${m.quote}`
-      : `- 证据 ${m.messageId}｜${nameOf(m.kpId)}｜导师用${armName(m.arm)}讲，猜他${m.predicted >= 0.5 ? "会" : "不会"}觉得舒服（${m.predicted.toFixed(2)}），实际${m.feel ? "没有负面反应" : "之后两轮内说了听不懂、放弃或点了踩"}`
+      ? `- 证据 ${m.attemptId}｜${nameOf(m.kpId)}｜${m.arm ? `之前用${armName(m.arm)}讲过` : "之前没讲过"}｜猜他${m.predicted >= 0.5 ? "能" : "不能"}独立答对（${m.predicted.toFixed(2)}），实际${m.correct ? "答对了" : "答错了"}｜学生原话：${m.quote}`
+      : `- 证据 ${m.messageId}｜${nameOf(m.kpId)}｜导师用${armName(m.arm ?? "")}讲，猜他${m.predicted >= 0.5 ? "会" : "不会"}觉得舒服（${m.predicted.toFixed(2)}），实际${m.feel ? "没有负面反应" : "之后两轮内说了听不懂、放弃或点了踩"}`
   );
   const current = activeNotes(input.notes);
   const text = [
@@ -81,7 +82,7 @@ export async function writeNotes(input: {
       (l) => `[${l.id}] ${l.role === "user" ? "学生" : "导师"}：${l.text}`
     ),
     "",
-    "这次猜错的地方：",
+    "猜错的地方：",
     ...lines,
     "",
     "已有笔记（hits 对上次数 / misses 对不上次数）：",
@@ -98,9 +99,7 @@ export async function writeNotes(input: {
     system: SYSTEM,
     tier: "review",
   });
-  const evidenceIds = new Set(
-    input.misses.map((m) => (m.kind === "learn" ? m.attemptId : m.messageId))
-  );
+  const evidenceIds = new Set(input.misses.map(missId));
   return {
     evidenceIds,
     ops: result.ops.map((o) => ({
