@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TutorPlan } from "@/lib/types";
-import { mergePlan } from "../plan-merge";
+import { mergePlan, nameStartFrom } from "../plan-merge";
 
 const rulePlan: TutorPlan = {
   action_type: "explain",
@@ -92,5 +92,22 @@ describe("mergePlan", () => {
       }
     );
     expect(plan.rationale).toBe("规则④");
+  });
+
+  it("规则算出的已会先修一定留着，Claude 填空也不会冲掉", () => {
+    const plan = mergePlan(
+      { ...rulePlan, start_from: ["kp_rule"] },
+      { ...filled, start_from: [] },
+      { justTellMe: false, prereqIds: ["kp_pre", "kp_rule"] }
+    );
+    expect(plan.start_from).toEqual(["kp_rule"]);
+  });
+
+  it("起点的名字存进 plan，标签直接显示", () => {
+    const plan = nameStartFrom(
+      { ...rulePlan, start_from: ["kp_pre", "kp_x"] },
+      [{ id: "kp_pre", name: "丢失更新" }]
+    );
+    expect(plan.start_from_names).toEqual(["丢失更新", "kp_x"]);
   });
 });

@@ -3,10 +3,15 @@ import {
   getLearnerState,
   saveLearnerState,
 } from "@/lib/db/queries";
-import { DEMO_STUDENT, seedDemoStudent, seedNextDay } from "@/lib/demo/seed";
+import {
+  DEMO_STUDENT,
+  SHOW_STUDENT,
+  seedDemoStudent,
+  seedNextDay,
+} from "@/lib/demo/seed";
 import { nodeLight } from "@/lib/learner/light";
 
-// 演示视频的“第二天”：演示学生的「死锁」换成昨天学过、半亮的样子，今天问到它会出复习题。
+// 演示视频的“第二天”：演示学生（或产品演示学生，student: "show"）的「死锁」换成昨天学过、半亮的样子，今天问到它会出复习题。
 // 其他点保持现在的样子；还没有状态就先按预置起点建一份
 export async function POST(request: Request) {
   try {
@@ -23,19 +28,21 @@ export async function POST(request: Request) {
 }
 
 async function writeNextDay(request: Request) {
-  const { courseId = "comp5348" } = (await request
+  const { courseId = "comp5348", student } = (await request
     .json()
     .catch(() => ({}))) as {
     courseId?: string;
+    student?: "demo" | "show";
   };
+  const studentId = student === "show" ? SHOW_STUDENT.id : DEMO_STUDENT.id;
   const course = await getCourseById({ id: courseId });
   if (!course) {
     return Response.json({ error: `没有这门课：${courseId}` }, { status: 404 });
   }
   const now = new Date();
   const current =
-    (await getLearnerState({ courseId, studentId: DEMO_STUDENT.id })) ??
-    seedDemoStudent(course.graph, courseId, now);
+    (await getLearnerState({ courseId, studentId })) ??
+    seedDemoStudent(course.graph, courseId, now, studentId);
   const result = seedNextDay(course.graph, current, now);
   if (!result) {
     return Response.json(

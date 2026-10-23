@@ -10,6 +10,7 @@ import {
   DEMO_STUDENT,
   demoTarget,
   lessonPoints,
+  SHOW_STUDENT,
   seedDemoStudent,
   seedNextDay,
   seedScene2,
@@ -381,6 +382,13 @@ describe("演示学生的预置起点", () => {
     const scene2 = seedScene2(g3, s, at);
     expect(nodeLight(scene2?.state.nodes.lost).light).toBe("half");
     expect(count(scene2?.state ?? s, 2).half).toBe(10);
+  });
+
+  it("产品演示学生用同一个起点，状态记在他自己名下", () => {
+    const s = seedDemoStudent(g3, "comp5348", at, SHOW_STUDENT.id);
+    expect(s.studentId).toBe(SHOW_STUDENT.id);
+    expect(SHOW_STUDENT.id).not.toBe(DEMO_STUDENT.id);
+    expect(count(s, 1)).toEqual(count(seedDemoStudent(g3, "comp5348", at), 1));
   });
 
   it("课内先亮前置", () => {

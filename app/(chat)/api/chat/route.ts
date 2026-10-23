@@ -39,6 +39,7 @@ import {
   diagnosisSkip,
   diagnosisStart,
 } from "@/lib/tutor/diagnose-turn";
+import { nameStartFrom } from "@/lib/tutor/plan-merge";
 import { describePlan, tutorPrompts } from "@/lib/tutor/prompts";
 import { pipeClaudeToUI, toClaudeMessages } from "@/lib/tutor/to-ui-stream";
 import {
@@ -351,7 +352,10 @@ export async function POST(request: Request) {
           quizzed?.step ??
           diagnosed?.step ??
           (turn && result ? await planAndAsk(turn, result, signal) : null);
-        const plan = step?.plan;
+        const plan =
+          step?.plan && turn
+            ? nameStartFrom(step.plan, turn.graph.points)
+            : step?.plan;
         const planAt = Date.now();
 
         if (turn && result && step) {

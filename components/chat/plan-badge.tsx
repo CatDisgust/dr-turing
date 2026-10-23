@@ -59,6 +59,13 @@ export function PlanBadge({
         Dr.Turing · {ACTION[plan.next_action]} ·{" "}
         {DISCLOSURE[plan.disclosure_level]}
         {plan.elicits_production ? " · 要你说出来" : ""}
+        {plan.start_from_names?.length ? (
+          <span data-testid="start-from">
+            {" "}
+            · 从你会的
+            {plan.start_from_names.map((n) => `「${n}」`).join("")}讲起
+          </span>
+        ) : null}
       </summary>
       {timing ? <TimingLine timing={timing} /> : null}
       <p className="mt-1">
