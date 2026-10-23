@@ -233,6 +233,26 @@ export function personalFromEvents(
       name: own,
     });
   }
+  // 学生合并过哪些（界面上可以拆开）
+  const undone = new Set(
+    events.filter((e) => e.type === "split").map((e) => e.payload.mergeId)
+  );
+  for (const e of events) {
+    if (e.type !== "merge" || !e.payload.from || undone.has(e.id)) {
+      continue;
+    }
+    const c = concepts.get(rootOf(e.conceptId, into));
+    if (c) {
+      c.merged = [
+        ...(c.merged ?? []),
+        {
+          from: e.payload.from,
+          mergeId: e.id,
+          name: ownName.get(e.payload.from) ?? e.payload.from,
+        },
+      ];
+    }
+  }
   return {
     concepts: [...concepts.values()],
     courseMentions,

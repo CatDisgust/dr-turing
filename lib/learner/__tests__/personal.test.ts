@@ -253,6 +253,9 @@ describe("个人知识库：先认人再记账", () => {
       id: "pc_1",
       name: "Agent harness",
     });
+    expect(g.concepts[0].merged).toEqual([
+      { from: "pc_2", mergeId: "m1", name: "智能体外壳" },
+    ]);
     expect(g.concepts[0].evidence).toHaveLength(2);
     events = [
       ...events,

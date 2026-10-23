@@ -433,6 +433,8 @@ export type PersonalConcept = {
   evidence: { sessionId: string; quote: string; at: string }[];
   note?: string;
   createdAt: string;
+  // 学生合并进来的：哪次合并、原来叫什么（可以拆开）
+  merged?: { from: string; mergeId: string; name: string }[];
 };
 
 export type PersonalGraph = {
