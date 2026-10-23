@@ -65,22 +65,31 @@ export type Grading = {
 const DEPTH = { hint: 0.5, none: 1, revealed: 0 } as const;
 
 // 批改结果 → 一条暂定证据。构建深度按答之前要过什么：没要 1，要了提示 0.5，要了答案 0
+// 判完对错后这条证据算哪一类：隔天复习独立答对、变式题答对、检查题答对，或答错
+export function gradedType(
+  kind: PendingQuestion["kind"] | undefined,
+  hinted: boolean,
+  correct: boolean
+): Attempt["type"] {
+  if (!correct) {
+    return "check_wrong";
+  }
+  if (kind === "review" && !hinted) {
+    return "review_correct";
+  }
+  if (kind === "variant") {
+    return "transfer_correct";
+  }
+  return "check_correct";
+}
+
 export function attemptFromGrading(
   pending: PendingQuestion,
   grading: Grading,
   turn: { id: string; turnId: string; at: string; quote: string }
 ): Attempt {
   const hinted = pending.help !== "none";
-  let type: Attempt["type"] = "check_wrong";
-  if (grading.correct) {
-    if (pending.kind === "review" && !hinted) {
-      type = "review_correct";
-    } else if (pending.kind === "variant") {
-      type = "transfer_correct";
-    } else {
-      type = "check_correct";
-    }
-  }
+  const type = gradedType(pending.kind, hinted, grading.correct);
   return {
     ...turn,
     correct: grading.correct,

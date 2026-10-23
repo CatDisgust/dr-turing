@@ -35,6 +35,8 @@ export type TurnResult = {
     point: KnowledgePoint;
     correct: boolean;
     misconception?: string;
+    // 学生说的是“不知道”，没给答案（也记一次答错）
+    dontKnow?: boolean;
     attempt: Attempt;
   };
   // 写进导师 system 的本轮情况；null 就是普通讲解
@@ -58,7 +60,7 @@ function pendingOf(turn: Turn) {
 
 // 快捷按钮：给提示、直接告诉我、先不做题
 export function signalTurn(turn: Turn, signal: TurnSignal): TurnResult {
-  const state = applySignal(turn.state, signal, turn.now);
+  const state = applySignal(turn.state, signal, turn.now, turn.sessionId);
   const open = pendingOf(turn);
   if (!open) {
     return { note: null, state };
@@ -119,12 +121,20 @@ export async function answerTurn(turn: Turn): Promise<TurnResult | null> {
   }
   // 答错了题还留着，导师接下来的反馈本身就是提示，再答对按“要过提示”算
   return {
-    graded: { attempt, correct: false, misconception, point },
-    note: [
-      `学生答错了这道题：「${pending.question}」。`,
-      misconception ? `从他的回答看，他可能以为：${misconception}。` : "",
-      "不要直接给答案。用一个反例或一个追问让他自己发现哪里不对，然后请他再答一次。",
-    ].join(""),
+    graded: {
+      attempt,
+      correct: false,
+      dontKnow: grading.dontKnow,
+      misconception,
+      point,
+    },
+    note: grading.dontKnow
+      ? `学生说不会这道题：「${pending.question}」。没关系，不要直接给答案。给一个最小的提示或拆成更小的一步，然后请他再试一次。`
+      : [
+          `学生答错了这道题：「${pending.question}」。`,
+          misconception ? `从他的回答看，他可能以为：${misconception}。` : "",
+          "不要直接给答案。用一个反例或一个追问让他自己发现哪里不对，然后请他再答一次。",
+        ].join(""),
     state: {
       ...state,
       pendingQuestion: { ...pending, help: atLeast(pending.help, "hint") },
@@ -168,7 +178,9 @@ export async function questionTurn(turn: Turn): Promise<TurnResult> {
   };
 }
 
+// 规则①的小提示之后也出题：不然投入度低时一直只给提示，学生没机会答对（建模审查第 1 条）
 const ASKS: TutorPlan["next_action"][] = [
+  "hint",
   "teach",
   "diagnose_misconception",
   "independent_check",

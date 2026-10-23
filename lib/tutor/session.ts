@@ -126,6 +126,7 @@ export async function endSession(input: {
     state: applied.state,
   });
   report.concepts = changed;
+  report.revised = applied.revised;
   await saveChatReport({ id: input.chatId, report });
   return report;
 }

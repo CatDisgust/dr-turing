@@ -167,3 +167,45 @@ describe("sessionReport", () => {
     expect(report.revealRate).toBeNull();
   });
 });
+
+// 建模审查第 2 条：复核除了确认和撤销，还能改判
+describe("复核改判", () => {
+  it("错判成对的改成错：M 回落、类型改成答错，报告里列出", () => {
+    const { a1, state } = seeded();
+    const out = applyReview(
+      state,
+      graph,
+      "s1",
+      [{ attemptId: a1.id, reason: "其实答反了", verdict: "flip" }],
+      "2026-10-22T10:00:00.000Z"
+    );
+    const flipped = out.state.nodes.a.attempts.find((a) => a.id === a1.id);
+    expect(flipped).toMatchObject({ correct: false, type: "check_wrong" });
+    expect(out.state.nodes.a.M).toBeLessThan(state.nodes.a.M);
+    expect(out.revised).toEqual([
+      expect.objectContaining({ correct: false, kpId: "a", quote: a1.quote }),
+    ]);
+    expect(out.confirmed).toBe(2);
+  });
+
+  it("对判成错的改成对：去掉错误想法，M 上升", () => {
+    let state = emptyLearnerState("stu", "c");
+    const wrong = attempt({
+      correct: false,
+      misconception: "以为加锁就没问题",
+      type: "check_wrong",
+    });
+    state = applyEvidence(state, graph, "b", wrong);
+    const out = applyReview(
+      state,
+      graph,
+      "s1",
+      [{ attemptId: wrong.id, reason: "意思是对的", verdict: "flip" }],
+      "2026-10-22T10:00:00.000Z"
+    );
+    const [flipped] = out.state.nodes.b.attempts;
+    expect(flipped).toMatchObject({ correct: true, type: "check_correct" });
+    expect(flipped.misconception).toBeUndefined();
+    expect(out.state.nodes.b.M).toBeGreaterThan(state.nodes.b.M);
+  });
+});

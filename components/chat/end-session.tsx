@@ -152,7 +152,8 @@ function ReportBody({ report }: { report: SessionReport }) {
       <section className="text-xs">
         <h4 className="mb-1 font-medium text-sm">复核</h4>
         <p className="text-muted-foreground">
-          确认 {report.confirmed} 条，推翻 {report.retracted.length} 条。
+          确认 {report.confirmed} 条，推翻 {report.retracted.length} 条
+          {report.revised?.length ? `，改判 ${report.revised.length} 条` : ""}。
         </p>
         {report.retracted.length > 0 ? (
           <ul
@@ -162,6 +163,16 @@ function ReportBody({ report }: { report: SessionReport }) {
             {report.retracted.map((r) => (
               <li className="rounded-md border border-dashed p-2" key={r.quote}>
                 「{r.name}」「{r.quote}」：{r.reason}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {report.revised && report.revised.length > 0 ? (
+          <ul className="mt-1 flex flex-col gap-1" data-testid="report-revised">
+            {report.revised.map((r) => (
+              <li className="rounded-md border p-2" key={r.quote}>
+                「{r.name}」「{r.quote}」改判为{r.correct ? "对" : "错"}：
+                {r.reason}
               </li>
             ))}
           </ul>

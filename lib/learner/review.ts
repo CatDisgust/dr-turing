@@ -6,9 +6,9 @@ import type {
   SessionReport,
 } from "@/lib/types";
 import { isGraded, masteryFromAttempts } from "./mastery";
-import { retractEvidence } from "./update";
+import { retractEvidence, reviseEvidence } from "./update";
 
-// 会后复核落到状态上：复核确认的暂定证据转正，推翻的撤掉并留下原因。
+// 会后复核落到状态上：复核确认的暂定证据转正，推翻的撤掉并留下原因，判反了的改判后重放。
 // 复核没提到的暂定证据按确认处理（检查题有服务端答案，推翻的本来就少）
 
 export function applyReview(
@@ -21,11 +21,13 @@ export function applyReview(
   state: LearnerState;
   confirmed: number;
   retracted: SessionReport["retracted"];
+  revised: NonNullable<SessionReport["revised"]>;
 } {
   const byId = new Map(verdicts.map((v) => [v.attemptId, v]));
   let next = state;
   let confirmed = 0;
   const retracted: SessionReport["retracted"] = [];
+  const revised: NonNullable<SessionReport["revised"]> = [];
   const nameOf = (kpId: string) =>
     graph.points.find((p) => p.id === kpId)?.name ?? kpId;
 
@@ -57,6 +59,15 @@ export function applyReview(
           quote: attempt.quote,
           reason: verdict.reason,
         });
+      } else if (verdict?.verdict === "flip" && attempt.correct !== undefined) {
+        next = reviseEvidence(next, graph, kpId, attempt.id);
+        revised.push({
+          correct: !attempt.correct,
+          kpId,
+          name: nameOf(kpId),
+          quote: attempt.quote,
+          reason: verdict.reason,
+        });
       } else {
         confirmed += 1;
       }
@@ -77,7 +88,7 @@ export function applyReview(
       },
     ])
   );
-  return { confirmed, retracted, state: { ...next, nodes } };
+  return { confirmed, retracted, revised, state: { ...next, nodes } };
 }
 
 const ratio = (k: number, n: number) => (n === 0 ? null : k / n);

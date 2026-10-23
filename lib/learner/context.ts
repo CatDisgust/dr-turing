@@ -1,4 +1,5 @@
 import type { CourseGraph, LearnerState, NodeState } from "@/lib/types";
+import { sessionEngagement } from "./engagement";
 import { type Light, nodeLight } from "./light";
 import { isGraded } from "./mastery";
 
@@ -71,7 +72,10 @@ export function plannerContext(
 
   return {
     confusable: confusable.map((id) => summarize(graph, state, id, sessionId)),
-    engagement: state.engagement,
+    engagement:
+      sessionId === undefined
+        ? state.engagement
+        : sessionEngagement(state.engagement, sessionId),
     prereqs: [
       ...oneHop.map((id) => ({
         hops: 1 as const,

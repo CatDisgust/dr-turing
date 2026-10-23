@@ -7,8 +7,10 @@ import type {
   NodeState,
 } from "@/lib/types";
 import { BKT } from "./config";
+import { sessionEngagement } from "./engagement";
 import { isGraded, masteryFromAttempts } from "./mastery";
 import { learningStage, type TurnSignal } from "./policy";
+import { gradedType } from "./question";
 import { initialState, scheduleReview } from "./scheduler";
 
 // 证据进来，状态出去，全是纯函数。
@@ -218,7 +220,13 @@ export function applyEvidence(
   return {
     ...state,
     engagement: reengaged
-      ? { giveUps: 0, justTellMe: 0, lastAt: attempt.at, skippedQuestions: 0 }
+      ? {
+          giveUps: 0,
+          justTellMe: 0,
+          lastAt: attempt.at,
+          sessionId: attempt.sessionId,
+          skippedQuestions: 0,
+        }
       : state.engagement,
     nodes: flagPrereqs({ ...state.nodes, [kpId]: derived }, graph, kpId),
   };
@@ -240,6 +248,33 @@ export function retractEvidence(
     kindOf(graph, kpId),
     carryOf(node)
   );
+  return { ...state, nodes: { ...state.nodes, [kpId]: derived } };
+}
+
+// 慢路径复核改判一条证据：对错反过来，类型跟着改，然后重放（建模审查第 2 条：以前只能删不能改）
+export function reviseEvidence(
+  state: LearnerState,
+  graph: CourseGraph,
+  kpId: string,
+  attemptId: string
+): LearnerState {
+  const node = state.nodes[kpId];
+  if (!node) {
+    return state;
+  }
+  const attempts = node.attempts.map((a) => {
+    if (a.id !== attemptId || a.correct === undefined) {
+      return a;
+    }
+    const correct = !a.correct;
+    return {
+      ...a,
+      correct,
+      misconception: correct ? undefined : a.misconception,
+      type: gradedType(a.questionKind, a.hinted, correct),
+    };
+  });
+  const derived = deriveNode(attempts, kindOf(graph, kpId), carryOf(node));
   return { ...state, nodes: { ...state.nodes, [kpId]: derived } };
 }
 
@@ -277,9 +312,10 @@ export function touchNode(
 export function applySignal(
   state: LearnerState,
   signal: TurnSignal,
-  at: string
+  at: string,
+  sessionId: string
 ): LearnerState {
-  const { engagement } = state;
+  const engagement = sessionEngagement(state.engagement, sessionId);
   if (signal === "give_up") {
     return {
       ...state,

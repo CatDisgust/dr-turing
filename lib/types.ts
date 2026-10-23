@@ -231,7 +231,8 @@ export type Transaction = {
 // 会后复核对一条暂定证据的结论
 export type ReviewVerdict = {
   attemptId: string;
-  verdict: "confirm" | "retract";
+  // flip：作答有效但对错判反了，改判（建模审查第 2 条）
+  verdict: "confirm" | "retract" | "flip";
   reason: string;
 };
 
@@ -247,6 +248,14 @@ export type SessionReport = {
   oGain: { kpId: string; name: string; before: number; after: number }[];
   confirmed: number;
   retracted: { kpId: string; name: string; quote: string; reason: string }[];
+  // 改判的证据：correct 是改判后的结论
+  revised?: {
+    kpId: string;
+    name: string;
+    quote: string;
+    reason: string;
+    correct: boolean;
+  }[];
   // 这次复核对个人图谱课外概念的改动
   concepts?: { op: "add" | "update" | "invalidate"; name: string }[];
 };
@@ -273,12 +282,13 @@ export type LearnerState = {
     statedPreferences: { text: string; quote: string }[];
   };
   burden: { tooAbstract: number; lost: number; lastAt?: string };
-  // 投入度 W：偏低时规划先修复情绪
+  // 投入度 W：偏低时规划先修复情绪。只算 sessionId 这一次学习，换一次学习从零算（建模审查第 1 条）
   engagement: {
     giveUps: number;
     justTellMe: number;
     skippedQuestions: number;
     lastAt?: string;
+    sessionId?: string;
   };
   nodes: Record<string, NodeState>;
   pendingQuestion?: PendingQuestion;
