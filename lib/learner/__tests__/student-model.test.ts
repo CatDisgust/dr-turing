@@ -3,7 +3,9 @@ import type { Attempt } from "@/lib/types";
 import { BKT } from "../config";
 import { rebuildStudentModel } from "../student-model";
 
-const attempt = (fields: Partial<Attempt>): { attempt: Attempt } => ({
+const attempt = (
+  fields: Partial<Attempt>
+): { attempt: Attempt; kpId: string } => ({
   attempt: {
     at: "2026-10-23T00:00:00Z",
     d: 1,
@@ -18,6 +20,7 @@ const attempt = (fields: Partial<Attempt>): { attempt: Attempt } => ({
     type: "check_correct",
     ...fields,
   },
+  kpId: "kp",
 });
 
 // 学生建模方案 F：学生模型整份从 Transaction + Event 重算
@@ -43,7 +46,11 @@ describe("rebuildStudentModel", () => {
         attempt({ correct: false, type: "check_wrong" }),
         attempt({ type: "said_understood" }),
       ],
-      [{ type: "give_up" }, { type: "give_up" }, { type: "thumbs_up" }],
+      [
+        { payload: {}, type: "give_up" },
+        { payload: {}, type: "give_up" },
+        { payload: {}, type: "thumbs_up" },
+      ],
       ["他先看例子"]
     );
     expect(model.answers).toEqual({ independentCorrect: 1, total: 3 });
@@ -54,7 +61,7 @@ describe("rebuildStudentModel", () => {
 
   it("同样的记录重算两次结果一样", () => {
     const tx = [attempt({ correct: true })];
-    const ev = [{ type: "skip" as const }];
+    const ev = [{ payload: {}, type: "skip" as const }];
     expect(rebuildStudentModel(tx, ev)).toEqual(rebuildStudentModel(tx, ev));
   });
 });

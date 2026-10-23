@@ -99,6 +99,7 @@ export function attemptFromGrading(
       !grading.correct && grading.misconception.trim()
         ? grading.misconception.trim()
         : undefined,
+    prediction: pending.prediction,
     producedStep: grading.producedStep,
     provisional: true,
     questionKind: pending.kind,

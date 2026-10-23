@@ -1,4 +1,5 @@
 import "server-only";
+import { BKT } from "@/lib/learner/config";
 import {
   B_HIGH,
   engagementOf,
@@ -7,6 +8,7 @@ import {
 } from "@/lib/learner/events";
 import { planTurn } from "@/lib/learner/planner";
 import type { TurnSignal } from "@/lib/learner/policy";
+import { predict } from "@/lib/learner/predict";
 import { attemptFromGrading, pickQuestion } from "@/lib/learner/question";
 import { applyEvidence, applySignal, touchNode } from "@/lib/learner/update";
 import type {
@@ -314,6 +316,11 @@ export function askQuestion(
         askedTurnId: turn.turnId,
         help: "none",
         kpId: point.id,
+        // 出题前先猜他能不能独立答对（学生建模方案 D）
+        prediction: predict(
+          state.nodes[point.id]?.attempts ?? [],
+          state.nodes[point.id]?.M ?? BKT.prior
+        ),
         sessionId: turn.sessionId,
       },
     },

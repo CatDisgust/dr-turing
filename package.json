@@ -16,7 +16,8 @@
     "db:push": "drizzle-kit push",
     "db:pull": "drizzle-kit pull",
     "db:check": "drizzle-kit check",
-    "db:up": "drizzle-kit up"
+    "db:up": "drizzle-kit up",
+    "replay-eval": "tsx scripts/replay-eval.ts"
   },
   "dependencies": {
     "@ai-sdk/otel": "^1.0.15",

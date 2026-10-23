@@ -165,6 +165,8 @@ export type Attempt = {
   provisional: boolean; // 快路径写入时为 true，复核后转正或撤销
   // 答的是哪种题；“保持”这项能力只看隔天复习题。D9 之前的证据没有这个字段
   questionKind?: PendingQuestion["kind"];
+  // 出题时的预测，批改时从 PendingQuestion 抄过来，Transaction 里预测和结果放在一起
+  prediction?: Prediction;
 };
 
 // 学生自己的错误模式：从他的错答里提出来的，同一个想法按原文归到一起
@@ -239,13 +241,23 @@ export type ReviewVerdict = {
 // 会话报告：这次是教会了，还是替他做完了（LearnTrace readouts）
 // 学生模型（学生建模方案 F），跨课程每个学生一份。learnRate、arms、calibration、style 由后面几步填，
 // 这一步先建表、先能从原始记录重算；notes 是 Claude 写的文字，不重算
+// 预测和结果的核对（学生建模方案 D）。只算出题后没要提示、没看答案就作答的题。
+// logLoss、brier 越小越准；baseline 是所有人共用一套参数（ℓ = 0.15）时的同样两个数
+export type Calibration = {
+  n: number;
+  hits: number; // 猜的方向对了几题（p ≥ 0.5 猜对、p < 0.5 猜错）
+  logLoss: number;
+  brier: number;
+  baseline: { logLoss: number; brier: number };
+};
+
 export type StudentModelData = {
   // 个人化 BKT 的学习率（方案 B）；还没拟合时用全局值
   learnRate: number;
   // 每种讲法的得分（方案 C）
   arms: Record<string, unknown>;
-  // 预测准不准（方案 D）
-  calibration: null;
+  // 预测准不准（方案 D）：没有可核对的题时为 null
+  calibration: Calibration | null;
   style: null;
   notes: unknown[];
   // 下面两项是这一步就能算的：各种反应各出现几次、答了多少题
@@ -289,6 +301,19 @@ export type PendingQuestion = {
   kind: "check" | "variant" | "review";
   // 答之前要过什么：没要、要了提示、要了答案
   help: "none" | "hint" | "revealed";
+  // 出题时模型先猜他能不能独立答对（学生建模方案 D）。D 之前出的题没有
+  prediction?: Prediction;
+};
+
+// 模型出题前的预测：pCorrect = M(1−s) + (1−M)g，用当时的 M 和学习率 ℓ。
+// baseline 是同样的证据、所有人共用 ℓ = 0.15 时的 pCorrect，做对照。
+// expectLike 是所选讲法“预计喜欢”的得分，挑讲法（方案 C）做好之前为 null
+export type Prediction = {
+  pCorrect: number;
+  baseline: number;
+  M: number;
+  learnRate: number;
+  expectLike: number | null;
 };
 
 export type StudentEventType =
@@ -299,7 +324,10 @@ export type StudentEventType =
   | "too_abstract"
   | "thumbs_up"
   | "thumbs_down"
-  | "asked_followup";
+  | "asked_followup"
+  // 会后复核撤销、改判了一条证据（payload.attemptId），重算时用
+  | "review_retract"
+  | "review_flip";
 
 export type LearnerState = {
   studentId: string;

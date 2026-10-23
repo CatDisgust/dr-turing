@@ -66,15 +66,15 @@ export function isGraded(attempt: Attempt): boolean {
 // - 其余：M 按 BKT，O 按 d 吃到 M 的涨幅；答错时 M 降、O 不变
 export function applyGraded(
   { M, O, peak = M }: { M: number; O: number; peak?: number },
-  attempt: Attempt
+  attempt: Attempt,
+  learn: number = BKT.learn
 ): { M: number; O: number; peak: number } {
   const correct = attempt.correct === true;
   const revealed = correct && attempt.d === 0;
-  const next = bktUpdate(
-    M,
-    correct,
-    revealed ? { ...BKT, learn: BKT.learn * REVEALED_LEARN_FACTOR } : BKT
-  );
+  const next = bktUpdate(M, correct, {
+    ...BKT,
+    learn: revealed ? learn * REVEALED_LEARN_FACTOR : learn,
+  });
   let nextO = updateO(O, Math.max(peak, M), next, attempt.d);
   if (attempt.type === "review_correct" && correct && !attempt.hinted) {
     nextO = Math.min(next, Math.max(nextO, O + REVIEW_PULL * (next - O)));
@@ -82,15 +82,16 @@ export function applyGraded(
   return { M: next, O: nextO, peak: Math.max(peak, M, next) };
 }
 
-// 从头重放全部证据得到 M、O。状态里存的 M、O 只是缓存，以这里为准
+// 从头重放全部证据得到 M、O。状态里存的 M、O 只是缓存，以这里为准。learn 是学习率 ℓ，默认全局值
 export function masteryFromAttempts(
   attempts: Attempt[],
-  prior: number = BKT.prior
+  prior: number = BKT.prior,
+  learn: number = BKT.learn
 ): { M: number; O: number } {
   let mastery = { M: prior, O: 0, peak: prior };
   for (const attempt of attempts) {
     if (isGraded(attempt)) {
-      mastery = applyGraded(mastery, attempt);
+      mastery = applyGraded(mastery, attempt, learn);
     }
   }
   return { M: mastery.M, O: mastery.O };

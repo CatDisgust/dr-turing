@@ -180,3 +180,31 @@ describe("画面二", () => {
     expect(s.nodes.kp_lost.attempts.at(-1)?.type).toBe("check_correct");
   });
 });
+
+describe("出题前的预测（学生建模方案 D）", () => {
+  it("批改时把题上的预测抄进证据", () => {
+    const pending: PendingQuestion = {
+      askedAt: "2026-10-23T00:00:00Z",
+      askedTurnId: "t0",
+      help: "none",
+      kind: "check",
+      kpId: "kp_lost",
+      prediction: {
+        baseline: 0.41,
+        expectLike: null,
+        learnRate: 0.15,
+        M: 0.3,
+        pCorrect: 0.41,
+      },
+      question: "q",
+      questionId: "q1",
+      sessionId: "s1",
+    };
+    const attempt = attemptFromGrading(
+      pending,
+      { correct: true, misconception: "", producedStep: true },
+      { at: "2026-10-23T00:01:00Z", id: "a", quote: "x", turnId: "t1" }
+    );
+    expect(attempt.prediction?.pCorrect).toBe(0.41);
+  });
+});
