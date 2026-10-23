@@ -30,6 +30,8 @@ import { submitEditedMessage } from "./message-editor";
 import { Messages } from "./messages";
 import { MultimodalInput } from "./multimodal-input";
 import { QuickActions } from "./quick-actions";
+import { SelectionMenu } from "./selection-menu";
+import { SideDrawer } from "./side-drawer";
 
 export function ChatShell() {
   const {
@@ -122,7 +124,7 @@ export function ChatShell() {
     setInput("");
   }, [editingMessage, input, regenerate, setInput, setMessages]);
 
-  // 课件划词提问：和首页示例问题一样，直接发出去
+  // 划词“问这句”（课件或导师回复）：和首页示例问题一样，直接发出去
   const handleAskMaterial = useCallback(
     (text: string) => {
       window.history.pushState(
@@ -133,6 +135,21 @@ export function ChatShell() {
       sendMessage({ parts: [{ text, type: "text" }], role: "user" });
     },
     [chatId, sendMessage]
+  );
+
+  // 划词“引用回复”：引用放进输入框开头，学生接着写
+  const handleQuote = useCallback(
+    (quote: string) => {
+      setInput(input ? `${quote}\n${input}` : `${quote}\n`);
+      const box = document.querySelector<HTMLTextAreaElement>(
+        '[data-testid="multimodal-input"]'
+      );
+      setTimeout(() => {
+        box?.focus();
+        box?.setSelectionRange(box.value.length, box.value.length);
+      }, 0);
+    },
+    [input, setInput]
   );
 
   // 快捷按钮：发一句话，同时告诉服务端这是哪种求助
@@ -173,11 +190,6 @@ export function ChatShell() {
   return (
     <>
       <div className="flex h-dvh w-full flex-row overflow-hidden">
-        {!(isArtifactVisible || isReadonly) && (
-          <aside className="hidden w-[26%] min-w-0 shrink-0 border-r bg-background lg:block">
-            <MaterialPane onAsk={handleAskMaterial} />
-          </aside>
-        )}
         <div
           className={cn(
             "flex min-w-0 flex-col bg-sidebar transition-[width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
@@ -239,18 +251,29 @@ export function ChatShell() {
         </div>
 
         {!isArtifactVisible && (
-          <aside className="hidden w-[34%] min-w-0 shrink-0 border-l bg-background lg:block">
-            <LearnerGraph
-              key={chatId}
-              onStartLearning={
-                isReadonly || status === "submitted" || status === "streaming"
-                  ? undefined
-                  : handleStartLearning
-              }
-              sessionId={chatId}
-            />
-          </aside>
+          <SideDrawer
+            graph={
+              <LearnerGraph
+                key={chatId}
+                onStartLearning={
+                  isReadonly || status === "submitted" || status === "streaming"
+                    ? undefined
+                    : handleStartLearning
+                }
+                sessionId={chatId}
+              />
+            }
+            material={<MaterialPane />}
+            showMaterial={!isReadonly}
+          />
         )}
+        <SelectionMenu
+          disabled={
+            isReadonly || status === "submitted" || status === "streaming"
+          }
+          onAsk={handleAskMaterial}
+          onQuote={handleQuote}
+        />
 
         <Artifact
           addToolApprovalResponse={addToolApprovalResponse}
