@@ -271,7 +271,7 @@ export async function planAndAsk(
   ) {
     return { note, plan, state };
   }
-  const asked = askQuestion(turn, state, target);
+  const asked = askQuestion(turn, state, target, plan.expect_like);
   if (asked) {
     return {
       note,
@@ -300,7 +300,9 @@ export async function planAndAsk(
 export function askQuestion(
   turn: Pick<Turn, "sessionId" | "turnId" | "now">,
   state: LearnerState,
-  point: KnowledgePoint
+  point: KnowledgePoint,
+  // 这轮所选讲法“感受好”的后验均值（学生建模方案 C、D）
+  expectLike?: number
 ): { state: LearnerState; question: string } | null {
   const picked = pickQuestion(
     point,
@@ -322,11 +324,14 @@ export function askQuestion(
         help: "none",
         kpId: point.id,
         // 出题前先猜他能不能独立答对（学生建模方案 D）
-        prediction: predict(
-          state.nodes[point.id]?.attempts ?? [],
-          state.nodes[point.id]?.M ?? BKT.prior,
-          learnRateOf(state)
-        ),
+        prediction: {
+          ...predict(
+            state.nodes[point.id]?.attempts ?? [],
+            state.nodes[point.id]?.M ?? BKT.prior,
+            learnRateOf(state)
+          ),
+          expectLike: expectLike ?? null,
+        },
         sessionId: turn.sessionId,
       },
     },

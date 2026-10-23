@@ -1,6 +1,6 @@
 import type { TutorPlan } from "@/lib/types";
 
-// 把 Claude 填的字段并进规则给的 plan。动作、目标、提示词、命中的规则只认规则；
+// 把 Claude 填的字段并进规则给的 plan。动作、目标、提示词、命中的规则、讲法只认代码；
 // Claude 的结果再过一遍硬约束，免得它越界
 
 export function mergePlan(
@@ -9,7 +9,6 @@ export function mergePlan(
     start_from: string[];
     disclosure_level: TutorPlan["disclosure_level"];
     action_type: TutorPlan["action_type"];
-    representation: TutorPlan["representation"];
     check_misconception_first: boolean;
     rationale: string;
   },
@@ -30,7 +29,6 @@ export function mergePlan(
     elicits_production: disclosure_level !== "full",
     filled_by: "claude",
     rationale: filled.rationale.trim() || rulePlan.rationale,
-    representation: filled.representation,
     start_from: [
       ...new Set(
         filled.start_from.filter((id) => limits.prereqIds.includes(id))

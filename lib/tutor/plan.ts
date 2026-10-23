@@ -5,8 +5,8 @@ import { plannerContext } from "@/lib/learner/context";
 import type { CourseGraph, LearnerState, TutorPlan } from "@/lib/types";
 import { mergePlan } from "./plan-merge";
 
-// 规划器的第二步：七条规则已经定了动作（planTurn），其余字段——从哪讲起、讲多少、
-// 怎么讲、要不要先查误解、理由——交给 Claude（低档）按目标节点和两跳先修来填。
+// 规划器的第二步：七条规则已经定了动作（planTurn），讲法由代码按得分挑（学生建模方案 C）；
+// 其余字段——从哪讲起、讲多少、要不要先查误解、理由——交给 Claude（低档）按目标节点和两跳先修来填。
 // 只读切片，不读整张图；调用失败就用规则的默认值
 
 const fillSchema = z.object({
@@ -14,7 +14,6 @@ const fillSchema = z.object({
   check_misconception_first: z.boolean(),
   disclosure_level: z.enum(["question", "hint", "partial", "full"]),
   rationale: z.string(),
-  representation: z.enum(["analogy", "code", "formula", "diagram"]),
   start_from: z.array(z.string()),
   student_reaction: z.enum(["none", "still_lost", "too_abstract"]),
 });
@@ -37,7 +36,6 @@ const SYSTEM = [
   "- start_from：从哪些已经理解的先修讲起（只能从给出的先修 id 里选，可以为空）。M ≥ 0.6 的先修算已理解，不必重讲。",
   "- disclosure_level：讲到什么程度。question 只提问不讲；hint 给一步提示；partial 讲一部分、留一步让学生自己推；full 完整讲清。",
   "- action_type：explain 讲解 / worked_example 边做边讲的例题 / scaffold 搭脚手架引导 / hint 提示 / ask 提问。",
-  "- representation：analogy 生活类比 / code 代码 / formula 公式 / diagram 图示。学生说过的偏好优先。",
   "- check_misconception_first：这个点上有没纠正的误解时，要不要先排查它。",
   "- rationale：一两句中文，说明为什么这样安排，引用具体的 M、O、H、先修或学生原话。",
   "- student_reaction：学生这一轮的话是不是在说听不懂。still_lost 是还是没懂、越听越糊涂（比如“还是不懂”“没明白”）；too_abstract 是嫌太抽象、想要具体例子（比如“太抽象了”“能举个例子吗”）；都不是就填 none。只看这一轮学生说的话，拿不准填 none。",

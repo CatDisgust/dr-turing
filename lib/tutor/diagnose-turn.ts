@@ -42,6 +42,7 @@ function diagnosisPlan(
     elicits_production: true,
     filled_by: "diagnosis",
     next_action: "independent_check",
+    order: "example_first",
     prompt: "question",
     rationale: `诊断「${lesson.title}」的前置（${index}/${total}）：「${name}」还没有答题记录，先问一道它的检查题`,
     representation: "analogy",

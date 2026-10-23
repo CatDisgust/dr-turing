@@ -9,6 +9,7 @@ const rulePlan: TutorPlan = {
   elicits_production: true,
   filled_by: "rules",
   next_action: "teach",
+  order: "example_first",
   prompt: "aha",
   rationale: "规则④",
   representation: "analogy",
@@ -23,7 +24,6 @@ const filled = {
   check_misconception_first: true,
   disclosure_level: "partial" as const,
   rationale: "从事务讲起",
-  representation: "code" as const,
   start_from: ["kp_pre", "kp_elsewhere"],
 };
 
@@ -42,7 +42,9 @@ describe("mergePlan", () => {
     expect(plan.prompt).toBe("aha");
     expect(plan.target_kc).toBe("kp_a");
     expect(plan.action_type).toBe("worked_example");
-    expect(plan.representation).toBe("code");
+    // 讲法只认代码挑的（学生建模方案 C）
+    expect(plan.representation).toBe("analogy");
+    expect(plan.order).toBe("example_first");
     expect(plan.rationale).toBe("从事务讲起");
     expect(plan.filled_by).toBe("claude");
   });

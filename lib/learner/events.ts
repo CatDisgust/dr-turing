@@ -19,13 +19,13 @@ export const EVENT_TYPES = [
 export type EventType = StudentEventType;
 
 // 投入度 W：不想学了的信号；负担 B：听不懂、太抽象
-const W_TYPES: readonly EventType[] = [
+export const W_TYPES: readonly EventType[] = [
   "give_up",
   "just_tell_me",
   "skip",
   "thumbs_down",
 ];
-const B_TYPES: readonly EventType[] = ["still_lost", "too_abstract"];
+export const B_TYPES: readonly EventType[] = ["still_lost", "too_abstract"];
 
 // 半衰期 4 轮：4 轮前的一次放弃只剩一半分量（学生建模方案 A）
 export const HALF_LIFE_TURNS = 4;

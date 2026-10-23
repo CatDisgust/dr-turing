@@ -11,6 +11,7 @@ import {
   inArray,
   isNull,
   lt,
+  ne,
   type SQL,
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -869,6 +870,47 @@ export async function saveStudentModel({
         set: { data, updatedAt: new Date() },
         target: studentModel.studentId,
       });
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// 讲法效果（学生建模方案 C）要用：这个学生所有对话里的消息，只取时间、角色和规划，不取正文
+export async function getPlanMessagesByStudent({
+  studentId,
+}: {
+  studentId: string;
+}) {
+  try {
+    return await db
+      .select({
+        chatId: message.chatId,
+        createdAt: message.createdAt,
+        id: message.id,
+        plan: message.plan,
+        role: message.role,
+      })
+      .from(message)
+      .innerJoin(chat, eq(chat.id, message.chatId))
+      .where(eq(chat.userId, studentId))
+      .orderBy(asc(message.createdAt));
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// 冷启动先验要用：其他学生的学生模型
+export async function getOtherStudentModels({
+  studentId,
+}: {
+  studentId: string;
+}) {
+  try {
+    const rows = await db
+      .select({ data: studentModel.data })
+      .from(studentModel)
+      .where(ne(studentModel.studentId, studentId));
+    return rows.map((r) => r.data);
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }

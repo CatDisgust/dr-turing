@@ -64,4 +64,46 @@ describe("rebuildStudentModel", () => {
     const ev = [{ payload: {}, type: "skip" as const }];
     expect(rebuildStudentModel(tx, ev)).toEqual(rebuildStudentModel(tx, ev));
   });
+
+  it("讲法的效果从回复的规划、之后的作答和反应里数出来（方案 C）", () => {
+    const plan = {
+      disclosure_level: "full" as const,
+      order: "definition_first" as const,
+      representation: "formula" as const,
+      target_kc: "kp",
+    };
+    const model = rebuildStudentModel(
+      [
+        attempt({
+          at: "2026-10-23T00:05:00Z",
+          correct: false,
+          id: "a1",
+        }),
+      ],
+      [{ messageId: "u2", payload: {}, type: "too_abstract" }],
+      [],
+      [
+        {
+          chatId: "c",
+          createdAt: "2026-10-23T00:01:00Z",
+          id: "m1",
+          plan,
+          role: "assistant",
+        },
+        {
+          chatId: "c",
+          createdAt: "2026-10-23T00:02:00Z",
+          id: "u2",
+          plan: null,
+          role: "user",
+        },
+      ]
+    );
+    expect(model.arms).toEqual({
+      "formula:definition_first": {
+        feel: { k: 0, n: 1 },
+        learn: { k: 0, n: 1 },
+      },
+    });
+  });
 });

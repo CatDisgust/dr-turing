@@ -145,4 +145,35 @@ describe("规划器", () => {
         .representation
     ).toBe("code");
   });
+
+  it("有了讲法记录就按得分挑：类比+先例子一直学不会，就不再挑它", () => {
+    const s = studentA();
+    s.arms = {
+      own: {
+        "analogy:example_first": {
+          feel: { k: 10, n: 10 },
+          learn: { k: 0, n: 10 },
+        },
+        "code:definition_first": {
+          feel: { k: 8, n: 10 },
+          learn: { k: 9, n: 10 },
+        },
+      },
+      prior: {},
+    };
+    let seed = 1;
+    const random = () => {
+      seed = (seed * 16_807) % 2_147_483_647;
+      return seed / 2_147_483_647;
+    };
+    const picks = Array.from({ length: 50 }, () =>
+      planTurn({ graph, kpId: "kp_race", random, sessionId: "now", state: s })
+    );
+    expect(
+      picks.some(
+        (p) => p.representation === "analogy" && p.order === "example_first"
+      )
+    ).toBe(false);
+    expect(picks.every((p) => p.expect_like !== undefined)).toBe(true);
+  });
 });
