@@ -11,6 +11,7 @@ import {
   demoTarget,
   lessonPoints,
   seedDemoStudent,
+  seedNextDay,
   seedScene2,
   seedStudents,
   seedSummary,
@@ -257,6 +258,80 @@ describe("画面二预置（D12）", () => {
 
   it("图里没有丢失更新就不写", () => {
     expect(seedScene2(graph, other, now)).toBeNull();
+  });
+});
+
+// 演示视频的“第二天”（用户 2026-10-23 定：全程只讲死锁）
+describe("第二天预置：死锁", () => {
+  const dl = graph.points.find((p) => p.id === "dl") as KnowledgePoint;
+  // 今天在死锁上很确定却答错的真实记录，写“第二天”时会被换掉
+  const today = applyEvidence(
+    emptyLearnerState(DEMO_STUDENT.id, "comp5348"),
+    graph,
+    "dl",
+    {
+      at: now.toISOString(),
+      confidence: "sure",
+      correct: false,
+      d: 0,
+      hinted: false,
+      id: "x",
+      misconception: "只要加锁就会死锁",
+      producedStep: false,
+      provisional: true,
+      quote: "还会。只要加了锁，就可能死锁",
+      sessionId: "today",
+      source: "fast",
+      turnId: "t",
+      type: "check_wrong",
+    }
+  );
+  const nextDay = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  it("昨天答错又改对：半亮，错误想法已修正，今天的记录换成预置", () => {
+    const seed = seedNextDay(graph, today, nextDay);
+    expect(seed?.target.id).toBe("dl");
+    const node = seed?.state.nodes.dl;
+    expect(nodeLight(node, "next").light).toBe("half");
+    expect(node?.O).toBeLessThan(FULL_O);
+    expect(node?.misconceptions.map((m) => m.status)).toEqual(["repaired"]);
+    expect(node?.attempts.every((a) => a.sessionId === "seed-next-day")).toBe(
+      true
+    );
+  });
+
+  it("第二天问到它：出复习题，独立答对就全亮", () => {
+    const seed = seedNextDay(graph, today, nextDay);
+    if (!seed) {
+      throw new Error("没找到死锁");
+    }
+    const plan = planTurn({
+      graph,
+      kpId: "dl",
+      sessionId: "next",
+      state: seed.state,
+    });
+    expect(plan.next_action).toBe("independent_check");
+    const at = nextDay.toISOString();
+    const picked = pickQuestion(dl, seed.state.nodes.dl, "next", at);
+    expect(picked?.kind).toBe("review");
+    if (!picked) {
+      throw new Error("没出题");
+    }
+    const evidence = attemptFromGrading(
+      {
+        ...picked,
+        askedAt: at,
+        askedTurnId: "t1",
+        help: "none",
+        kpId: "dl",
+        sessionId: "next",
+      },
+      { correct: true, misconception: "", producedStep: true },
+      { at, id: "a1", quote: "顺序一样，等待绕不成圈", turnId: "t2" }
+    );
+    const after = applyEvidence(seed.state, graph, "dl", evidence);
+    expect(nodeLight(after.nodes.dl, "next").light).toBe("full");
   });
 });
 
