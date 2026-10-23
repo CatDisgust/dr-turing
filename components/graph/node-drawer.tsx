@@ -81,11 +81,14 @@ export function NodeDrawer({
   node,
   sessionId,
   onClose,
+  onStart,
 }: {
   point: KnowledgePoint;
   node: NodeState | undefined;
   sessionId: string;
   onClose: () => void;
+  // 点“开始学习”：在对话里以这个点为目标开始。没传就不显示按钮（课程图谱页）
+  onStart?: () => void;
 }) {
   const { light, provisional } = nodeLight(node, sessionId);
   const attempts = [...(node?.attempts ?? [])].reverse();
@@ -111,6 +114,17 @@ export function NodeDrawer({
           ✕
         </button>
       </div>
+
+      {onStart ? (
+        <button
+          className="rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-sm disabled:opacity-50"
+          data-testid="start-learning"
+          onClick={onStart}
+          type="button"
+        >
+          开始学习
+        </button>
+      ) : null}
 
       <div className="flex flex-col gap-1.5 text-xs">
         <Bar label="表面掌握 M" mark={HALF_M} value={node?.M ?? 0} />
