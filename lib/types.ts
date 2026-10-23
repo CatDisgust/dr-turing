@@ -279,6 +279,26 @@ export type ArmCounts = {
   feel: { n: number; k: number };
 };
 
+// 教学笔记（方案 E）：Claude 写的一句话规律，附证据；数字由代码检验。
+// when 里没写的项不限；expect 是这种讲法下预计的结果
+export type TeachingNote = {
+  id: string;
+  text: string;
+  when: {
+    representation?: TutorPlan["representation"];
+    order?: TutorPlan["order"];
+    kind?: KnowledgePoint["kind"];
+  };
+  expect: "learn_good" | "learn_bad" | "feel_good" | "feel_bad";
+  evidence: string[]; // 证据 id：作答 id 或导师消息 id
+  createdAt: string;
+  // 检验：写下之后每遇到一轮符合 when 的讲解，结果对上 expect 记 hits，对不上记 misses
+  hits: number;
+  misses: number;
+  // dropped：misses 比 hits 多 2 次，代码自动删；deleted：Claude 复核时删
+  status: "active" | "dropped" | "deleted";
+};
+
 export type StudentModelData = {
   // 个人化 BKT 的学习率（方案 B）；还没拟合时用全局值
   learnRate: number;
@@ -287,7 +307,7 @@ export type StudentModelData = {
   // 预测准不准（方案 D）：没有可核对的题时为 null
   calibration: Calibration | null;
   style: null;
-  notes: unknown[];
+  notes: TeachingNote[];
   // 下面两项是这一步就能算的：各种反应各出现几次、答了多少题
   reactions: Partial<Record<StudentEventType, number>>;
   answers: { total: number; independentCorrect: number };
@@ -379,6 +399,8 @@ export type LearnerState = {
     own: Record<string, ArmCounts>;
     prior: Record<string, { learn: number; feel: number }>;
   };
+  // 检验过的教学笔记（hits ≥ 2），结束学习时从 StudentModel 带过来，放进导师提示词（方案 E）
+  teachingNotes?: TeachingNote[];
   pendingQuestion?: PendingQuestion;
   // 诊断入口进行中：这一课、还没问的前置
   diagnosis?: {
