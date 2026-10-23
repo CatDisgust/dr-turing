@@ -498,3 +498,20 @@ textarea:focus-visible {
 [data-testid="artifact"] {
   isolation: isolate;
 }
+
+/* 图谱节点升级时闪一下（D12 点亮动画）。只动阴影，不动 transform：React Flow 用 transform 定位节点 */
+@keyframes node-light-up {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.9);
+  }
+  60% {
+    box-shadow: 0 0 0 14px rgba(245, 158, 11, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+
+.react-flow__node.node-light-up {
+  animation: node-light-up 0.8s ease-out 2;
+}

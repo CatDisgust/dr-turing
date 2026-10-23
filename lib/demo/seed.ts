@@ -20,7 +20,7 @@ export const DEMO_QUESTION = "加锁为什么会死锁？";
 // 原定的加锁本身没有前置（它 part_of 并发控制），A、B 拉不开。按名字和别名找，不认死 id
 const TARGET = /死锁|deadlock/i;
 
-export const [, STUDENT_A, STUDENT_B] = STUDENTS;
+export const [DEMO_STUDENT, STUDENT_A, STUDENT_B] = STUDENTS;
 
 export function demoTarget(graph: CourseGraph): KnowledgePoint | null {
   return (
@@ -194,4 +194,71 @@ export function seedSummary(seed: DemoSeed) {
     bM: m(seed.b, p.id),
     bOwned: m(seed.b, p.id) >= HALF_M,
   }));
+}
+
+// 画面二（D12）：演示学生昨天在「丢失更新」上独立答对了检查题和变式题，已经半亮。
+// 今天问到它，规则⑤出题；隔了一夜，出的是复习题，独立答对就全亮（D6：全亮只能靠隔天复习）。
+// 只替换这一个点，其他点和学生自己的记录不动；没答完的题清掉，免得接着批改旧题
+const SCENE2_TARGET = /丢失更新|lost update/i;
+
+export function scene2Target(graph: CourseGraph): KnowledgePoint | null {
+  return (
+    graph.points.find((p) => SCENE2_TARGET.test(p.name)) ??
+    graph.points.find((p) => p.aliases.some((a) => SCENE2_TARGET.test(a))) ??
+    null
+  );
+}
+
+export function seedScene2(
+  graph: CourseGraph,
+  state: LearnerState,
+  now: Date
+): { state: LearnerState; target: KnowledgePoint } | null {
+  const target = scene2Target(graph);
+  if (!target) {
+    return null;
+  }
+  const { [target.id]: _old, ...others } = state.nodes;
+  let next: LearnerState = {
+    ...state,
+    nodes: others,
+    pendingQuestion: undefined,
+  };
+  const yesterday = now.getTime() - DAY;
+  next = applyEvidence(
+    next,
+    graph,
+    target.id,
+    attempt("seed-demo-1", yesterday, {
+      correct: true,
+      d: 1,
+      hinted: false,
+      producedStep: true,
+      questionKind: "check",
+      quote: `（预置）昨天自己讲清了「${target.name}」：两个人同时读到旧值，后写的把先写的盖掉了`,
+      type: "check_correct",
+    })
+  );
+  next = applyEvidence(
+    next,
+    graph,
+    target.id,
+    attempt("seed-demo-1", yesterday + 5 * 60_000, {
+      correct: true,
+      d: 1,
+      hinted: false,
+      producedStep: true,
+      questionKind: "variant",
+      quote: "（预置）昨天的变式题也独立答对：库存扣减一样会少扣",
+      type: "transfer_correct",
+    })
+  );
+  // 预置历史是昨天的事，投入度按现在算
+  return {
+    state: {
+      ...next,
+      engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 },
+    },
+    target,
+  };
 }

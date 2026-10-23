@@ -13,8 +13,9 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { layoutGraph, NODE_HEIGHT, NODE_WIDTH } from "@/lib/graph/layout";
+import { FULL_O } from "@/lib/learner/config";
 import type { Light } from "@/lib/learner/light";
 import type { CourseGraph, Edge } from "@/lib/types";
 
@@ -74,7 +75,57 @@ export const EDGE_LEGEND: { type: Edge["type"]; label: string }[] = [
   { label: "易混", type: "confusable" },
 ];
 
-type LabelNode = FlowNode<{ label: string }>;
+type LabelNode = FlowNode<{ label: string; o?: number }>;
+
+const LIGHT_RANK: Record<Light, number> = {
+  dashed: 1,
+  full: 3,
+  gray: 0,
+  half: 2,
+};
+// 节点升级后闪多久（毫秒），和 globals.css 里 node-light-up 的时长一致
+const FLASH_MS = 1600;
+
+// 节点右上角的小环：自主掌握 O 走到全亮门槛的进度，答对一次就能看到涨（用户 2026-10-21 定）
+function ORing({ o }: { o: number }) {
+  const r = 7;
+  const length = 2 * Math.PI * r;
+  const progress = Math.min(o / FULL_O, 1);
+  return (
+    <svg
+      aria-label={`自主掌握 O ${o.toFixed(2)}，全亮要 ${FULL_O}`}
+      className="absolute -top-2 -right-2"
+      data-testid="o-ring"
+      height={20}
+      role="img"
+      viewBox="0 0 20 20"
+      width={20}
+    >
+      <title>{`自主掌握 O ${o.toFixed(2)} / 全亮 ${FULL_O}`}</title>
+      <circle
+        cx={10}
+        cy={10}
+        fill="#fff"
+        r={r}
+        stroke="#e5e7eb"
+        strokeWidth={3}
+      />
+      <circle
+        cx={10}
+        cy={10}
+        fill="none"
+        r={r}
+        stroke={progress >= 1 ? "#b45309" : "#f59e0b"}
+        strokeDasharray={length}
+        strokeDashoffset={length * (1 - progress)}
+        strokeLinecap="round"
+        strokeWidth={3}
+        style={{ transition: "stroke-dashoffset 0.8s ease-out" }}
+        transform="rotate(-90 10 10)"
+      />
+    </svg>
+  );
+}
 
 const HIDDEN_HANDLE = { opacity: 0 };
 
@@ -87,6 +138,7 @@ function PointNode({ data }: NodeProps<LabelNode>) {
     <>
       <Handle position={Position.Top} style={HIDDEN_HANDLE} type="target" />
       {data.label}
+      {data.o !== undefined && data.o > 0 ? <ORing o={data.o} /> : null}
       <Handle position={Position.Bottom} style={HIDDEN_HANDLE} type="source" />
     </>
   );
@@ -99,15 +151,38 @@ export function GraphPanel({
   selectedId,
   onSelect,
   lights,
+  progress,
   focusId,
 }: {
   graph: CourseGraph;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   lights?: Record<string, Light>;
+  // 每个点的自主掌握 O，有值就画进度环
+  progress?: Record<string, number>;
   // 变了就把视野移到这个点上
   focusId?: string;
 }) {
+  // 亮度比上次高的点闪一下（点亮动画，D12）
+  const previous = useRef<Record<string, Light> | undefined>(undefined);
+  const [flashing, setFlashing] = useState<string[]>([]);
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = lights;
+    if (!(before && lights)) {
+      return;
+    }
+    const raised = Object.keys(lights).filter(
+      (id) => LIGHT_RANK[lights[id]] > LIGHT_RANK[before[id] ?? "gray"]
+    );
+    if (raised.length === 0) {
+      return;
+    }
+    setFlashing(raised);
+    const timer = setTimeout(() => setFlashing([]), FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [lights]);
+
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null);
   useEffect(() => {
     if (flow && focusId) {
@@ -141,7 +216,8 @@ export function GraphPanel({
       ...graph.points.map((point) => {
         const look = LIGHT_STYLE[lights?.[point.id] ?? "gray"];
         return {
-          data: { label: point.name },
+          className: flashing.includes(point.id) ? "node-light-up" : undefined,
+          data: { label: point.name, o: progress?.[point.id] },
           id: point.id,
           parentId: `lesson:${point.lessonId}`,
           position: layout.positions[point.id] ?? { x: 0, y: 0 },
@@ -162,14 +238,14 @@ export function GraphPanel({
             lineHeight: 1.2,
             padding: 6,
             textAlign: "center" as const,
-            transition: "background 0.4s, border 0.4s",
+            transition: "background 0.6s, border 0.6s, color 0.6s",
             width: NODE_WIDTH,
           },
           type: "point",
         };
       }),
     ],
-    [graph, layout, selectedId, lights]
+    [graph, layout, selectedId, lights, progress, flashing]
   );
 
   const edges = useMemo<FlowEdge[]>(

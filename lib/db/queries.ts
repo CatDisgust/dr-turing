@@ -242,7 +242,8 @@ export async function getChatById({ id }: { id: string }) {
 
 export async function saveMessages({ messages }: { messages: DBMessage[] }) {
   try {
-    return await db.insert(message).values(messages);
+    // 出错后点“重试”会用同一个 id 再发一次用户消息，已经存过就跳过
+    return await db.insert(message).values(messages).onConflictDoNothing();
   } catch (error) {
     throw new ChatbotError("bad_request:database", {
       cause: error,

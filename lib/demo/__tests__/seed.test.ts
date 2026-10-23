@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { FULL_O } from "@/lib/learner/config";
+import { nodeLight } from "@/lib/learner/light";
 import { planTurn } from "@/lib/learner/planner";
+import { attemptFromGrading, pickQuestion } from "@/lib/learner/question";
+import { applyEvidence, emptyLearnerState } from "@/lib/learner/update";
 import type { CourseGraph, KnowledgePoint } from "@/lib/types";
 import { compareRuns } from "../compare";
-import { demoTarget, seedStudents, seedSummary } from "../seed";
+import {
+  DEMO_STUDENT,
+  demoTarget,
+  seedScene2,
+  seedStudents,
+  seedSummary,
+} from "../seed";
 
 // D11：A、B 的预置历史由引擎重放出来；同一个目标点，规则给两人的规划不一样
 
@@ -172,5 +182,78 @@ describe("线上图谱的样子", () => {
     expect(a.start_from).toEqual(["lock"]);
     expect(b.start_from).toEqual([]);
     expect(compareRuns([{ a, b }]).alwaysDifferent).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("画面二预置（D12）", () => {
+  const lost = point("lost", "丢失更新", {
+    checkQuestions: ["两个人同时存钱为什么少一笔？", "库存扣减会怎样？"],
+  });
+  const g2: CourseGraph = { ...graph, points: [...graph.points, lost] };
+  const other = applyEvidence(
+    emptyLearnerState(DEMO_STUDENT.id, "comp5348"),
+    g2,
+    "txn",
+    {
+      at: "2026-10-20T10:00:00Z",
+      correct: true,
+      d: 1,
+      hinted: false,
+      id: "x",
+      producedStep: true,
+      provisional: false,
+      quote: "学生自己的记录",
+      sessionId: "old",
+      source: "slow",
+      turnId: "t",
+      type: "check_correct",
+    }
+  );
+
+  it("昨天的检查题和变式题让它半亮，其他点不动", () => {
+    const seed = seedScene2(g2, other, now);
+    expect(seed?.target.id).toBe("lost");
+    const node = seed?.state.nodes.lost;
+    expect(nodeLight(node, "today").light).toBe("half");
+    expect(node?.O).toBeLessThan(FULL_O);
+    expect(seed?.state.nodes.txn).toEqual(other.nodes.txn);
+  });
+
+  it("今天问到它：规则⑤出复习题，独立答对就全亮", () => {
+    const seed = seedScene2(g2, other, now);
+    if (!seed) {
+      throw new Error("没找到丢失更新");
+    }
+    const plan = planTurn({
+      graph: g2,
+      kpId: "lost",
+      sessionId: "today",
+      state: seed.state,
+    });
+    expect(plan.next_action).toBe("independent_check");
+    const today = now.toISOString();
+    const picked = pickQuestion(lost, seed.state.nodes.lost, "today", today);
+    expect(picked?.kind).toBe("review");
+    if (!picked) {
+      throw new Error("没出题");
+    }
+    const evidence = attemptFromGrading(
+      {
+        ...picked,
+        askedAt: today,
+        askedTurnId: "t1",
+        help: "none",
+        kpId: "lost",
+        sessionId: "today",
+      },
+      { correct: true, misconception: "", producedStep: true },
+      { at: today, id: "a1", quote: "后写的覆盖了先写的", turnId: "t2" }
+    );
+    const after = applyEvidence(seed.state, g2, "lost", evidence);
+    expect(nodeLight(after.nodes.lost, "today").light).toBe("full");
+  });
+
+  it("图里没有丢失更新就不写", () => {
+    expect(seedScene2(graph, other, now)).toBeNull();
   });
 });

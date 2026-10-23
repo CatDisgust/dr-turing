@@ -9,7 +9,7 @@ import { useDataStream } from "./data-stream-provider";
 import { SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
 import { MessageReasoning } from "./message-reasoning";
-import { PlanBadge } from "./plan-badge";
+import { PlanBadge, TimingLine } from "./plan-badge";
 import { PreviewAttachment } from "./preview-attachment";
 
 function WaitingText() {
@@ -156,7 +156,12 @@ const PurePreviewMessage = ({
       {attachments}
       {parts}
       {message.metadata?.plan ? (
-        <PlanBadge plan={message.metadata.plan} />
+        <PlanBadge
+          plan={message.metadata.plan}
+          timing={message.metadata.timing}
+        />
+      ) : message.metadata?.timing ? (
+        <TimingLine timing={message.metadata.timing} />
       ) : null}
       {actions}
     </>

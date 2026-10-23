@@ -1,4 +1,5 @@
 import evalSet from "@/fixtures/eval/classify-comp5348.json";
+import { FAST_MODELS, type FastModel } from "@/lib/claude";
 import { COURSE_ID } from "@/lib/constants";
 import { getCourseById } from "@/lib/db/queries";
 import { classifyQuestion } from "@/lib/tutor/classify";
@@ -10,7 +11,12 @@ const cases = evalSet.items as ClassifyCase[];
 
 // 跑评测集里的第 index 条：一次一条，页面那边控制并发、显示进度
 export async function GET(request: Request) {
-  const index = Number(new URL(request.url).searchParams.get("index"));
+  const params = new URL(request.url).searchParams;
+  const index = Number(params.get("index"));
+  // 页面上选的快路径模型，用来对比 Opus 低档和 Haiku 5.5
+  const model = params.get("model");
+  const fastModel =
+    model && model in FAST_MODELS ? (model as FastModel) : undefined;
   const item = cases[index];
   if (!item) {
     return Response.json({ total: cases.length });
@@ -21,7 +27,11 @@ export async function GET(request: Request) {
   }
   const started = Date.now();
   try {
-    const point = await classifyQuestion(course.graph, item.question);
+    const point = await classifyQuestion(
+      course.graph,
+      item.question,
+      fastModel
+    );
     return Response.json({
       accept: item.accept,
       got: point ? point.name : null,

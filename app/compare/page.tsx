@@ -17,6 +17,7 @@ type SeedResult = {
   target: { id: string; name: string };
   misconception: string | null;
   prereqs: { id: string; name: string; aM: number; bM: number }[];
+  scene2: { name: string; M: number; O: number } | null;
 };
 
 const FIELD_LABELS: Record<ComparedField, string> = {
@@ -179,6 +180,10 @@ export default function ComparePage() {
           {seed.misconception
             ? `B 的错误想法（从他的错答里提的）：${seed.misconception}`
             : null}
+          <br />
+          {seed.scene2
+            ? `画面二：演示学生的「${seed.scene2.name}」昨天已半亮（M ${seed.scene2.M.toFixed(2)}，O ${seed.scene2.O.toFixed(2)}），今天问到它会出复习题，独立答对就全亮。`
+            : "画面二：图谱里找不到「丢失更新」，没写。"}
         </p>
       ) : null}
 
