@@ -30,6 +30,8 @@ import { submitEditedMessage } from "./message-editor";
 import { Messages } from "./messages";
 import { MultimodalInput } from "./multimodal-input";
 import { QuickActions } from "./quick-actions";
+import { ASK_QUESTION, SelectionMenu } from "./selection-menu";
+import { SideDrawer } from "./side-drawer";
 
 export function ChatShell() {
   const {
@@ -122,17 +124,31 @@ export function ChatShell() {
     setInput("");
   }, [editingMessage, input, regenerate, setInput, setMessages]);
 
-  // 课件划词提问：和首页示例问题一样，直接发出去
-  const handleAskMaterial = useCallback(
-    (text: string) => {
-      window.history.pushState(
-        {},
-        "",
-        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/chat/${chatId}`
+  // 划词后把引用放进输入框开头，学生改好再发；select 给出要选中的那段（方便直接改写）
+  const fillInput = useCallback(
+    (quote: string, question: string) => {
+      const head = `${quote}${question}`;
+      const text = input ? `${head}\n${input}` : head;
+      setInput(text);
+      const box = document.querySelector<HTMLTextAreaElement>(
+        '[data-testid="multimodal-input"]'
       );
-      sendMessage({ parts: [{ text, type: "text" }], role: "user" });
+      setTimeout(() => {
+        box?.focus();
+        box?.setSelectionRange(quote.length, head.length);
+      }, 0);
     },
-    [chatId, sendMessage]
+    [input, setInput]
+  );
+  // “问这句”：带上默认问题并选中它，直接回车就问“这句是什么意思”，打字就换成自己的问题
+  const handleAsk = useCallback(
+    (quote: string) => fillInput(quote, ASK_QUESTION),
+    [fillInput]
+  );
+  // “引用回复”：只放引用，光标停在后面接着写
+  const handleQuote = useCallback(
+    (quote: string) => fillInput(quote, ""),
+    [fillInput]
   );
 
   // 快捷按钮：发一句话，同时告诉服务端这是哪种求助
@@ -173,11 +189,6 @@ export function ChatShell() {
   return (
     <>
       <div className="flex h-dvh w-full flex-row overflow-hidden">
-        {!(isArtifactVisible || isReadonly) && (
-          <aside className="hidden w-[26%] min-w-0 shrink-0 border-r bg-background lg:block">
-            <MaterialPane onAsk={handleAskMaterial} />
-          </aside>
-        )}
         <div
           className={cn(
             "flex min-w-0 flex-col bg-sidebar transition-[width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
@@ -239,18 +250,29 @@ export function ChatShell() {
         </div>
 
         {!isArtifactVisible && (
-          <aside className="hidden w-[34%] min-w-0 shrink-0 border-l bg-background lg:block">
-            <LearnerGraph
-              key={chatId}
-              onStartLearning={
-                isReadonly || status === "submitted" || status === "streaming"
-                  ? undefined
-                  : handleStartLearning
-              }
-              sessionId={chatId}
-            />
-          </aside>
+          <SideDrawer
+            graph={
+              <LearnerGraph
+                key={chatId}
+                onStartLearning={
+                  isReadonly || status === "submitted" || status === "streaming"
+                    ? undefined
+                    : handleStartLearning
+                }
+                sessionId={chatId}
+              />
+            }
+            material={<MaterialPane />}
+            showMaterial={!isReadonly}
+          />
         )}
+        <SelectionMenu
+          disabled={
+            isReadonly || status === "submitted" || status === "streaming"
+          }
+          onAsk={handleAsk}
+          onQuote={handleQuote}
+        />
 
         <Artifact
           addToolApprovalResponse={addToolApprovalResponse}

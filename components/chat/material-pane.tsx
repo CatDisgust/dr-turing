@@ -2,50 +2,36 @@
 
 import {
   type ChangeEvent,
-  type MouseEvent,
   useCallback,
+  useEffect,
   useRef,
   useState,
 } from "react";
+import type { PDFDocumentProxy } from "unpdf/pdfjs";
 
-// 左边的课件：学生打开自己电脑上的 PDF，只在浏览器里读出文字，不上传（课件有版权）。
-// 划一句，点“问这句”，带着原文和页码发给导师
+// 课件：学生打开自己电脑上的 PDF，在浏览器里按原样画出来，不上传（课件有版权）。
+// 每页是一张画布加一层透明文字层，所以能照常划词；划词菜单见 selection-menu.tsx
 
-const MAX_QUOTE = 600;
-
-type Page = { page: number; text: string };
-type Picked = { text: string; page: number; top: number; left: number };
-
-async function readPdf(file: File): Promise<Page[]> {
-  const { getDocumentProxy } = await import("unpdf");
-  const pdf = await getDocumentProxy(new Uint8Array(await file.arrayBuffer()));
-  const numbers = Array.from({ length: pdf.numPages }, (_, i) => i + 1);
-  return Promise.all(
-    numbers.map(async (page) => {
-      const content = await (await pdf.getPage(page)).getTextContent();
-      let text = "";
-      for (const item of content.items) {
-        if ("str" in item) {
-          text += item.str + (item.hasEOL ? "\n" : "");
-        }
-      }
-      return { page, text: text.trim() };
-    })
-  );
-}
-
-export function askText(quote: string, page: number) {
-  const clipped =
-    quote.length > MAX_QUOTE ? `${quote.slice(0, MAX_QUOTE)}…` : quote;
-  return `「${clipped}」（课件第 ${page} 页）这句是什么意思？`;
-}
-
-export function MaterialPane({ onAsk }: { onAsk: (text: string) => void }) {
+export function MaterialPane() {
   const [fileName, setFileName] = useState("");
-  const [pages, setPages] = useState<Page[]>([]);
+  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
+  const [ratio, setRatio] = useState(0.75);
   const [error, setError] = useState("");
-  const [picked, setPicked] = useState<Picked | null>(null);
+  const [width, setWidth] = useState(0);
   const boxRef = useRef<HTMLDivElement>(null);
+
+  // 侧拉框宽度一变，页面按新宽度重画
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) {
+      return;
+    }
+    const observer = new ResizeObserver(([entry]) => {
+      setWidth(Math.floor(entry.contentRect.width));
+    });
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, []);
 
   const onFile = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -53,55 +39,28 @@ export function MaterialPane({ onAsk }: { onAsk: (text: string) => void }) {
       return;
     }
     setError("");
-    setPicked(null);
     setFileName(file.name);
     try {
-      setPages(await readPdf(file));
+      const { getDocumentProxy } = await import("unpdf");
+      const doc = await getDocumentProxy(
+        new Uint8Array(await file.arrayBuffer())
+      );
+      const first = (await doc.getPage(1)).getViewport({ scale: 1 });
+      setRatio(first.height / first.width);
+      setPdf(doc);
     } catch (e) {
-      setPages([]);
+      setPdf(null);
       setError(`读不出这份 PDF：${e instanceof Error ? e.message : String(e)}`);
     }
   }, []);
 
-  const onMouseUp = useCallback((_: MouseEvent<HTMLDivElement>) => {
-    const selection = window.getSelection();
-    const text = selection?.toString().trim() ?? "";
-    const box = boxRef.current;
-    if (!(selection && box) || text === "" || selection.rangeCount === 0) {
-      setPicked(null);
-      return;
-    }
-    const anchor = selection.anchorNode;
-    const pageEl = (
-      anchor instanceof Element ? anchor : anchor?.parentElement
-    )?.closest<HTMLElement>("[data-page]");
-    const rect = selection.getRangeAt(0).getBoundingClientRect();
-    const boxRect = box.getBoundingClientRect();
-    setPicked({
-      left: Math.max(0, rect.left - boxRect.left),
-      page: Number(pageEl?.dataset.page ?? 1),
-      text,
-      top: rect.bottom - boxRect.top + box.scrollTop + 4,
-    });
-  }, []);
-
-  const ask = useCallback(() => {
-    if (!picked) {
-      return;
-    }
-    onAsk(askText(picked.text, picked.page));
-    setPicked(null);
-    window.getSelection()?.removeAllRanges();
-  }, [onAsk, picked]);
-
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b px-3 py-2 text-sm">
-        <span className="font-medium">课件</span>
         <span className="truncate text-muted-foreground text-xs">
-          {fileName || "打开本地 PDF，只在浏览器里读，不上传"}
+          {fileName || "打开本地 PDF，只在浏览器里显示，不上传"}
         </span>
-        <label className="ml-auto cursor-pointer rounded-md border px-2 py-1 text-xs hover:bg-muted">
+        <label className="ml-auto shrink-0 cursor-pointer rounded-md border px-2 py-1 text-xs hover:bg-muted">
           打开
           <input
             accept="application/pdf"
@@ -112,46 +71,148 @@ export function MaterialPane({ onAsk }: { onAsk: (text: string) => void }) {
           />
         </label>
       </div>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 划词只能在文字区域上监听 mouseup */}
-      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: 同上 */}
       <div
-        className="relative min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm leading-relaxed"
-        data-testid="material-text"
-        onMouseUp={onMouseUp}
-        ref={boxRef}
+        className="min-h-0 flex-1 overflow-y-auto bg-muted/40 p-3"
+        data-testid="material-pages"
       >
-        {error ? <p className="text-destructive">{error}</p> : null}
-        {pages.length === 0 && !error ? (
-          <p className="text-muted-foreground">
-            打开一份课件后，划一句话，点“问这句”就能问导师。
-          </p>
-        ) : null}
-        {pages.map(({ page, text }) => (
-          <section className="mb-6" data-page={page} key={page}>
-            <div className="mb-1 text-muted-foreground text-xs">
-              第 {page} 页
-            </div>
-            <p className="whitespace-pre-wrap">{text || "（这页没有文字）"}</p>
-          </section>
-        ))}
-        {picked ? (
-          <button
-            className="absolute z-10 rounded-md bg-primary px-2 py-1 text-primary-foreground text-xs shadow"
-            data-testid="ask-selection"
-            onClick={ask}
-            onMouseUp={stop}
-            style={{ left: picked.left, top: picked.top }}
-            type="button"
-          >
-            问这句
-          </button>
-        ) : null}
+        <div ref={boxRef}>
+          {error ? <p className="text-destructive text-sm">{error}</p> : null}
+          {pdf || error ? null : (
+            <p className="text-muted-foreground text-sm">
+              打开一份课件后，选中一句话，点“问这句”问导师，或“引用回复”带进输入框。
+            </p>
+          )}
+          {pdf && width > 0
+            ? Array.from({ length: pdf.numPages }, (_, i) => i + 1).map((n) => (
+                <PdfPage
+                  key={n}
+                  pageNumber={n}
+                  pdf={pdf}
+                  ratio={ratio}
+                  width={width}
+                />
+              ))
+            : null}
+        </div>
       </div>
     </div>
   );
 }
 
-// 点按钮本身的 mouseup 不能冒泡到文字区，否则选区被当成空的、按钮先消失
-function stop(event: MouseEvent) {
-  event.stopPropagation();
+// 一页：滚到附近才画，省得几十页一起画
+function PdfPage({
+  pdf,
+  pageNumber,
+  width,
+  ratio,
+}: {
+  pdf: PDFDocumentProxy;
+  pageNumber: number;
+  width: number;
+  ratio: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const [near, setNear] = useState(false);
+  const [height, setHeight] = useState(Math.round(width * ratio));
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setNear(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "800px 0px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const textBox = textRef.current;
+    if (!(near && canvas && textBox)) {
+      return;
+    }
+    let cancelled = false;
+    let cancel = () => {
+      cancelled = true;
+    };
+    (async () => {
+      const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({
+        scale: width / page.getViewport({ scale: 1 }).width,
+      });
+      if (cancelled) {
+        return;
+      }
+      setScale(viewport.scale);
+      setHeight(Math.round(viewport.height));
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(viewport.width * dpr);
+      canvas.height = Math.floor(viewport.height * dpr);
+      const context = canvas.getContext("2d");
+      if (!context) {
+        return;
+      }
+      const task = page.render({
+        canvas,
+        canvasContext: context,
+        transform: dpr === 1 ? undefined : [dpr, 0, 0, dpr, 0, 0],
+        viewport,
+      });
+      const { TextLayer } = await (await import("unpdf")).getResolvedPDFJS();
+      textBox.replaceChildren();
+      const layer = new TextLayer({
+        container: textBox,
+        textContentSource: page.streamTextContent(),
+        viewport,
+      });
+      cancel = () => {
+        cancelled = true;
+        task.cancel();
+        layer.cancel();
+      };
+      await Promise.all([task.promise, layer.render()]).catch(() => {
+        /* 宽度变了被取消，下一轮重画 */
+      });
+    })();
+    return () => cancel();
+  }, [near, pdf, pageNumber, width]);
+
+  return (
+    <div
+      className="relative mb-3 overflow-hidden bg-white shadow-sm"
+      data-page={pageNumber}
+      ref={ref}
+      style={
+        {
+          "--scale-round-x": "1px",
+          "--scale-round-y": "1px",
+          "--total-scale-factor": scale,
+          height,
+          width,
+        } as React.CSSProperties
+      }
+    >
+      <canvas
+        className="absolute inset-0"
+        ref={canvasRef}
+        style={{ height, width }}
+      />
+      <div
+        className="textLayer"
+        data-quote-source={`课件第 ${pageNumber} 页`}
+        ref={textRef}
+      />
+    </div>
+  );
 }

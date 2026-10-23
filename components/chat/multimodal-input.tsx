@@ -93,8 +93,11 @@ function PureMultimodalInput({
     ""
   );
 
+  // 只在打开页面时恢复上次没发的草稿；之后再跑会在发送清空的瞬间读到旧的 DOM 值，把刚发的话又填回去
+  const restoredDraft = useRef(false);
   useEffect(() => {
-    if (textareaRef.current) {
+    if (textareaRef.current && !restoredDraft.current) {
+      restoredDraft.current = true;
       const domValue = textareaRef.current.value;
       const finalValue = domValue || localStorageInput || "";
       setInput(finalValue);
