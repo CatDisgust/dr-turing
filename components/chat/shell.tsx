@@ -30,7 +30,7 @@ import { submitEditedMessage } from "./message-editor";
 import { Messages } from "./messages";
 import { MultimodalInput } from "./multimodal-input";
 import { QuickActions } from "./quick-actions";
-import { SelectionMenu } from "./selection-menu";
+import { ASK_QUESTION, SelectionMenu } from "./selection-menu";
 import { SideDrawer } from "./side-drawer";
 
 export function ChatShell() {
@@ -124,32 +124,31 @@ export function ChatShell() {
     setInput("");
   }, [editingMessage, input, regenerate, setInput, setMessages]);
 
-  // 划词“问这句”（课件或导师回复）：和首页示例问题一样，直接发出去
-  const handleAskMaterial = useCallback(
-    (text: string) => {
-      window.history.pushState(
-        {},
-        "",
-        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/chat/${chatId}`
-      );
-      sendMessage({ parts: [{ text, type: "text" }], role: "user" });
-    },
-    [chatId, sendMessage]
-  );
-
-  // 划词“引用回复”：引用放进输入框开头，学生接着写
-  const handleQuote = useCallback(
-    (quote: string) => {
-      setInput(input ? `${quote}\n${input}` : `${quote}\n`);
+  // 划词后把引用放进输入框开头，学生改好再发；select 给出要选中的那段（方便直接改写）
+  const fillInput = useCallback(
+    (quote: string, question: string) => {
+      const head = `${quote}${question}`;
+      const text = input ? `${head}\n${input}` : head;
+      setInput(text);
       const box = document.querySelector<HTMLTextAreaElement>(
         '[data-testid="multimodal-input"]'
       );
       setTimeout(() => {
         box?.focus();
-        box?.setSelectionRange(box.value.length, box.value.length);
+        box?.setSelectionRange(quote.length, head.length);
       }, 0);
     },
     [input, setInput]
+  );
+  // “问这句”：带上默认问题并选中它，直接回车就问“这句是什么意思”，打字就换成自己的问题
+  const handleAsk = useCallback(
+    (quote: string) => fillInput(quote, ASK_QUESTION),
+    [fillInput]
+  );
+  // “引用回复”：只放引用，光标停在后面接着写
+  const handleQuote = useCallback(
+    (quote: string) => fillInput(quote, ""),
+    [fillInput]
   );
 
   // 快捷按钮：发一句话，同时告诉服务端这是哪种求助
@@ -271,7 +270,7 @@ export function ChatShell() {
           disabled={
             isReadonly || status === "submitted" || status === "streaming"
           }
-          onAsk={handleAskMaterial}
+          onAsk={handleAsk}
           onQuote={handleQuote}
         />
 

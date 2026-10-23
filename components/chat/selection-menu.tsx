@@ -2,7 +2,7 @@
 
 import { type MouseEvent, useCallback, useEffect, useState } from "react";
 
-// 划词菜单：课件和导师回复里选中一段，弹出“问这句 / 引用回复”。
+// 划词菜单：课件和导师回复里选中一段，弹出“问这句 / 引用回复”，都是放进输入框，改好再发。
 // 可选的区域用 data-quote-source 标出来源（“课件第 3 页”“导师刚才说的”），选区两端必须在同一块里
 
 const MAX_QUOTE = 600;
@@ -17,9 +17,7 @@ export function quoteText(quote: string, source: string) {
   return `「${clip(quote)}」（${source}）`;
 }
 
-export function askText(quote: string, source: string) {
-  return `${quoteText(quote, source)}这句是什么意思？`;
-}
+export const ASK_QUESTION = "这句是什么意思？";
 
 function sourceOf(node: Node | null) {
   const el = node instanceof Element ? node : node?.parentElement;
@@ -82,7 +80,7 @@ export function SelectionMenu({
 
   const ask = useCallback(() => {
     if (picked) {
-      onAsk(askText(picked.text, picked.source));
+      onAsk(quoteText(picked.text, picked.source));
       done();
     }
   }, [done, onAsk, picked]);
