@@ -234,42 +234,104 @@ export function seedScene2(
   if (!target) {
     return null;
   }
-  const { [target.id]: _old, ...others } = state.nodes;
+  const yesterday = now.getTime() - DAY;
+  return {
+    state: replayPoint(graph, state, target.id, [
+      attempt("seed-demo-1", yesterday, {
+        correct: true,
+        d: 1,
+        hinted: false,
+        producedStep: true,
+        questionKind: "check",
+        quote: `（预置）昨天自己讲清了「${target.name}」：两个人同时读到旧值，后写的把先写的盖掉了`,
+        type: "check_correct",
+      }),
+      attempt("seed-demo-1", yesterday + 5 * 60_000, {
+        correct: true,
+        d: 1,
+        hinted: false,
+        producedStep: true,
+        questionKind: "variant",
+        quote: "（预置）昨天的变式题也独立答对：库存扣减一样会少扣",
+        type: "transfer_correct",
+      }),
+    ]),
+    target,
+  };
+}
+
+// 演示视频的“第二天”（用户 2026-10-23 定：课程内容全程只讲死锁）：
+// 把演示学生的「死锁」换成“昨天学过”的样子——很确定却答错、换个讲法后独立答对检查题和变式题，半亮，错误想法已修正。
+// 今天再问死锁，和画面二一样出复习题，独立答对就全亮。只替换这一个点，今天在死锁上的真实记录一起换掉
+const NEXT_DAY_WRONG = {
+  answer: "（预置）昨天的回答：还会。只要加了锁，就可能死锁",
+  idea: "只要加锁就会死锁",
+};
+
+export function seedNextDay(
+  graph: CourseGraph,
+  state: LearnerState,
+  now: Date
+): { state: LearnerState; target: KnowledgePoint } | null {
+  const target = demoTarget(graph);
+  if (!target) {
+    return null;
+  }
+  const yesterday = now.getTime() - DAY;
+  return {
+    state: replayPoint(graph, state, target.id, [
+      attempt("seed-next-day", yesterday, {
+        confidence: "sure",
+        correct: false,
+        d: 0,
+        hinted: false,
+        misconception: NEXT_DAY_WRONG.idea,
+        producedStep: false,
+        questionKind: "check",
+        quote: NEXT_DAY_WRONG.answer,
+        type: "check_wrong",
+      }),
+      attempt("seed-next-day", yesterday + 5 * 60_000, {
+        correct: true,
+        d: 1,
+        hinted: false,
+        producedStep: true,
+        questionKind: "check",
+        quote:
+          "（预置）换个讲法后自己讲清了：按同一个顺序加锁，等待绕不成圈，就不会死锁",
+        type: "check_correct",
+      }),
+      attempt("seed-next-day", yesterday + 10 * 60_000, {
+        correct: true,
+        d: 1,
+        hinted: false,
+        producedStep: true,
+        questionKind: "variant",
+        quote: "（预置）昨天的变式题也独立答对：三个事务互相等，一样是死锁",
+        type: "transfer_correct",
+      }),
+    ]),
+    target,
+  };
+}
+
+// 把一个点的记录整份换成给定的证据重放出来；其他点不动，没答完的题清掉，免得接着批改旧题
+function replayPoint(
+  graph: CourseGraph,
+  state: LearnerState,
+  kpId: string,
+  attempts: Attempt[]
+): LearnerState {
+  const { [kpId]: _old, ...others } = state.nodes;
   let next: LearnerState = {
     ...state,
     nodes: others,
     pendingQuestion: undefined,
   };
-  const yesterday = now.getTime() - DAY;
-  next = applyEvidence(
-    next,
-    graph,
-    target.id,
-    attempt("seed-demo-1", yesterday, {
-      correct: true,
-      d: 1,
-      hinted: false,
-      producedStep: true,
-      questionKind: "check",
-      quote: `（预置）昨天自己讲清了「${target.name}」：两个人同时读到旧值，后写的把先写的盖掉了`,
-      type: "check_correct",
-    })
-  );
-  next = applyEvidence(
-    next,
-    graph,
-    target.id,
-    attempt("seed-demo-1", yesterday + 5 * 60_000, {
-      correct: true,
-      d: 1,
-      hinted: false,
-      producedStep: true,
-      questionKind: "variant",
-      quote: "（预置）昨天的变式题也独立答对：库存扣减一样会少扣",
-      type: "transfer_correct",
-    })
-  );
-  return { state: next, target };
+  for (const a of attempts) {
+    next = applyEvidence(next, graph, kpId, a);
+  }
+  return next;
 }
 
 // 课程里各课的知识点，按课的顺序；课内先放前置，后放依赖它的点（点亮时先亮前置，看着自然）

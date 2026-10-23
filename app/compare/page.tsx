@@ -20,6 +20,8 @@ type SeedResult = {
   scene2: { name: string; M: number; O: number } | null;
 };
 
+type NextDayResult = { name: string; M: number; O: number; light: string };
+
 const FIELD_LABELS: Record<ComparedField, string> = {
   check_misconception_first: "先查误解吗",
   disclosure_level: "讲到多少",
@@ -85,12 +87,26 @@ export default function ComparePage() {
   const [error, setError] = useState("");
   const [seed, setSeed] = useState<SeedResult | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const [nextDay, setNextDay] = useState<NextDayResult | null>(null);
 
   const writeSeed = useCallback(async () => {
     setBusy("seed");
     setError("");
     try {
       setSeed(await post<SeedResult>("/api/demo/seed", {}));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy("");
+    }
+  }, []);
+
+  // 演示视频的“第二天”：演示学生的死锁变成昨天学过、半亮
+  const writeNextDay = useCallback(async () => {
+    setBusy("next-day");
+    setError("");
+    try {
+      setNextDay(await post<NextDayResult>("/api/demo/next-day", {}));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -147,6 +163,15 @@ export default function ComparePage() {
           {busy === "seed" ? "写入中…" : "写入预置数据"}
         </button>
         <button
+          className="rounded-md border px-3 py-1.5 disabled:opacity-50"
+          data-testid="next-day"
+          disabled={busy !== ""}
+          onClick={writeNextDay}
+          type="button"
+        >
+          {busy === "next-day" ? "写入中…" : "写入“第二天”（死锁）"}
+        </button>
+        <button
           className="rounded-md bg-primary px-3 py-1.5 text-primary-foreground disabled:opacity-50"
           data-testid="compare-once"
           disabled={busy !== ""}
@@ -184,6 +209,15 @@ export default function ComparePage() {
           {seed.scene2
             ? `画面二：演示学生的「${seed.scene2.name}」昨天已半亮（M ${seed.scene2.M.toFixed(2)}，O ${seed.scene2.O.toFixed(2)}），今天问到它会出复习题，独立答对就全亮。`
             : "画面二：图谱里找不到「丢失更新」，没写。"}
+        </p>
+      ) : null}
+
+      {nextDay ? (
+        <p className="mb-4 text-muted-foreground" data-testid="next-day-result">
+          “第二天”已写入：演示学生的「{nextDay.name}」昨天学过（M{" "}
+          {nextDay.M.toFixed(2)}，O {nextDay.O.toFixed(2)}，
+          {nextDay.light === "half" ? "半亮" : nextDay.light}
+          ），今天问到它会出复习题，独立答对就全亮。
         </p>
       ) : null}
 
