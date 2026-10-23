@@ -518,6 +518,7 @@ export function GraphPanel({
   lights,
   progress,
   focusId,
+  plainTitles,
 }: {
   graph: CourseGraph;
   selectedId: string | null;
@@ -527,6 +528,8 @@ export function GraphPanel({
   progress?: Record<string, number>;
   // 变了就把视野移到这个点上
   focusId?: string;
+  // 块标题不加“第 N 课”（我的星图）
+  plainTitles?: boolean;
 }) {
   // 亮度比上次高的点闪一下（点亮动画，D12）
   const previous = useRef<Record<string, Light> | undefined>(undefined);
@@ -582,7 +585,10 @@ export function GraphPanel({
     return () => observer.disconnect();
   }, [draw]);
 
-  const layout = useMemo(() => layoutGraph(graph), [graph]);
+  const layout = useMemo(
+    () => layoutGraph(graph, { plainTitles }),
+    [graph, plainTitles]
+  );
   const isLit = useCallback(
     (id: string) => lights?.[id] === "half" || lights?.[id] === "full",
     [lights]

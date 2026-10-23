@@ -1,36 +1,54 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { GraphPanel } from "@/components/graph/graph-panel";
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { FULL_O, HALF_M } from "@/lib/learner/config";
-import type { Ability, LearnerState, PersonalConcept } from "@/lib/types";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  type MergeTarget,
+  mergeCandidates,
+  type Star,
+  type StarMap,
+} from "@/lib/learner/star-map";
+import type { Ability } from "@/lib/types";
 
-// 个人图谱：这门课点亮了多少、三项底层能力、课外概念（未锚定，可以删）。
-// 每一项都能看到是从哪几条证据来的
+// 我的星图（用户 2026-10-23 看过样稿说“继续”）：跨所有课，只画小明碰过的概念。
+// 左边星空，右边点开一颗星看凭什么；课外概念能纠错：和另一个是同一个（能拆开）、记错了
 
-type Personal = { abilities: Ability[]; concepts: PersonalConcept[] };
+type MapData = StarMap & { abilities: Ability[] };
 
 const percent = (x: number) => `${Math.round(x * 100)}%`;
 
-export function PersonalPanel({
-  state,
-  total,
-}: {
-  state: LearnerState | null;
-  total: number;
-}) {
+const STATUS: Record<Star["light"], string> = {
+  dashed: "这次问到了，还没答过题",
+  full: "真会了：隔天自己答对过",
+  gray: "碰过，还没看懂",
+  half: "看懂了，还没隔天自己答对",
+};
+
+const HOW: Record<Star["evidence"][number]["how"], string> = {
+  answer: "答题",
+  chat: "聊到",
+  mention: "提到",
+};
+
+const day = (at: string) =>
+  new Date(at).toLocaleDateString("zh-CN", { day: "numeric", month: "long" });
+
+export function PersonalPanel() {
   const [open, setOpen] = useState(false);
-  const [data, setData] = useState<Personal | null>(null);
+  const [data, setData] = useState<MapData | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [merging, setMerging] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    fetch("/api/personal")
+    fetch("/api/personal/map")
       .then((res) => res.json())
       .then(setData)
       .catch(() => setData(null));
@@ -43,16 +61,55 @@ export function PersonalPanel({
   }, [open, load]);
 
   const show = useCallback(() => setOpen(true), []);
-  const remove = useCallback(
-    (id: string) => {
-      fetch(`/api/personal/concepts/${id}`, { method: "DELETE" }).then(load);
+  const select = useCallback((id: string | null) => {
+    setSelectedId(id);
+    setMerging(false);
+  }, []);
+  const toggleMerge = useCallback(() => setMerging((m) => !m), []);
+
+  const star = selectedId ? data?.stars[selectedId] : undefined;
+
+  const mergeInto = useCallback(
+    (into: MergeTarget) => {
+      if (!star) {
+        return;
+      }
+      fetch(`/api/personal/concepts/${star.id}/merge`, {
+        body: JSON.stringify({ into: into.id }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }).then(() => {
+        setNotice(`已把「${star.name}」并进「${into.name}」`);
+        setSelectedId(into.id);
+        setMerging(false);
+        load();
+      });
+    },
+    [star, load]
+  );
+  const split = useCallback(
+    (mergeId: string, name: string) => {
+      fetch(`/api/personal/merges/${mergeId}`, { method: "DELETE" }).then(
+        () => {
+          setNotice(`已拆开，「${name}」又单独算了`);
+          load();
+        }
+      );
     },
     [load]
   );
-
-  const nodes = Object.values(state?.nodes ?? {});
-  const full = nodes.filter((n) => n.O >= FULL_O).length;
-  const half = nodes.filter((n) => n.M >= HALF_M && n.O < FULL_O).length;
+  const markWrong = useCallback(() => {
+    if (!star) {
+      return;
+    }
+    fetch(`/api/personal/concepts/${star.id}`, { method: "DELETE" }).then(
+      () => {
+        setNotice(`记下了：「${star.name}」是记错的，不再显示`);
+        setSelectedId(null);
+        load();
+      }
+    );
+  }, [star, load]);
 
   return (
     <>
@@ -63,138 +120,296 @@ export function PersonalPanel({
         size="sm"
         variant="outline"
       >
-        我的个人图谱
+        我的星图
       </Button>
-      <Sheet onOpenChange={setOpen} open={open}>
-        <SheetContent
-          className="flex flex-col gap-4 overflow-y-auto"
+      <Dialog onOpenChange={setOpen} open={open}>
+        <DialogContent
+          className="flex h-[92vh] w-[96vw] max-w-none gap-0 overflow-hidden bg-[#050506] p-0 text-stone-100 sm:max-w-none"
           data-testid="personal-panel"
         >
-          <SheetHeader>
-            <SheetTitle>我的个人图谱</SheetTitle>
-            <SheetDescription>
-              每次结束学习后自动更新。数都是从你的答题记录算出来的，点开能看到证据。
-            </SheetDescription>
-          </SheetHeader>
-
-          <section className="px-4 text-sm">
-            <h4 className="mb-1 font-medium">这门课</h4>
-            <p className="text-muted-foreground text-xs">
-              {total} 个知识点里，全亮 {full} 个，半亮 {half} 个。
-            </p>
-          </section>
-
-          <section className="px-4 text-sm" data-testid="abilities">
-            <h4 className="mb-2 font-medium">底层能力</h4>
-            <ul className="flex flex-col gap-3">
-              {(data?.abilities ?? []).map((a) => (
-                <AbilityRow ability={a} key={a.key} />
-              ))}
-            </ul>
-          </section>
-
-          <section className="px-4 pb-4 text-sm" data-testid="concepts">
-            <h4 className="mb-1 font-medium">课外概念</h4>
-            <p className="mb-2 text-muted-foreground text-xs">
-              对话里提到、但不在课程图谱里的概念，标“未锚定”。记错了可以删掉。
-            </p>
-            {data && data.concepts.length === 0 ? (
-              <p className="text-muted-foreground text-xs">还没有。</p>
+          <div className="relative min-w-0 flex-1">
+            <div className="pointer-events-none absolute top-5 left-6 z-[5]">
+              <DialogTitle className="font-semibold text-2xl tracking-wide">
+                我的星图
+              </DialogTitle>
+              <DialogDescription className="mt-2 text-stone-400 text-xs">
+                你学过、聊过的所有概念，不分哪门课。亮度是答题答出来的，这里只能看。
+              </DialogDescription>
+            </div>
+            {data && data.graph.points.length > 0 ? (
+              <GraphPanel
+                graph={data.graph}
+                lights={data.lights}
+                onSelect={select}
+                plainTitles
+                progress={data.progress}
+                selectedId={selectedId}
+              />
+            ) : (
+              <p className="p-6 pt-28 text-sm text-stone-400">
+                {data ? "还没有。学一会儿、聊一会儿，这里就会出现星星。" : ""}
+              </p>
+            )}
+          </div>
+          <aside
+            className="flex w-[380px] shrink-0 flex-col gap-5 overflow-y-auto border-white/10 border-l bg-[#0b0b0e] p-6 pt-14"
+            data-testid="star-detail"
+          >
+            {notice ? (
+              <p
+                className="rounded-lg bg-white/5 px-3 py-2 text-stone-200 text-xs"
+                data-testid="star-notice"
+              >
+                {notice}
+              </p>
             ) : null}
-            <ul className="flex flex-col gap-2">
-              {(data?.concepts ?? []).map((c) => (
-                <ConceptRow concept={c} key={c.id} onRemove={remove} />
-              ))}
-            </ul>
-          </section>
-        </SheetContent>
-      </Sheet>
+            {star ? (
+              <StarDetail
+                candidates={
+                  merging && data ? mergeCandidates(data, star.id) : []
+                }
+                merging={merging}
+                onMarkWrong={markWrong}
+                onMerge={mergeInto}
+                onSelect={select}
+                onSplit={split}
+                onToggleMerge={toggleMerge}
+                star={star}
+              />
+            ) : (
+              <Overview abilities={data?.abilities ?? []} />
+            )}
+          </aside>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
 
-function AbilityRow({ ability: a }: { ability: Ability }) {
+function Overview({ abilities }: { abilities: Ability[] }) {
   return (
-    <li>
-      <div className="flex items-baseline justify-between text-xs">
-        <span className="font-medium text-sm">{a.label}</span>
-        <span className="text-muted-foreground">
-          {a.certain
-            ? `${percent(a.value)}（${percent(a.low)}–${percent(a.high)}）`
-            : "还不确定"}
-          {` · ${a.k}/${a.n} 条`}
-        </span>
-      </div>
-      <div className="relative mt-1 h-1.5 rounded bg-muted">
-        <div
-          className="absolute h-full rounded bg-foreground/20"
-          style={{
-            left: percent(a.low),
-            width: percent(a.high - a.low),
-          }}
-        />
-        <div
-          className={
-            a.certain
-              ? "absolute h-full w-1 rounded bg-foreground"
-              : "absolute h-full w-1 rounded bg-muted-foreground"
-          }
-          style={{ left: percent(a.value) }}
-        />
-      </div>
-      {a.evidence.length > 0 ? (
-        <details className="mt-1 text-xs">
-          <summary className="cursor-pointer text-muted-foreground">
-            证据
-          </summary>
-          <ul className="mt-1 flex flex-col gap-1">
-            {a.evidence.map((e) => (
-              <li key={`${e.at}-${e.quote}`}>
-                <span
-                  className={e.success ? "text-emerald-600" : "text-red-600"}
-                >
-                  {e.success ? "✓" : "✗"}
-                </span>{" "}
-                「{e.quote}」
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-    </li>
+    <>
+      <p className="text-sm text-stone-400 leading-relaxed">
+        点一颗星，看系统凭什么认为你见过它：哪次对话、你原话怎么说的。
+      </p>
+      <section className="flex flex-col gap-3" data-testid="abilities">
+        <h3 className="font-medium text-sm text-stone-300">底层能力</h3>
+        {abilities.map((a) => (
+          <div key={a.key}>
+            <div className="flex items-baseline justify-between text-xs">
+              <span className="text-sm">{a.label}</span>
+              <span className="text-stone-400">
+                {a.certain
+                  ? `${percent(a.value)}（${percent(a.low)}–${percent(a.high)}）`
+                  : "还不确定"}
+                {` · ${a.k}/${a.n} 条`}
+              </span>
+            </div>
+            <div className="relative mt-1 h-1.5 rounded bg-white/10">
+              <div
+                className="absolute h-full rounded bg-white/20"
+                style={{
+                  left: percent(a.low),
+                  width: percent(a.high - a.low),
+                }}
+              />
+              <div
+                className={
+                  a.certain
+                    ? "absolute h-full w-1 rounded bg-white"
+                    : "absolute h-full w-1 rounded bg-stone-500"
+                }
+                style={{ left: percent(a.value) }}
+              />
+            </div>
+          </div>
+        ))}
+      </section>
+    </>
   );
 }
 
-function ConceptRow({
-  concept: c,
-  onRemove,
+function StarDetail({
+  star,
+  merging,
+  candidates,
+  onToggleMerge,
+  onMerge,
+  onSplit,
+  onMarkWrong,
+  onSelect,
 }: {
-  concept: PersonalConcept;
-  onRemove: (id: string) => void;
+  star: Star;
+  merging: boolean;
+  candidates: MergeTarget[];
+  onToggleMerge: () => void;
+  onMerge: (into: MergeTarget) => void;
+  onSplit: (mergeId: string, name: string) => void;
+  onMarkWrong: () => void;
+  onSelect: (id: string | null) => void;
 }) {
-  const remove = useCallback(() => onRemove(c.id), [c.id, onRemove]);
+  const outside = star.kind === "outside";
+  const back = useCallback(() => onSelect(null), [onSelect]);
   return (
-    <li className="rounded-md border border-dashed p-2 text-xs">
-      <div className="flex items-center gap-2">
-        <span className="font-medium text-sm">{c.name}</span>
-        <span className="rounded bg-muted px-1">未锚定</span>
-        <span className="rounded bg-muted px-1">
-          {c.level === "claimed" ? "自称会" : "接触过"}
-        </span>
-        <button
-          className="ml-auto text-muted-foreground hover:text-red-600"
-          onClick={remove}
-          type="button"
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-2">
+        <span
+          className={
+            outside ? "text-sky-300 text-xs" : "text-amber-200 text-xs"
+          }
         >
-          删掉
-        </button>
+          {star.where}
+        </span>
+        <h2 className="font-semibold text-2xl" data-testid="star-name">
+          {star.name}
+        </h2>
+        {star.aliases.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-stone-400">也叫</span>
+            {star.aliases.map((a) => (
+              <span className="rounded-full bg-white/10 px-2 py-0.5" key={a}>
+                {a}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <span className="text-sm text-stone-300">
+          {outside
+            ? `聊过 ${star.evidence.length} 次（课外概念没有检查题，不打分）`
+            : STATUS[star.light]}
+        </span>
       </div>
-      <p className="mt-1">{c.definition}</p>
-      <ul className="mt-1 text-muted-foreground">
-        {c.evidence.map((e) => (
-          <li key={`${e.at}-${e.quote}`}>「{e.quote}」</li>
+
+      <p className="text-sm text-stone-200 leading-relaxed">
+        {star.definition}
+      </p>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="font-medium text-stone-400 text-xs">凭什么</h3>
+        {star.evidence.map((e) => (
+          <div
+            className="flex flex-col gap-1 rounded-lg bg-white/5 px-3 py-2"
+            key={`${e.at}-${e.quote}`}
+          >
+            <span className="text-sky-300 text-xs">
+              {day(e.at)} · {HOW[e.how]}
+              {e.correct === undefined ? "" : e.correct ? " · 答对" : " · 答错"}
+            </span>
+            <span className="text-sm leading-relaxed">你：「{e.quote}」</span>
+          </div>
         ))}
-      </ul>
-    </li>
+      </section>
+
+      {star.merged.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <h3 className="font-medium text-stone-400 text-xs">
+            你合并进来的课外概念
+          </h3>
+          {star.merged.map((m) => (
+            <div className="flex items-center gap-2 text-sm" key={m.mergeId}>
+              <span>「{m.name}」</span>
+              <SplitButton item={m} onSplit={onSplit} />
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      {outside ? (
+        <div className="flex gap-2 border-white/10 border-t pt-4">
+          <Button
+            className="flex-1"
+            data-testid="merge-open"
+            onClick={onToggleMerge}
+            variant="outline"
+          >
+            和另一个是同一个
+          </Button>
+          <Button
+            className="flex-1 text-red-300"
+            data-testid="mark-wrong"
+            onClick={onMarkWrong}
+            variant="outline"
+          >
+            记错了
+          </Button>
+        </div>
+      ) : null}
+
+      {merging ? (
+        <div className="flex flex-col gap-2 rounded-lg border border-white/10 p-3">
+          <span className="text-stone-400 text-xs">
+            「{star.name}
+            」和哪个是同一个？名字像的排在前面。并进课内知识点后，它就算那个知识点的出处，不改亮度
+          </span>
+          {candidates.length === 0 ? (
+            <span className="text-stone-500 text-xs">没找到可以合并的。</span>
+          ) : null}
+          {candidates.map((c) => (
+            <CandidateButton key={c.id} onMerge={onMerge} target={c} />
+          ))}
+        </div>
+      ) : null}
+
+      {outside ? null : (
+        <p className="text-stone-500 text-xs">
+          课内知识点的亮度只看你答题，这里改不了。
+        </p>
+      )}
+      <button
+        className="self-start text-stone-500 text-xs hover:text-stone-300"
+        onClick={back}
+        type="button"
+      >
+        ← 返回总览
+      </button>
+    </div>
+  );
+}
+
+function SplitButton({
+  item,
+  onSplit,
+}: {
+  item: Star["merged"][number];
+  onSplit: (mergeId: string, name: string) => void;
+}) {
+  const split = useCallback(
+    () => onSplit(item.mergeId, item.name),
+    [item, onSplit]
+  );
+  return (
+    <Button
+      className="ml-auto"
+      data-testid="split"
+      onClick={split}
+      size="sm"
+      variant="outline"
+    >
+      拆开
+    </Button>
+  );
+}
+
+function CandidateButton({
+  target: c,
+  onMerge,
+}: {
+  target: MergeTarget;
+  onMerge: (into: MergeTarget) => void;
+}) {
+  const merge = useCallback(() => onMerge(c), [c, onMerge]);
+  return (
+    <Button
+      className="h-auto justify-start whitespace-normal py-2 text-left"
+      data-testid="merge-candidate"
+      onClick={merge}
+      variant="outline"
+    >
+      {c.name}
+      <span className="text-stone-400">
+        {c.kind === "course" ? `　${c.where}` : "　课外"}
+        {c.aliases.length > 0 ? `，也叫 ${c.aliases.join("、")}` : ""}
+      </span>
+    </Button>
   );
 }

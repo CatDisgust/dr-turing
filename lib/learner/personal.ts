@@ -152,6 +152,15 @@ export function personalFromEvents(
       if (!ownName.has(e.conceptId) && p.name?.trim()) {
         ownName.set(e.conceptId, p.name.trim());
       }
+      // 学生把它并进了课程知识点（锚定）：出处算成提到那个知识点，只记出处，不动掌握度
+      if (!isPersonalId(root)) {
+        courseMentions[root] = [
+          ...(courseMentions[root] ?? []),
+          { at: e.at, quote: p.quote ?? "", sessionId: e.sessionId ?? "" },
+        ];
+        seen.add(e.conceptId);
+        continue;
+      }
       const old = concepts.get(root);
       const evidence = {
         at: e.at,
@@ -233,27 +242,30 @@ export function personalFromEvents(
       name: own,
     });
   }
-  // 学生合并过哪些（界面上可以拆开）
+  // 学生合并过哪些（界面上可以拆开）；并进课程知识点的记在 anchored 上
   const undone = new Set(
     events.filter((e) => e.type === "split").map((e) => e.payload.mergeId)
   );
+  const anchored: NonNullable<PersonalGraph["anchored"]> = {};
   for (const e of events) {
     if (e.type !== "merge" || !e.payload.from || undone.has(e.id)) {
       continue;
     }
-    const c = concepts.get(rootOf(e.conceptId, into));
+    const target = rootOf(e.conceptId, into);
+    const item = {
+      from: e.payload.from,
+      mergeId: e.id,
+      name: ownName.get(e.payload.from) ?? e.payload.from,
+    };
+    const c = concepts.get(target);
     if (c) {
-      c.merged = [
-        ...(c.merged ?? []),
-        {
-          from: e.payload.from,
-          mergeId: e.id,
-          name: ownName.get(e.payload.from) ?? e.payload.from,
-        },
-      ];
+      c.merged = [...(c.merged ?? []), item];
+    } else if (!isPersonalId(target)) {
+      anchored[target] = [...(anchored[target] ?? []), item];
     }
   }
   return {
+    anchored,
     concepts: [...concepts.values()],
     courseMentions,
     log,
@@ -452,7 +464,7 @@ export function identityEvents(
   return drafts;
 }
 
-// 学生纠错（下一个 PR 接界面）：“这两个是同一个”→ 合并；“记错了”→ 作废。都记成学生给的证据
+// 学生纠错：“这两个是同一个”→ 合并（into 可以是课程知识点，等于锚定）；“记错了”→ 作废。都记成学生给的证据
 export function mergeDraft(from: string, into: string) {
   return {
     conceptId: into,

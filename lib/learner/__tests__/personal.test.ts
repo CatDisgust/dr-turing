@@ -272,6 +272,36 @@ describe("个人知识库：先认人再记账", () => {
     ]);
   });
 
+  it("课外概念并进课程知识点（锚定）：出处算到知识点上，拆开又回到课外", () => {
+    let events = review([], [change({ name: "lost update 问题" })], "s1", T1);
+    const [merge] = stamp(
+      [mergeDraft("pc_1", "kp_lost")],
+      { now: T2, sessionId: null, studentId: "stu" },
+      () => "m1"
+    );
+    events = [...events, merge];
+    let g = personalFromEvents("stu", events);
+    expect(g.concepts).toHaveLength(0);
+    expect(g.courseMentions?.kp_lost).toEqual([
+      { at: T1, quote: "原话", sessionId: "s1" },
+    ]);
+    expect(g.anchored?.kp_lost).toEqual([
+      { from: "pc_1", mergeId: "m1", name: "lost update 问题" },
+    ]);
+    events = [
+      ...events,
+      ...stamp(
+        [splitDraft(merge)],
+        { now: T3, sessionId: null, studentId: "stu" },
+        () => "s1"
+      ),
+    ];
+    g = personalFromEvents("stu", events);
+    expect(g.concepts.map((c) => c.id)).toEqual(["pc_1"]);
+    expect(g.courseMentions?.kp_lost).toBeUndefined();
+    expect(g.anchored).toEqual({});
+  });
+
   it("旧数据（按名字认人的那版）导进日志，算出来一样", () => {
     const legacy = {
       concepts: [

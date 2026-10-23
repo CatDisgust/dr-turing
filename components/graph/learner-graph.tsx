@@ -132,7 +132,7 @@ export function LearnerGraph({
           ) : null}
         </div>
       ) : null}
-      <PersonalPanel state={state} total={graph.points.length} />
+      <PersonalPanel />
       {openPoint ? (
         <NodeDrawer
           node={state?.nodes[openPoint.id]}
