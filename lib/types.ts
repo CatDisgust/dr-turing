@@ -423,6 +423,8 @@ export type TutorPlan = {
 export type PersonalConcept = {
   id: string;
   name: string;
+  // 学生和 Claude 用过的其他叫法：认人时一起比，认出来了就记进来
+  aliases: string[];
   definition: string;
   // 未锚定；被复核作废的保留原因，不再显示
   status: "unanchored" | "invalidated";
@@ -436,6 +438,11 @@ export type PersonalConcept = {
 export type PersonalGraph = {
   studentId: string;
   concepts: PersonalConcept[];
+  // 学生在对话里顺口提到的课程知识点：kp id → 出处（只记出处，不动掌握度）。旧数据没有
+  courseMentions?: Record<
+    string,
+    { sessionId: string; quote: string; at: string }[]
+  >;
   // 每次复核的新增 / 更新 / 作废，带原话，只追加
   log: {
     at: string;
@@ -444,6 +451,33 @@ export type PersonalGraph = {
     conceptId: string;
     quote: string;
   }[];
+};
+
+// 个人知识库的原始记录（只追加，从不改、不删）：个人图谱整份从这里算（方案 ④ 证据日志）。
+// conceptId 是课外概念的编号 pc_N，或课程知识点的 id（学生顺口提到课程里的点，只记出处，不动掌握度）
+export type ConceptEventType =
+  | "mention" // 某次对话里提到了它
+  | "invalidate" // 记错了：复核或学生说的
+  | "merge" // 两个其实是同一个：from 并进 conceptId
+  | "split"; // 撤销一次合并
+export type ConceptEventPayload = {
+  name?: string;
+  definition?: string;
+  level?: PersonalConcept["level"];
+  quote?: string;
+  reason?: string;
+  from?: string; // merge：被并掉的那个
+  mergeId?: string; // split：撤销哪次合并
+  by?: "review" | "student";
+};
+export type ConceptEvent = {
+  id: string;
+  studentId: string;
+  conceptId: string;
+  sessionId: string | null;
+  type: ConceptEventType;
+  payload: ConceptEventPayload;
+  at: string;
 };
 
 // 复核给出的课外概念变更

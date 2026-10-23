@@ -20,6 +20,7 @@ import type { ArtifactKind } from "@/components/chat/artifact";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { ChatbotError } from "../errors";
 import type {
+  ConceptEvent,
   CourseGraph,
   LearnerState,
   PersonalGraph,
@@ -31,6 +32,7 @@ import { generateUUID } from "../utils";
 import {
   type Chat,
   chat,
+  conceptEvent,
   course,
   type DBMessage,
   document,
@@ -911,6 +913,37 @@ export async function getOtherStudentModels({
       .from(studentModel)
       .where(ne(studentModel.studentId, studentId));
     return rows.map((r) => r.data);
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// 个人知识库的原始记录（只追加），按时间顺序
+export async function getConceptEvents({
+  studentId,
+}: {
+  studentId: string;
+}): Promise<ConceptEvent[]> {
+  try {
+    const rows = await db
+      .select()
+      .from(conceptEvent)
+      .where(eq(conceptEvent.studentId, studentId))
+      .orderBy(asc(conceptEvent.at), asc(conceptEvent.id));
+    return rows.map((r) => ({ ...r, at: r.at.toISOString() }));
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function saveConceptEvents(events: ConceptEvent[]) {
+  if (events.length === 0) {
+    return;
+  }
+  try {
+    await db
+      .insert(conceptEvent)
+      .values(events.map((e) => ({ ...e, at: new Date(e.at) })));
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }
