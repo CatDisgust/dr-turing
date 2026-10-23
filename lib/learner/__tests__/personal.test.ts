@@ -23,6 +23,7 @@ import {
   similar,
   splitDraft,
   stamp,
+  unlinkDraft,
 } from "../personal";
 import { applyEvidence, emptyLearnerState } from "../update";
 
@@ -300,6 +301,95 @@ describe("个人知识库：先认人再记账", () => {
     expect(g.concepts.map((c) => c.id)).toEqual(["pc_1"]);
     expect(g.courseMentions?.kp_lost).toBeUndefined();
     expect(g.anchored).toEqual({});
+  });
+
+  it("意思上的关系：认成编号连起来；连错了撤销；被作废的那头不连", () => {
+    let events = review([], [change({ name: "AI agent" })], "s1", T1);
+    events = review(
+      events,
+      [
+        change({
+          links: [
+            { how: "part_of", to: "pc_1", why: "harness 包在 agent 外面" },
+            { how: "related", to: "丢失更新", why: "都要处理并发" },
+            { how: "related", to: "不存在的东西", why: "x" },
+          ],
+          name: "Agent harness",
+        }),
+      ],
+      "s2",
+      T2
+    );
+    let g = personalFromEvents("stu", events);
+    expect(g.links?.map((l) => [l.from, l.to, l.how, l.why])).toEqual([
+      ["pc_2", "pc_1", "part_of", "harness 包在 agent 外面"],
+      ["pc_2", "kp_lost", "related", "都要处理并发"],
+    ]);
+    const link = events.find(
+      (e) => e.type === "link" && e.payload.to === "kp_lost"
+    );
+    events = [
+      ...events,
+      ...stamp(
+        [unlinkDraft(link as ConceptEvent)],
+        { now: T3, sessionId: null, studentId: "stu" },
+        () => "u1"
+      ),
+      ...stamp(
+        [invalidateDraft("pc_1", "学生说记错了")],
+        { now: T3, sessionId: null, studentId: "stu" },
+        () => "u2"
+      ),
+    ];
+    g = personalFromEvents("stu", events);
+    expect(g.links).toEqual([]);
+  });
+
+  it("同一对记过好几次，学生说一次连错了就整对不连，复核再连也不算", () => {
+    let events = review([], [change({ name: "AI agent" })], "s1", T1);
+    const harness = change({
+      links: [{ how: "part_of", to: "pc_1", why: "外壳" }],
+      name: "Agent harness",
+    });
+    events = review(
+      events,
+      [harness, { ...harness, name: "Agent harness 外壳" }],
+      "s2",
+      T2,
+      { 1: "#0" }
+    );
+    expect(events.filter((e) => e.type === "link")).toHaveLength(1);
+    events = review(events, [{ ...harness, sameAs: "pc_2" }], "s3", T2);
+    expect(events.filter((e) => e.type === "link")).toHaveLength(2);
+    const [first] = events.filter((e) => e.type === "link");
+    events = [
+      ...events,
+      ...stamp(
+        [unlinkDraft(first)],
+        { now: T3, sessionId: null, studentId: "stu" },
+        () => "u1"
+      ),
+    ];
+    events = review(events, [{ ...harness, sameAs: "pc_2" }], "s4", T3);
+    expect(personalFromEvents("stu", events).links).toEqual([]);
+  });
+
+  it("这次一起列出的两个新概念之间也能连", () => {
+    const events = review(
+      [],
+      [
+        change({ name: "AI agent" }),
+        change({
+          links: [{ how: "part_of", to: "AI agent", why: "外壳" }],
+          name: "Agent harness",
+        }),
+      ],
+      "s1",
+      T1
+    );
+    expect(
+      personalFromEvents("stu", events).links?.map((l) => [l.from, l.to])
+    ).toEqual([["pc_2", "pc_1"]]);
   });
 
   it("旧数据（按名字认人的那版）导进日志，算出来一样", () => {

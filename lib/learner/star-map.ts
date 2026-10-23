@@ -1,4 +1,5 @@
 import type {
+  ConceptLink,
   CourseGraph,
   LearnerState,
   PersonalConcept,
@@ -40,6 +41,15 @@ export type Star = {
   merged: NonNullable<PersonalConcept["merged"]>;
   // 常一起出现的：在同一次对话里都出现过，按一起出现的次数排
   related: string[];
+  // 意思上有关系的（复核时 Claude 判断，学生可以说连错了）。label 是从这颗星看过去的说法
+  links: { to: string; name: string; label: string; linkId: string }[];
+};
+
+// 选中一颗星时额外画的线：link 是意思上的关系（实线，带说明），together 是一起出现（虚线）
+export type ExtraEdge = {
+  to: string;
+  kind: "link" | "together";
+  label?: string;
 };
 
 // 并进课程知识点时的候选：图上没有的课内知识点也算
@@ -55,7 +65,7 @@ export type StarMap = {
   lights: Record<string, Light>;
   progress: Record<string, number>;
   stars: Record<string, Star>;
-  related: Record<string, string[]>;
+  related: Record<string, ExtraEdge[]>;
 };
 
 // 一颗星最多列几条出处，新的在前
@@ -63,8 +73,16 @@ const MAX_EVIDENCE = 8;
 // “常一起出现”最多列几个
 const MAX_RELATED = 5;
 
+// 新的在前；同一次对话里同一句原话只留一条（复核一次可能用两个叫法各记一次）
 const recent = (items: StarEvidence[]) =>
-  items.toSorted((a, b) => b.at.localeCompare(a.at));
+  items
+    .toSorted((a, b) => b.at.localeCompare(a.at))
+    .filter(
+      (e, i, all) =>
+        all.findIndex(
+          (x) => x.sessionId === e.sessionId && x.quote === e.quote
+        ) === i
+    );
 
 export function buildStarMap(input: {
   courses: readonly CourseGraph[];
@@ -137,6 +155,7 @@ export function buildStarMap(input: {
         id: p.id,
         kind: "course",
         light: lights[p.id],
+        links: [],
         merged: anchored[p.id] ?? [],
         name: p.name,
         related: [],
@@ -192,6 +211,7 @@ export function buildStarMap(input: {
       id: c.id,
       kind: "outside",
       light: "half",
+      links: [],
       merged: c.merged ?? [],
       name: c.name,
       related: [],
@@ -219,6 +239,38 @@ export function buildStarMap(input: {
       new Set(star.evidence.map((e) => e.sessionId).filter(Boolean)),
     ])
   );
+  // 意思上的关系：两头都在图上（或在课程里）才列；线只画到图上有的星
+  const nameOf = (id: string) =>
+    stars[id]?.name ?? catalog.find((c) => c.id === id)?.name;
+  const say = (how: ConceptLink["how"], other: string, outgoing: boolean) => {
+    if (how === "part_of") {
+      return outgoing ? `是「${other}」的一部分` : `「${other}」是它的一部分`;
+    }
+    if (how === "prereq") {
+      return outgoing ? `要先懂「${other}」` : `是学「${other}」之前要懂的`;
+    }
+    return `和「${other}」有关`;
+  };
+  for (const link of input.personal.links ?? []) {
+    const fromName = nameOf(link.from);
+    const toName = nameOf(link.to);
+    if (!(fromName && toName)) {
+      continue;
+    }
+    stars[link.from]?.links.push({
+      label: say(link.how, toName, true),
+      linkId: link.id,
+      name: toName,
+      to: link.to,
+    });
+    stars[link.to]?.links.push({
+      label: say(link.how, fromName, false),
+      linkId: link.id,
+      name: fromName,
+      to: link.from,
+    });
+  }
+
   const related: StarMap["related"] = {};
   for (const star of all) {
     const mine = sessions.get(star.id) ?? new Set<string>();
@@ -232,7 +284,18 @@ export function buildStarMap(input: {
       .toSorted((a, b) => b.n - a.n)
       .slice(0, MAX_RELATED)
       .map((x) => x.id);
-    related[star.id] = star.related;
+    related[star.id] = [
+      ...star.links
+        .filter((l) => stars[l.to])
+        .map((l) => ({
+          kind: "link" as const,
+          label: l.label.replace(/「|」/g, ""),
+          to: l.to,
+        })),
+      ...star.related
+        .filter((id) => !star.links.some((l) => l.to === id))
+        .map((to) => ({ kind: "together" as const, to })),
+    ];
     if (star.kind === "outside" && mine.size < 2) {
       star.light = "gray";
       lights[star.id] = "gray";
@@ -282,4 +345,89 @@ export function mergeCandidates(
   return [...outside, ...map.catalog.filter(alike)]
     .toSorted((a, b) => Number(alike(b)) - Number(alike(a)))
     .slice(0, MAX_CANDIDATES);
+}
+
+// 课内每门课先收成一团（用户 2026-10-23 选“课内每门课先收成一团”）：没展开的课只画一颗星云，
+// 写着全亮几个、半亮几个，点它才展开成一颗颗星；课外概念一直单独画
+export const CLUSTER = "cluster:";
+
+export function collapseCourses(
+  map: StarMap,
+  expanded: ReadonlySet<string>
+): Pick<StarMap, "graph" | "lights" | "progress" | "related"> {
+  const folded = new Set(
+    map.graph.lessons
+      .filter((l) => l.id !== OUTSIDE && !expanded.has(l.id))
+      .map((l) => l.id)
+  );
+  if (folded.size === 0) {
+    return map;
+  }
+  // 被收起的星 → 它那团星云
+  const home = new Map<string, string>();
+  for (const p of map.graph.points) {
+    if (folded.has(p.lessonId)) {
+      home.set(p.id, `${CLUSTER}${p.lessonId}`);
+    }
+  }
+  const lights = { ...map.lights };
+  const clusters = map.graph.lessons
+    .filter((l) => folded.has(l.id))
+    .map((l) => {
+      const ids = map.graph.points
+        .filter((p) => p.lessonId === l.id)
+        .map((p) => p.id);
+      const full = ids.filter((x) => map.lights[x] === "full").length;
+      const half = ids.filter((x) => map.lights[x] === "half").length;
+      const id = `${CLUSTER}${l.id}`;
+      lights[id] = full > 0 ? "full" : half > 0 ? "half" : "gray";
+      return {
+        // 星云的“定义”就是这门课点亮了多少，块标题也用它
+        aliases: [],
+        checkQuestions: [],
+        definition: `全亮 ${full} · 半亮 ${half} / ${ids.length}`,
+        id,
+        kind: "concept" as const,
+        lessonId: l.id,
+        name: `点开看 ${ids.length} 个知识点`,
+        sources: [],
+        status: "auto" as const,
+      };
+    });
+  const related: StarMap["related"] = {};
+  for (const [id, others] of Object.entries(map.related)) {
+    if (home.has(id)) {
+      continue;
+    }
+    // 连到收起的星就连到它那团星云，同一团只连一条
+    const seen = new Set<string>();
+    related[id] = others.flatMap((o) => {
+      const to = home.get(o.to) ?? o.to;
+      if (seen.has(to)) {
+        return [];
+      }
+      seen.add(to);
+      return [{ ...o, to }];
+    });
+  }
+  const counts = new Map(
+    clusters.map((c) => [c.lessonId, c.definition] as const)
+  );
+  return {
+    graph: {
+      ...map.graph,
+      edges: map.graph.edges.filter(
+        (e) => !(home.has(e.from) || home.has(e.to))
+      ),
+      lessons: map.graph.lessons.map((l) =>
+        counts.has(l.id)
+          ? { ...l, title: `${l.title} · ${counts.get(l.id)}` }
+          : l
+      ),
+      points: [...clusters, ...map.graph.points.filter((p) => !home.has(p.id))],
+    },
+    lights,
+    progress: map.progress,
+    related,
+  };
 }

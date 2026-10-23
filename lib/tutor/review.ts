@@ -17,6 +17,15 @@ const reviewSchema = z.object({
     z.object({
       definition: z.string(),
       level: z.enum(["touched", "claimed"]),
+      links: z
+        .array(
+          z.object({
+            how: z.enum(["part_of", "prereq", "related"]),
+            to: z.string(),
+            why: z.string(),
+          })
+        )
+        .default([]),
       name: z.string(),
       op: z.enum(["add", "update", "invalidate"]),
       quote: z.string(),
@@ -61,6 +70,8 @@ const SYSTEM = [
   "- level：学生说自己学过、会用，填 claimed；只是提到或问到，填 touched。",
   "- quote 是学生的原话；definition 用一句中文写清楚这个概念。",
   "- 只记学生说的，导师自己提到的不算。没有就给空数组。宁缺毋滥。",
+  "- links：add、update 的概念和学生已有的哪些概念意思上有关系。to 填已有课外概念的 id、课程知识点的名字，或这次一起列出的另一个概念的名字。",
+  "  how：part_of 它是对方的一部分，prereq 要先懂对方才能懂它，related 其他明显的关系。why 用一句中文说清楚。没有明显关系就给空数组，别硬连。",
 ].join("\n");
 
 export async function reviewSession(input: {

@@ -235,7 +235,7 @@ export function sampleBeta({ a, b }: Beta, random: () => number): number {
   return x / (x + gamma(b, random));
 }
 
-// ---- 默认讲法：他还没有任何讲法记录时用（2026-10-23 决策卡推荐项，等用户确认） ----
+// ---- 默认讲法：他还没有任何讲法记录时用（用户 2026-10-23 选“先照旧规则，之后再换着试”） ----
 
 // 学生说过的偏好优先；没说过就按知识类型
 export function defaultArm(

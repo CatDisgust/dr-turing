@@ -85,6 +85,14 @@ export function layoutGraph(
       height = Math.max(height, py + NODE_HEIGHT);
     });
     height += PADDING;
+    // 我的星图的块常常只有一两颗星，标题又长：块至少宽到标题一行放得下（14px 字，中文按 14、其余按 8 估）
+    if (plainTitles) {
+      const text = [...lesson.title].reduce(
+        (sum, ch) => sum + ((ch.codePointAt(0) ?? 0) < 0x1_00 ? 8 : 14),
+        0
+      );
+      width = Math.max(width, text + 2 * PADDING);
+    }
 
     lessons.push({
       height,

@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { layoutGraph, NODE_HEIGHT, NODE_WIDTH } from "@/lib/graph/layout";
 import { FULL_O } from "@/lib/learner/config";
 import type { Light } from "@/lib/learner/light";
+import type { ExtraEdge } from "@/lib/learner/star-map";
 import type { CourseGraph, Edge } from "@/lib/types";
 
 // 课程知识图谱，星图样式（用户 2026-10-23 选定“天文馆”）：纯黑星空，学会的点是发光的星，
@@ -38,6 +39,7 @@ const LIT_LINE = "rgba(255, 238, 205, 0.55)";
 const CHAIN = "#8d8a83";
 const CONFUSABLE = "#d9a066";
 const RELATED = "rgba(156, 200, 255, 0.6)";
+const RELATED_SOLID = "rgba(156, 200, 255, 0.9)";
 
 // 星心在节点里的位置：左边 32px 宽的一格的正中
 const STAR_X = 16;
@@ -532,8 +534,8 @@ export function GraphPanel({
   focusId?: string;
   // 块标题不加“第 N 课”（我的星图）
   plainTitles?: boolean;
-  // 常一起出现的（我的星图）：选中一颗星时画蓝色虚线连到它们
-  related?: Record<string, string[]>;
+  // 我的星图：选中一颗星时额外画的线。意思上的关系画实线带说明，一起出现画虚线，都是蓝色
+  related?: Record<string, ExtraEdge[]>;
 }) {
   // 亮度比上次高的点闪一下（点亮动画，D12）
   const previous = useRef<Record<string, Light> | undefined>(undefined);
@@ -605,9 +607,11 @@ export function GraphPanel({
         return {
           data: {
             label: lesson.title,
-            lit: lights
-              ? `已点亮 ${points.filter((p) => isLit(p.id)).length} / ${points.length}`
-              : undefined,
+            // 我的星图的块标题自己带数，不再算“已点亮”
+            lit:
+              lights && !plainTitles
+                ? `已点亮 ${points.filter((p) => isLit(p.id)).length} / ${points.length}`
+                : undefined,
           },
           draggable: false,
           id: `lesson:${lesson.id}`,
@@ -650,23 +654,26 @@ export function GraphPanel({
         type: "point",
       })),
     ],
-    [graph, layout, selectedId, lights, progress, flashing, isLit]
+    [graph, layout, selectedId, lights, progress, flashing, isLit, plainTitles]
   );
 
   const edges = useMemo<StarEdgeType[]>(() => {
     const lessonOf = new Map(graph.points.map((p) => [p.id, p.lessonId]));
     const chain = selectedId ? chainOf(graph.edges, selectedId) : new Set();
-    const together: StarEdgeType[] = (
+    const extras: StarEdgeType[] = (
       selectedId ? (related?.[selectedId] ?? []) : []
-    ).map((to) => ({
-      data: { label: "一起出现" },
-      id: `related:${selectedId}:${to}`,
+    ).map((extra) => ({
+      data: { label: extra.label },
+      id: `${extra.kind}:${selectedId}:${extra.to}`,
       source: selectedId ?? "",
-      style: { stroke: RELATED, strokeDasharray: "4 4", strokeWidth: 1.2 },
-      target: to,
+      style:
+        extra.kind === "link"
+          ? { stroke: RELATED_SOLID, strokeWidth: 1.4 }
+          : { stroke: RELATED, strokeDasharray: "4 4", strokeWidth: 1.2 },
+      target: extra.to,
       type: "star",
     }));
-    return together.concat(
+    return extras.concat(
       graph.edges.flatMap<StarEdgeType>((edge) => {
         const touched =
           selectedId !== null &&
@@ -754,6 +761,7 @@ export function GraphPanel({
         edges={edges}
         edgeTypes={EDGE_TYPES}
         fitView
+        fitViewOptions={{ maxZoom: 1.2 }}
         minZoom={0.1}
         nodes={nodes}
         nodesConnectable={false}

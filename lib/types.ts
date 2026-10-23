@@ -466,6 +466,8 @@ export type PersonalGraph = {
     string,
     { sessionId: string; quote: string; at: string }[]
   >;
+  // 意思上的关系（两头都按合并后的编号算）。旧数据没有
+  links?: ConceptLink[];
   // 学生把课外概念并进了哪个课程知识点：kp id → 并进来的（可以拆开）。旧数据没有
   anchored?: Record<string, NonNullable<PersonalConcept["merged"]>>;
   // 每次复核的新增 / 更新 / 作废，带原话，只追加
@@ -484,7 +486,9 @@ export type ConceptEventType =
   | "mention" // 某次对话里提到了它
   | "invalidate" // 记错了：复核或学生说的
   | "merge" // 两个其实是同一个：from 并进 conceptId
-  | "split"; // 撤销一次合并
+  | "split" // 撤销一次合并
+  | "link" // 意思上有关系：conceptId → payload.to（复核时 Claude 判断）
+  | "unlink"; // 学生说连错了：撤销一条关系
 export type ConceptEventPayload = {
   name?: string;
   definition?: string;
@@ -493,8 +497,23 @@ export type ConceptEventPayload = {
   reason?: string;
   from?: string; // merge：被并掉的那个
   mergeId?: string; // split：撤销哪次合并
+  to?: string; // link：连到哪个（课外概念或课程知识点）
+  how?: ConceptLinkKind; // link：什么关系
+  why?: string; // link：一句话说明
+  linkId?: string; // unlink：撤销哪条
   by?: "review" | "student";
 };
+export type ConceptLinkKind = "part_of" | "prereq" | "related";
+
+// 两个概念意思上的关系（个人知识库第 3 步，用户 2026-10-23 选“两种线都要”）
+export type ConceptLink = {
+  id: string; // 记下这条关系的那条日志的 id，连错了按它撤销
+  from: string;
+  to: string;
+  how: ConceptLinkKind;
+  why: string;
+};
+
 export type ConceptEvent = {
   id: string;
   studentId: string;
@@ -515,6 +534,8 @@ export type ConceptChange = {
   level: PersonalConcept["level"];
   quote: string;
   reason: string;
+  // 和已有概念意思上的关系：to 是已有课外概念的 id、课程知识点的名字或这次一起列出的新概念的名字
+  links?: { to: string; how: ConceptLinkKind; why: string }[];
 };
 
 // 底层能力：代码从全部证据统计，贝叶斯比例估计（Beta-binomial）

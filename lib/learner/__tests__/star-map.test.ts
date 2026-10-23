@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CourseGraph, PersonalGraph } from "@/lib/types";
-import { buildStarMap, mergeCandidates } from "../star-map";
+import {
+  buildStarMap,
+  CLUSTER,
+  collapseCourses,
+  mergeCandidates,
+} from "../star-map";
 import { applyEvidence, emptyLearnerState } from "../update";
 
 const point = (id: string, name: string, aliases: string[] = []) => ({
@@ -175,7 +180,7 @@ describe("我的星图", () => {
     });
     expect(map.stars.kp_dead.evidence[0].chat).toBeUndefined();
     expect(map.stars.pc_2.related).toEqual(["kp_lock"]);
-    expect(map.related.kp_lock).toEqual(["pc_2"]);
+    expect(map.related.kp_lock).toEqual([{ kind: "together", to: "pc_2" }]);
     expect(map.stars.pc_1.related).toEqual([]);
   });
 
@@ -211,5 +216,52 @@ describe("我的星图", () => {
       states: [],
     });
     expect(twice.lights.pc_1).toBe("half");
+  });
+
+  it("意思上的关系两头都看得到，说法各自顺着说；线画成实线，盖过一起出现", () => {
+    const map = buildStarMap({
+      courses: [course],
+      personal: personal({
+        links: [
+          { from: "pc_2", how: "part_of", id: "k1", to: "kp_lock", why: "" },
+          { from: "pc_1", how: "prereq", id: "k2", to: "kp_cc", why: "" },
+        ],
+      }),
+      states: [stateWithLock()],
+    });
+    expect(map.stars.pc_2.links).toEqual([
+      { label: "是「锁」的一部分", linkId: "k1", name: "锁", to: "kp_lock" },
+    ]);
+    expect(map.stars.kp_lock.links[0].label).toBe("「lock」是它的一部分");
+    // 并发控制不在图上（没碰过）：详情里列，线不画
+    expect(map.stars.pc_1.links[0].label).toBe("要先懂「并发控制」");
+    expect(map.related.pc_1).toEqual([]);
+    expect(map.related.pc_2).toEqual([
+      { kind: "link", label: "是锁的一部分", to: "kp_lock" },
+    ]);
+  });
+
+  it("课内每门课先收成一团：只剩一颗星云，连过去的线改连星云；展开后照旧", () => {
+    const map = buildStarMap({
+      courses: [course],
+      personal: personal(),
+      states: [stateWithLock()],
+    });
+    const folded = collapseCourses(map, new Set());
+    const cloud = `${CLUSTER}course:comp5348`;
+    expect(folded.graph.points.map((p) => p.id)).toEqual([
+      cloud,
+      "pc_1",
+      "pc_2",
+    ]);
+    expect(folded.graph.points[0].name).toBe("点开看 2 个知识点");
+    expect(folded.graph.lessons[0].title).toBe(
+      "COMP5348 · 全亮 0 · 半亮 1 / 2"
+    );
+    expect(folded.graph.edges).toEqual([]);
+    expect(folded.related.pc_2).toEqual([{ kind: "together", to: cloud }]);
+    expect(folded.related.kp_lock).toBeUndefined();
+    const open = collapseCourses(map, new Set(["course:comp5348"]));
+    expect(open.graph.points).toHaveLength(4);
   });
 });
