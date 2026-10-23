@@ -6,7 +6,6 @@ import {
   getLearnerState,
   getMessagesByChatId,
   getOtherStudentModels,
-  getPersonalGraph,
   getPlanMessagesByStudent,
   getStudentModel,
   getTransactionsByStudent,
@@ -14,7 +13,6 @@ import {
   saveChatReport,
   saveEvents,
   saveLearnerState,
-  savePersonalGraph,
   saveStudentModel,
 } from "@/lib/db/queries";
 import { engagementOf } from "@/lib/learner/events";
@@ -26,8 +24,10 @@ import {
   trustedNotes,
 } from "@/lib/learner/notes";
 import {
-  applyConceptChanges,
-  emptyPersonalGraph,
+  identityEvents,
+  identityPool,
+  identityQuestions,
+  nextConceptSeq,
 } from "@/lib/learner/personal";
 import { reviewedAttempts } from "@/lib/learner/predict";
 import { armOutcomes, populationPrior } from "@/lib/learner/preference";
@@ -35,7 +35,9 @@ import { applyReview, sessionReport } from "@/lib/learner/review";
 import { rebuildStudentModel } from "@/lib/learner/student-model";
 import { learnRateOf, relearn } from "@/lib/learner/update";
 import type { CourseGraph, SessionReport } from "@/lib/types";
+import { identify } from "./identify";
 import { writeNotes } from "./notes";
+import { appendPersonal, loadPersonal } from "./personal-store";
 import { reviewSession, type TranscriptLine } from "./review";
 
 // 结束一次会话：复核 → 证据转正或撤销 → 算会话报告 → 记在 Chat 上。
@@ -102,9 +104,7 @@ export async function endSession(input: {
     }))
     .filter((line) => line.text !== "");
 
-  const personal =
-    (await getPersonalGraph({ studentId: input.studentId })) ??
-    emptyPersonalGraph(input.studentId);
+  const { graph: personal } = await loadPersonal(input.studentId);
   const { concepts, leaks, verdicts } = await reviewSession({
     graph: course.graph,
     personal,
@@ -155,17 +155,29 @@ export async function endSession(input: {
   } catch (error) {
     console.error("rebuild student model failed:", error);
   }
-  // 个人图谱：课外概念的新增 / 更新 / 作废，同样在落库前重新读一次
-  const freshPersonal =
-    (await getPersonalGraph({ studentId: input.studentId })) ?? personal;
-  const nextPersonal = applyConceptChanges(
-    freshPersonal,
-    [course.graph],
-    concepts,
-    input.chatId,
-    now
+  // 个人图谱：先认人再记账。落库前重新读一次日志，认人失败就全部按复核给的编号或新概念记
+  const { events: freshEvents, graph: freshPersonal } = await loadPersonal(
+    input.studentId
   );
-  await savePersonalGraph({ graph: nextPersonal });
+  const pool = identityPool(freshPersonal, [course.graph]);
+  const questions = identityQuestions(concepts, pool);
+  let answers = new Map<number, string>();
+  try {
+    answers = await identify(questions);
+  } catch (error) {
+    console.error("identify concepts failed:", error);
+  }
+  const nextPersonal = await appendPersonal(
+    input.studentId,
+    input.chatId,
+    identityEvents(
+      concepts,
+      pool,
+      questions,
+      answers,
+      nextConceptSeq(freshEvents)
+    )
+  );
   const changed = nextPersonal.log
     .slice(freshPersonal.log.length)
     .map((entry) => ({

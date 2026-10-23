@@ -115,7 +115,10 @@ export async function reviewSession(input: {
     "",
     "学生已有的课外概念：",
     ...(known.length > 0
-      ? known.map((c) => `- ${c.id}「${c.name}」：${c.definition}`)
+      ? known.map(
+          (c) =>
+            `- ${c.id}「${c.name}」${c.aliases.length > 0 ? `（也叫${c.aliases.map((n) => `「${n}」`).join("")}）` : ""}：${c.definition}`
+        )
       : ["（无）"]),
   ].join("\n");
 

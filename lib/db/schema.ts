@@ -14,6 +14,8 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   Attempt,
+  ConceptEventPayload,
+  ConceptEventType,
   CourseGraph,
   LearnerState as LearnerStateData,
   PersonalGraph as PersonalGraphData,
@@ -195,6 +197,22 @@ export const personalGraph = pgTable("PersonalGraph", {
   studentId: uuid("studentId").primaryKey().notNull(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
+
+// 个人知识库的原始记录（只追加）：提到、记错、合并、拆开。个人图谱从这里整份算出来，
+// 上面的 PersonalGraph 表只在第一次读时导入旧数据用
+export const conceptEvent = pgTable(
+  "ConceptEvent",
+  {
+    at: timestamp("at").notNull().defaultNow(),
+    conceptId: text("conceptId").notNull(),
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    payload: jsonb("payload").$type<ConceptEventPayload>().notNull(),
+    sessionId: uuid("sessionId"),
+    studentId: uuid("studentId").notNull(),
+    type: varchar("type", { length: 16 }).$type<ConceptEventType>().notNull(),
+  },
+  (table) => [index("ConceptEvent_student_idx").on(table.studentId)]
+);
 
 // 学生的反应事件（学生建模方案 A）：放弃、跳题、听不懂、点赞点踩……只追加，从不更新、不删除。
 // payload.turn 是这门课里学生的第几条消息，投入度按它衰减；复核撤销、改判带 payload.attemptId
