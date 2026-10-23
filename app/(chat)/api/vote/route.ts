@@ -1,6 +1,15 @@
 import { z } from "zod";
-import { getChatById, getVotesByChatId, voteMessage } from "@/lib/db/queries";
+import { COURSE_ID } from "@/lib/constants";
+import {
+  getChatById,
+  getLearnerState,
+  getVotesByChatId,
+  saveEvents,
+  saveLearnerState,
+  voteMessage,
+} from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
+import { engagementOf, recordEvent } from "@/lib/learner/events";
 import { auth } from "@/lib/session";
 
 const voteSchema = z.object({
@@ -77,5 +86,43 @@ export async function PATCH(request: Request) {
     type,
   });
 
+  // 点赞点踩也是学生的反应（学生建模方案 A）：记进 Event 表，点踩计入投入度 W。
+  // 记不上不影响投票本身
+  try {
+    await recordVote({
+      chatId,
+      messageId,
+      studentId: session.user.id,
+      type: type === "up" ? "thumbs_up" : "thumbs_down",
+    });
+  } catch (error) {
+    console.error("record vote event failed:", error);
+  }
+
   return new Response("Message voted", { status: 200 });
+}
+
+async function recordVote(input: {
+  chatId: string;
+  messageId: string;
+  studentId: string;
+  type: "thumbs_up" | "thumbs_down";
+}) {
+  const key = { courseId: COURSE_ID, studentId: input.studentId };
+  const state = await getLearnerState(key);
+  if (!state) {
+    return;
+  }
+  const next = recordEvent(state, input.type);
+  await saveLearnerState({ state: next });
+  await saveEvents([
+    {
+      ...key,
+      kpId: null,
+      messageId: input.messageId,
+      payload: { turn: engagementOf(next).turn },
+      sessionId: input.chatId,
+      type: input.type,
+    },
+  ]);
 }

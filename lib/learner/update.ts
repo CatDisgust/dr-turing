@@ -7,7 +7,7 @@ import type {
   NodeState,
 } from "@/lib/types";
 import { BKT } from "./config";
-import { sessionEngagement } from "./engagement";
+import { emptyEngagement, recordEvent } from "./events";
 import { isGraded, masteryFromAttempts } from "./mastery";
 import { learningStage, type TurnSignal } from "./policy";
 import { gradedType } from "./question";
@@ -38,9 +38,8 @@ export function emptyLearnerState(
   courseId: string
 ): LearnerState {
   return {
-    burden: { lost: 0, tooAbstract: 0 },
     courseId,
-    engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 },
+    engagement: emptyEngagement(),
     nodes: {},
     profile: { background: [], statedPreferences: [] },
     studentId,
@@ -203,7 +202,7 @@ function flagPrereqs(
   return next;
 }
 
-// 一条证据进来：重放这个节点，再做先修传播；独立做对说明学生又投入了，投入度计数清零（假设）
+// 一条证据进来：重放这个节点，再做先修传播
 export function applyEvidence(
   state: LearnerState,
   graph: CourseGraph,
@@ -216,18 +215,8 @@ export function applyEvidence(
     kindOf(graph, kpId),
     carryOf(node)
   );
-  const reengaged = attempt.correct === true && !attempt.hinted;
   return {
     ...state,
-    engagement: reengaged
-      ? {
-          giveUps: 0,
-          justTellMe: 0,
-          lastAt: attempt.at,
-          sessionId: attempt.sessionId,
-          skippedQuestions: 0,
-        }
-      : state.engagement,
     nodes: flagPrereqs({ ...state.nodes, [kpId]: derived }, graph, kpId),
   };
 }
@@ -308,43 +297,10 @@ export function touchNode(
   };
 }
 
-// 投入度 W：放弃、“直接告诉我”、跳题各记一笔；“给提示”只是请求，不算 W
+// 快捷按钮记成事件：放弃、“直接告诉我”、跳题计入投入度 W；“给提示”只是请求，不算
 export function applySignal(
   state: LearnerState,
-  signal: TurnSignal,
-  at: string,
-  sessionId: string
+  signal: TurnSignal
 ): LearnerState {
-  const engagement = sessionEngagement(state.engagement, sessionId);
-  if (signal === "give_up") {
-    return {
-      ...state,
-      engagement: {
-        ...engagement,
-        giveUps: engagement.giveUps + 1,
-        lastAt: at,
-      },
-    };
-  }
-  if (signal === "just_tell_me") {
-    return {
-      ...state,
-      engagement: {
-        ...engagement,
-        justTellMe: engagement.justTellMe + 1,
-        lastAt: at,
-      },
-    };
-  }
-  if (signal === "skip") {
-    return {
-      ...state,
-      engagement: {
-        ...engagement,
-        lastAt: at,
-        skippedQuestions: engagement.skippedQuestions + 1,
-      },
-    };
-  }
-  return state;
+  return signal === "hint" ? state : recordEvent(state, signal);
 }

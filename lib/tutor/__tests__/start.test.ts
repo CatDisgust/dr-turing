@@ -69,7 +69,7 @@ describe("startTurn", () => {
   it("换了个点学：上一道没答的题清掉，不计入投入度", () => {
     const result = startTurn(turn("lost"), "dl");
     expect(result.state.pendingQuestion).toBeUndefined();
-    expect(result.state.engagement.skippedQuestions).toBe(0);
+    expect(result.state.engagement.recent).toEqual([]);
   });
 
   it("还是同一个点：题留着", () => {

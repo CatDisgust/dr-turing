@@ -1,4 +1,10 @@
 import "server-only";
+import {
+  B_HIGH,
+  engagementOf,
+  recordEvent,
+  signals,
+} from "@/lib/learner/events";
 import { planTurn } from "@/lib/learner/planner";
 import type { TurnSignal } from "@/lib/learner/policy";
 import { attemptFromGrading, pickQuestion } from "@/lib/learner/question";
@@ -60,7 +66,7 @@ function pendingOf(turn: Turn) {
 
 // 快捷按钮：给提示、直接告诉我、先不做题
 export function signalTurn(turn: Turn, signal: TurnSignal): TurnResult {
-  const state = applySignal(turn.state, signal, turn.now, turn.sessionId);
+  const state = applySignal(turn.state, signal);
   const open = pendingOf(turn);
   if (!open) {
     return { note: null, state };
@@ -162,7 +168,7 @@ export function startTurn(turn: Turn, kpId: string): TurnResult {
   };
 }
 
-// 新问题：归类到一个点，虚线亮，讲完出一道题
+// 新问题：归类到一个点，虚线亮，讲完出一道题。这次学习里已经碰过这个点，算追问
 export async function questionTurn(turn: Turn): Promise<TurnResult> {
   const point =
     turn.text.trim() === ""
@@ -171,9 +177,14 @@ export async function questionTurn(turn: Turn): Promise<TurnResult> {
   if (!point) {
     return { note: null, state: turn.state };
   }
+  const followup =
+    turn.state.nodes[point.id]?.touchedInSession === turn.sessionId;
+  const state = followup
+    ? recordEvent(turn.state, "asked_followup")
+    : turn.state;
   return {
     note: null,
-    state: touchNode(turn.state, point.id, turn.sessionId),
+    state: touchNode(state, point.id, turn.sessionId),
     touched: point,
   };
 }
@@ -187,6 +198,19 @@ const ASKS: TutorPlan["next_action"][] = [
   "variant",
   "review",
 ];
+
+// 负担 B 偏高（最近几轮说过还是不懂、太抽象）：提醒导师讲得更具体、步子更小，不改规则
+function withBurden(note: string | null, state: LearnerState): string | null {
+  if (signals(engagementOf(state)).B < B_HIGH) {
+    return note;
+  }
+  return [
+    note,
+    "他最近几轮说过还是不懂或太抽象。这一轮讲得更具体：先举一个具体的例子，步子放小，一次只讲一步。",
+  ]
+    .filter(Boolean)
+    .join("");
+}
 
 // 引擎这一步之后：规划器定本轮动作；讲解、出题、复习之后接一道题（还有题没答完就不出新题）
 export async function planAndAsk(
@@ -211,8 +235,9 @@ export async function planAndAsk(
     state: result.state,
   });
   let plan = rulePlan;
+  let { state } = result;
   try {
-    plan = await fillPlan({
+    const { plan: filledPlan, reaction } = await fillPlan({
       graph: turn.graph,
       justTellMe: signal === "just_tell_me",
       rulePlan,
@@ -220,10 +245,16 @@ export async function planAndAsk(
       state: result.state,
       studentText: turn.text,
     });
+    plan = filledPlan;
+    // 学生这句是在说“还是不懂”或“太抽象”：记成事件，计入负担 B（顺手判断，2026-10-23 用户定）
+    if (reaction !== "none") {
+      state = recordEvent(state, reaction);
+    }
   } catch (error) {
     console.error("[plan] Claude 填 plan 失败，用规则默认值", error);
   }
-  const stillOpen = result.state.pendingQuestion?.sessionId === turn.sessionId;
+  const note = withBurden(result.note, state);
+  const stillOpen = state.pendingQuestion?.sessionId === turn.sessionId;
   const target = turn.graph.points.find((p) => p.id === plan.target_kc);
   if (
     stillOpen ||
@@ -231,12 +262,12 @@ export async function planAndAsk(
     !ASKS.includes(plan.next_action) ||
     plan.reveals_answer
   ) {
-    return { note: result.note, plan, state: result.state };
+    return { note, plan, state };
   }
-  const asked = askQuestion(turn, result.state, target);
+  const asked = askQuestion(turn, state, target);
   if (asked) {
     return {
-      note: result.note,
+      note,
       plan,
       question: asked.question,
       state: asked.state,
@@ -246,16 +277,16 @@ export async function planAndAsk(
   if (plan.prompt === "question" || plan.prompt === "review") {
     return {
       note: [
-        result.note,
+        note,
         "这个点这次的题都做完了。用一两句话总结他今天弄懂了什么，再问他接下来想弄懂什么。",
       ]
         .filter(Boolean)
         .join(""),
       plan,
-      state: result.state,
+      state,
     };
   }
-  return { note: result.note, plan, state: result.state };
+  return { note, plan, state };
 }
 
 // 讲完之后出题：选好题、存成 PendingQuestion，返回题面

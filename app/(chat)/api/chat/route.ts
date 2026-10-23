@@ -23,6 +23,7 @@ import {
   getMessagesByChatId,
   reopenChat,
   saveChat,
+  saveEvents,
   saveLearnerState,
   saveMessages,
   saveTransaction,
@@ -30,6 +31,7 @@ import {
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
 import { computeAbilities, describeAbilities } from "@/lib/learner/abilities";
+import { engagementOf, nextTurn } from "@/lib/learner/events";
 import { emptyLearnerState } from "@/lib/learner/update";
 import { auth } from "@/lib/session";
 import {
@@ -93,9 +95,11 @@ async function loadTurn(input: {
     if (!course) {
       return null;
     }
-    const state =
+    // 学生每发一条消息算一轮，投入度按轮次衰减
+    const state = nextTurn(
       (await getLearnerState(input)) ??
-      emptyLearnerState(input.studentId, input.courseId);
+        emptyLearnerState(input.studentId, input.courseId)
+    );
     return {
       graph: course.graph,
       now: new Date().toISOString(),
@@ -204,6 +208,9 @@ export async function POST(request: Request) {
 
     const stream = createUIMessageStream<ChatMessage>({
       execute: async ({ writer }) => {
+        // 先发 start：SDK 会把服务端生成的消息 id 填进去，前端用同一个 id。
+        // 不发的话前端自己起 id，库里存的是另一个，刚讲完就点赞点踩会找不到这条消息
+        writer.write({ type: "start" });
         const writeWaitingStatus = (
           phase: WaitingStatusData["phase"],
           status: string
@@ -293,6 +300,25 @@ export async function POST(request: Request) {
           }
           const { state } = step;
           await safely("save learner state", () => saveLearnerState({ state }));
+          // 这一轮新记的反应（放弃、跳题、还是不懂……）进只追加的 Event 表
+          const { turn: turnNo, recent } = engagementOf(state);
+          if (courseId) {
+            await safely("save events", () =>
+              saveEvents(
+                recent
+                  .filter((e) => e.turn === turnNo)
+                  .map((e) => ({
+                    courseId,
+                    kpId: touched?.id ?? null,
+                    messageId: message.id,
+                    payload: { turn: e.turn },
+                    sessionId: id,
+                    studentId: session.user.id,
+                    type: e.type,
+                  }))
+              )
+            );
+          }
           if (graded && courseId) {
             // 只追加的作答记录：每次批改一行
             await safely("save transaction", () =>

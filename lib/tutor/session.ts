@@ -2,19 +2,24 @@ import "server-only";
 import {
   getChatById,
   getCourseById,
+  getEventsByStudent,
   getLearnerState,
   getMessagesByChatId,
   getPersonalGraph,
+  getStudentModel,
+  getTransactionsByStudent,
   getUnreviewedChats,
   saveChatReport,
   saveLearnerState,
   savePersonalGraph,
+  saveStudentModel,
 } from "@/lib/db/queries";
 import {
   applyConceptChanges,
   emptyPersonalGraph,
 } from "@/lib/learner/personal";
 import { applyReview, sessionReport } from "@/lib/learner/review";
+import { rebuildStudentModel } from "@/lib/learner/student-model";
 import type { SessionReport } from "@/lib/types";
 import { reviewSession, type TranscriptLine } from "./review";
 
@@ -128,7 +133,25 @@ export async function endSession(input: {
   report.concepts = changed;
   report.revised = applied.revised;
   await saveChatReport({ id: input.chatId, report });
+  try {
+    await refreshStudentModel(input.studentId);
+  } catch (error) {
+    console.error("rebuild student model failed:", error);
+  }
   return report;
+}
+
+// 学生模型每次结束学习都从原始记录整份重算（学生建模方案 F）；文字笔记原样保留
+async function refreshStudentModel(studentId: string) {
+  const [transactions, events, old] = await Promise.all([
+    getTransactionsByStudent({ studentId }),
+    getEventsByStudent({ studentId }),
+    getStudentModel({ studentId }),
+  ]);
+  await saveStudentModel({
+    data: rebuildStudentModel(transactions, events, old?.notes),
+    studentId,
+  });
 }
 
 // 开新对话时补跑：之前没点“结束本次学习”的会话，挨个复核。失败的下次再补

@@ -16,6 +16,7 @@ const fillSchema = z.object({
   rationale: z.string(),
   representation: z.enum(["analogy", "code", "formula", "diagram"]),
   start_from: z.array(z.string()),
+  student_reaction: z.enum(["none", "still_lost", "too_abstract"]),
 });
 
 export type PlanFill = z.infer<typeof fillSchema>;
@@ -39,6 +40,7 @@ const SYSTEM = [
   "- representation：analogy 生活类比 / code 代码 / formula 公式 / diagram 图示。学生说过的偏好优先。",
   "- check_misconception_first：这个点上有没纠正的误解时，要不要先排查它。",
   "- rationale：一两句中文，说明为什么这样安排，引用具体的 M、O、H、先修或学生原话。",
+  "- student_reaction：学生这一轮的话是不是在说听不懂。still_lost 是还是没懂、越听越糊涂（比如“还是不懂”“没明白”）；too_abstract 是嫌太抽象、想要具体例子（比如“太抽象了”“能举个例子吗”）；都不是就填 none。只看这一轮学生说的话，拿不准填 none。",
   "",
   "原则：让学生自己做出来的部分尽量多，但他刚接触、又没有能借力的先修、或者求助依赖很高（H ≥ 0.5）时，讲完整一些。学生说“直接告诉我”时必须 full。",
 ].join("\n");
@@ -50,7 +52,7 @@ export async function fillPlan(input: {
   rulePlan: TutorPlan;
   studentText: string;
   justTellMe: boolean;
-}): Promise<TutorPlan> {
+}): Promise<{ plan: TutorPlan; reaction: PlanFill["student_reaction"] }> {
   const { graph, state, rulePlan } = input;
   const ctx = plannerContext(graph, state, rulePlan.target_kc, input.sessionId);
   const t = ctx.target;
@@ -84,9 +86,12 @@ export async function fillPlan(input: {
     system: SYSTEM,
     tier: "fast",
   });
-  return mergePlan(rulePlan, filled, {
-    justTellMe: input.justTellMe,
-    misconception: rulePlan.check_misconception_first,
-    prereqIds: ctx.prereqs.map((p) => p.id),
-  });
+  return {
+    plan: mergePlan(rulePlan, filled, {
+      justTellMe: input.justTellMe,
+      misconception: rulePlan.check_misconception_first,
+      prereqIds: ctx.prereqs.map((p) => p.id),
+    }),
+    reaction: filled.student_reaction,
+  };
 }

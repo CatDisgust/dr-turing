@@ -237,6 +237,23 @@ export type ReviewVerdict = {
 };
 
 // 会话报告：这次是教会了，还是替他做完了（LearnTrace readouts）
+// 学生模型（学生建模方案 F），跨课程每个学生一份。learnRate、arms、calibration、style 由后面几步填，
+// 这一步先建表、先能从原始记录重算；notes 是 Claude 写的文字，不重算
+export type StudentModelData = {
+  // 个人化 BKT 的学习率（方案 B）；还没拟合时用全局值
+  learnRate: number;
+  // 每种讲法的得分（方案 C）
+  arms: Record<string, unknown>;
+  // 预测准不准（方案 D）
+  calibration: null;
+  style: null;
+  notes: unknown[];
+  // 下面两项是这一步就能算的：各种反应各出现几次、答了多少题
+  reactions: Partial<Record<StudentEventType, number>>;
+  answers: { total: number; independentCorrect: number };
+  rebuiltFrom: { transactions: number; events: number };
+};
+
 export type SessionReport = {
   sessionId: string;
   reviewedAt: string;
@@ -274,6 +291,16 @@ export type PendingQuestion = {
   help: "none" | "hint" | "revealed";
 };
 
+export type StudentEventType =
+  | "give_up"
+  | "just_tell_me"
+  | "skip"
+  | "still_lost"
+  | "too_abstract"
+  | "thumbs_up"
+  | "thumbs_down"
+  | "asked_followup";
+
 export type LearnerState = {
   studentId: string;
   courseId: string;
@@ -281,14 +308,11 @@ export type LearnerState = {
     background: string[];
     statedPreferences: { text: string; quote: string }[];
   };
-  burden: { tooAbstract: number; lost: number; lastAt?: string };
-  // 投入度 W：偏低时规划先修复情绪。只算 sessionId 这一次学习，换一次学习从零算（建模审查第 1 条）
+  // 投入度 W、负担 B 的原料：最近还有分量的反应事件，按轮次衰减（学生建模方案 A，lib/learner/events.ts）。
+  // turn 是这门课里学生发了多少条消息。完整记录在 Event 表
   engagement: {
-    giveUps: number;
-    justTellMe: number;
-    skippedQuestions: number;
-    lastAt?: string;
-    sessionId?: string;
+    turn: number;
+    recent: { type: StudentEventType; turn: number }[];
   };
   nodes: Record<string, NodeState>;
   pendingQuestion?: PendingQuestion;

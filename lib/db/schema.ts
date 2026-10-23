@@ -2,6 +2,7 @@ import type { InferSelectModel } from "drizzle-orm";
 import {
   boolean,
   foreignKey,
+  index,
   json,
   jsonb,
   pgTable,
@@ -17,6 +18,8 @@ import type {
   LearnerState as LearnerStateData,
   PersonalGraph as PersonalGraphData,
   SessionReport,
+  StudentEventType,
+  StudentModelData,
   TutorPlan,
 } from "../types";
 
@@ -189,6 +192,38 @@ export const transaction = pgTable("Transaction", {
 // 个人图谱（D9b）：每个学生一份，跨课程。课内状态在 LearnerState，这里只放课外概念
 export const personalGraph = pgTable("PersonalGraph", {
   graph: jsonb("graph").$type<PersonalGraphData>().notNull(),
+  studentId: uuid("studentId").primaryKey().notNull(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+// 学生的反应事件（学生建模方案 A）：放弃、跳题、听不懂、点赞点踩……只追加，从不更新、不删除。
+// payload.turn 是这门课里学生的第几条消息，投入度按它衰减
+export const event = pgTable(
+  "Event",
+  {
+    at: timestamp("at").notNull().defaultNow(),
+    courseId: text("courseId").notNull(),
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    kpId: text("kpId"),
+    messageId: uuid("messageId").notNull(),
+    payload: jsonb("payload").$type<{ turn: number }>().notNull(),
+    sessionId: uuid("sessionId").notNull(),
+    studentId: uuid("studentId").notNull(),
+    type: varchar("type", { length: 32 }).$type<StudentEventType>().notNull(),
+  },
+  (table) => ({
+    studentCourse: index("Event_student_course_idx").on(
+      table.studentId,
+      table.courseId
+    ),
+  })
+);
+
+export type StudentEvent = InferSelectModel<typeof event>;
+
+// 学生模型（学生建模方案 F）：每个学生一份。除 notes 外都能由 rebuildStudentModel 从 Transaction + Event 重算
+export const studentModel = pgTable("StudentModel", {
+  data: jsonb("data").$type<StudentModelData>().notNull(),
   studentId: uuid("studentId").primaryKey().notNull(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });

@@ -190,9 +190,6 @@ export function seedStudents(
       b = learnHalf(b, graph, p, at, "seed-b-l1", true);
     }
   }
-  // 预置历史是一周前的事，投入度按现在算
-  a = { ...a, engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 } };
-  b = { ...b, engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 } };
 
   return {
     a,
@@ -272,14 +269,7 @@ export function seedScene2(
       type: "transfer_correct",
     })
   );
-  // 预置历史是昨天的事，投入度按现在算
-  return {
-    state: {
-      ...next,
-      engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 },
-    },
-    target,
-  };
+  return { state: next, target };
 }
 
 // 课程里各课的知识点，按课的顺序；课内先放前置，后放依赖它的点（点亮时先亮前置，看着自然）
@@ -431,8 +421,5 @@ export function seedDemoStudent(
       );
     }
   }
-  return {
-    ...s,
-    engagement: { giveUps: 0, justTellMe: 0, skippedQuestions: 0 },
-  };
+  return s;
 }

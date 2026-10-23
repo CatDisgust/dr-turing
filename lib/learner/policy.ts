@@ -5,13 +5,8 @@ import type {
   LearningStage,
   NodeState,
 } from "@/lib/types";
-import {
-  ENGAGEMENT_LOW,
-  FULL_O,
-  HALF_M,
-  QUALITATIVE_KINDS,
-  QUANTITATIVE_GATE,
-} from "./config";
+import { FULL_O, HALF_M, QUALITATIVE_KINDS, QUANTITATIVE_GATE } from "./config";
+import { engagementLow } from "./events";
 import { isGraded } from "./mastery";
 
 // 翻译部分出自 DeepTutor（github.com/HKUDS/DeepTutor，Apache-2.0）deeptutor/learning/policy.py，commit a31d826。
@@ -168,13 +163,6 @@ export type ActionDecision = {
   prompt: TutorPrompt;
   kpId: string; // 规则 ④ 可能改成先讲一个已知薄弱的先修
 };
-
-export function engagementLow(engagement: LearnerState["engagement"]): boolean {
-  return (
-    engagement.giveUps + engagement.justTellMe + engagement.skippedQuestions >=
-    ENGAGEMENT_LOW
-  );
-}
 
 // 有过批改证据、而且 M 还没到半亮的先修，才算“已知薄弱”；没证据的先修交给诊断入口去问
 function knownWeak(node: NodeState | undefined): boolean {

@@ -1,5 +1,5 @@
 import type { CourseGraph, LearnerState, NodeState } from "@/lib/types";
-import { sessionEngagement } from "./engagement";
+import { engagementOf, signals } from "./events";
 import { type Light, nodeLight } from "./light";
 import { isGraded } from "./mastery";
 
@@ -72,10 +72,6 @@ export function plannerContext(
 
   return {
     confusable: confusable.map((id) => summarize(graph, state, id, sessionId)),
-    engagement:
-      sessionId === undefined
-        ? state.engagement
-        : sessionEngagement(state.engagement, sessionId),
     prereqs: [
       ...oneHop.map((id) => ({
         hops: 1 as const,
@@ -86,6 +82,10 @@ export function plannerContext(
         ...summarize(graph, state, id, sessionId),
       })),
     ],
+    // 投入度 W、负担 B（按轮次衰减）
+    signals: (({ B, W }) => ({ B: round(B), W: round(W) }))(
+      signals(engagementOf(state))
+    ),
     target: {
       ...summarize(graph, state, kpId, sessionId),
       checkQuestions: point.checkQuestions,
