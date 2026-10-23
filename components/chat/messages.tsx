@@ -107,6 +107,7 @@ function PureMessages({
             <PreviewMessage
               addToolApprovalResponse={addToolApprovalResponse}
               chatId={chatId}
+              isLatest={messages.length - 1 === index}
               isLoading={
                 status === "streaming" && messages.length - 1 === index
               }

@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import type { UIMessageStreamWriter } from "ai";
 import type { ChatMessage } from "@/lib/types";
 import { generateUUID } from "@/lib/utils";
+import { partText } from "./parts";
 
 type Events = AsyncIterable<Anthropic.Beta.BetaRawMessageStreamEvent>;
 
@@ -44,7 +45,7 @@ export async function pipeClaudeToUI(
   return written;
 }
 
-// UI 消息 → Anthropic messages。只带文字；空消息丢掉，连续同角色合并由 API 处理。
+// UI 消息 → Anthropic messages。只带文字（检查题卡片还原成题面）；空消息丢掉，连续同角色合并由 API 处理。
 export function toClaudeMessages(
   messages: ChatMessage[]
 ): Anthropic.Beta.BetaMessageParam[] {
@@ -52,10 +53,7 @@ export function toClaudeMessages(
     if (message.role !== "user" && message.role !== "assistant") {
       return [];
     }
-    const text = message.parts
-      .flatMap((part) => (part.type === "text" ? [part.text] : []))
-      .join("\n")
-      .trim();
+    const text = message.parts.map(partText).join("").trim();
     return text ? [{ content: text, role: message.role }] : [];
   });
 }

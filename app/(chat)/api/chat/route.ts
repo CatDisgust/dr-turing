@@ -43,19 +43,90 @@ import { describePlan, tutorPrompts } from "@/lib/tutor/prompts";
 import { pipeClaudeToUI, toClaudeMessages } from "@/lib/tutor/to-ui-stream";
 import {
   answerTurn,
+  type PlanStep,
   planAndAsk,
   questionTurn,
+  quizTurn,
   signalTurn,
   startTurn,
   type Turn,
   type TurnResult,
 } from "@/lib/tutor/turn";
-import type { ChatMessage, WaitingStatusData } from "@/lib/types";
+import type {
+  ChatMessage,
+  CheckCard,
+  CustomUIDataTypes,
+  KnowledgePoint,
+  TutorPlan,
+  WaitingStatusData,
+} from "@/lib/types";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { generateTitleFromUserMessage } from "../../actions";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
 
 export const maxDuration = 60;
+
+// 讲「死锁」时在回答里嵌一个小模拟（交互方案 C），一次学习只出一次
+const SIM_TARGET = /死锁|deadlock/i;
+function simFor(
+  plan: TutorPlan | undefined,
+  points: KnowledgePoint[],
+  messages: ChatMessage[]
+): { data: CustomUIDataTypes["sim"]; type: "data-sim" } | null {
+  if (plan?.next_action !== "teach") {
+    return null;
+  }
+  const point = points.find((p) => p.id === plan.target_kc);
+  const shown = messages.some((m) =>
+    m.parts.some((part) => part.type === "data-sim")
+  );
+  if (!point || shown || !SIM_TARGET.test(point.name)) {
+    return null;
+  }
+  return { data: { kind: "deadlock", kpId: point.id }, type: "data-sim" };
+}
+
+// 这一轮结束时要不要摆一张检查题卡片：新出了题；或者题还开着，这一轮答错了、要了提示或答案
+function cardFor(
+  turn: Turn,
+  step: PlanStep,
+  result: TurnResult | null,
+  signal: PostRequestBody["signal"]
+): CheckCard | null {
+  const open = step.state.pendingQuestion;
+  const isOpen = open?.sessionId === turn.sessionId;
+  const nameOf = (kpId: string) =>
+    turn.graph.points.find((p) => p.id === kpId)?.name ?? "";
+  if (step.question) {
+    const fromPending = isOpen && open.question === step.question;
+    const kpId = fromPending ? open.kpId : (step.plan?.target_kc ?? "");
+    return {
+      kind: fromPending ? open.kind : "diagnosis",
+      kpId,
+      name: nameOf(kpId),
+      question: step.question,
+      retry: fromPending && open.askedTurnId !== turn.turnId,
+    };
+  }
+  const touchedIt =
+    Boolean(result?.graded) || signal === "hint" || signal === "just_tell_me";
+  if (isOpen && touchedIt) {
+    return {
+      kind: open.kind,
+      kpId: open.kpId,
+      name: nameOf(open.kpId),
+      question: open.question,
+      retry: true,
+    };
+  }
+  return null;
+}
+
+// “我懂了，考我”考的是上一条回答讲的那个点
+function lastTarget(messages: ChatMessage[]): string | undefined {
+  return messages.findLast((m) => m.role === "assistant" && m.metadata?.plan)
+    ?.metadata?.plan?.target_kc;
+}
 
 // demo 阶段把出错原因直接显示出来，省得翻日志；错误信息里不含 key
 function describeClaudeError(error: unknown): string {
@@ -155,6 +226,8 @@ export async function POST(request: Request) {
       selectedVisibilityType,
       signal,
       targetKpId,
+      confidence,
+      quizMe,
     } = requestBody;
 
     const session = await auth();
@@ -246,8 +319,10 @@ export async function POST(request: Request) {
         // 引擎这一侧先走完：快捷按钮 / 批改上一轮的题 / 归类新问题，再由规划器定本轮动作。
         // 导师用哪段提示词取决于规划，所以归类不能再和讲解并行
         // 诊断入口（D10）优先：“我要学第 N 课”、诊断题的回答、诊断中点“先不做题”
+        const quizKpId = quizMe ? lastTarget(uiMessages) : undefined;
+        const quizzed = turn && quizKpId ? quizTurn(turn, quizKpId) : null;
         const diagnosed =
-          turn && !targetKpId
+          turn && !targetKpId && !quizzed
             ? await safely("diagnose", () =>
                 signal === "skip"
                   ? diagnosisSkip(turn)
@@ -258,8 +333,9 @@ export async function POST(request: Request) {
                       )
               )
             : null;
-        let result: TurnResult | null = diagnosed?.result ?? null;
-        if (diagnosed) {
+        let result: TurnResult | null =
+          quizzed?.result ?? diagnosed?.result ?? null;
+        if (quizzed || diagnosed) {
           // 诊断这一侧已经定好了规划和题
         } else if (turn && targetKpId) {
           result = startTurn(turn, targetKpId);
@@ -267,11 +343,12 @@ export async function POST(request: Request) {
           result = signalTurn(turn, signal);
         } else if (turn) {
           result =
-            (await safely("grade", () => answerTurn(turn))) ??
+            (await safely("grade", () => answerTurn(turn, confidence))) ??
             (await safely("classify", () => questionTurn(turn)));
         }
         const engineAt = Date.now();
-        const step =
+        const step: PlanStep | null =
+          quizzed?.step ??
           diagnosed?.step ??
           (turn && result ? await planAndAsk(turn, result, signal) : null);
         const plan = step?.plan;
@@ -287,14 +364,15 @@ export async function POST(request: Request) {
             });
           }
           if (graded) {
+            // 不再是临时的：存进这条回答，开头画一行批改结果（交互方案 D）
             writer.write({
               data: {
+                confidence: graded.attempt.confidence,
                 correct: graded.correct,
                 kpId: graded.point.id,
                 misconception: graded.misconception,
                 name: graded.point.name,
               },
-              transient: true,
               type: "data-graded",
             });
           }
@@ -418,16 +496,17 @@ export async function POST(request: Request) {
             errorText: "这个问题我没法回答，换个问法试试？",
             type: "error",
           });
-        } else if (step?.question) {
-          // 题面由代码写，不靠导师记得出题；题已经和状态一起存好了
-          const partId = generateUUID();
-          writer.write({ id: partId, type: "text-start" });
-          writer.write({
-            delta: `\n\n**检查一下：**${step.question}`,
-            id: partId,
-            type: "text-delta",
-          });
-          writer.write({ id: partId, type: "text-end" });
+        } else {
+          const sim = turn ? simFor(plan, turn.graph.points, uiMessages) : null;
+          if (sim) {
+            writer.write(sim);
+          }
+          const card =
+            turn && step ? cardFor(turn, step, result, signal) : null;
+          if (card) {
+            // 题面由代码写，不靠导师记得出题；题已经和状态一起存好了。界面画成卡片
+            writer.write({ data: card, type: "data-check" });
+          }
         }
 
         if (titlePromise) {

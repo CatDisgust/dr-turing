@@ -118,6 +118,10 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
         );
         return;
       }
+      // 检查题卡片、小模拟是消息里的部件，由消息自己画
+      if (dataPart.type === "data-check" || dataPart.type === "data-sim") {
+        return;
+      }
       if (dataPart.type === "data-node-touched") {
         window.dispatchEvent(
           new CustomEvent(NODE_TOUCHED_EVENT, { detail: dataPart.data })

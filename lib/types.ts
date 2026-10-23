@@ -52,8 +52,27 @@ export type CustomUIDataTypes = {
     name: string;
     correct: boolean;
     misconception?: string;
+    // 学生交卷前说的把握，没选就没有
+    confidence?: Confidence;
   };
+  // 检查题卡片：题面由代码写，界面画成卡片（交互方案 D）
+  check: CheckCard;
+  // 回答里嵌的小模拟（交互方案 C），现在只有死锁一种
+  sim: { kind: "deadlock"; kpId: string };
 };
+
+export type CheckCard = {
+  kpId: string;
+  name: string;
+  question: string;
+  // 诊断题不走 PendingQuestion，卡片上只留“先不做题”
+  kind: "check" | "variant" | "review" | "diagnosis";
+  // 答错、要了提示或答案之后同一道题再出一次
+  retry: boolean;
+};
+
+// 交卷前学生自己说有多确定：猜的、有点把握、很确定（交互方案 D，先只记不算分）
+export type Confidence = "guess" | "somewhat" | "sure";
 
 export type ChatMessage = UIMessage<
   MessageMetadata,
@@ -167,6 +186,8 @@ export type Attempt = {
   questionKind?: PendingQuestion["kind"];
   // 出题时的预测，批改时从 PendingQuestion 抄过来，Transaction 里预测和结果放在一起
   prediction?: Prediction;
+  // 交卷前学生说的把握（交互方案 D）。先只记下来，不进掌握度
+  confidence?: Confidence;
 };
 
 // 学生自己的错误模式：从他的错答里提出来的，同一个想法按原文归到一起

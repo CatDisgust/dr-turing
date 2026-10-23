@@ -27,6 +27,7 @@ import { applyReview, sessionReport } from "@/lib/learner/review";
 import { rebuildStudentModel } from "@/lib/learner/student-model";
 import { learnRateOf, relearn } from "@/lib/learner/update";
 import type { SessionReport } from "@/lib/types";
+import { partText } from "./parts";
 import { reviewSession, type TranscriptLine } from "./review";
 
 // 结束一次会话：复核 → 证据转正或撤销 → 算会话报告 → 记在 Chat 上。
@@ -39,14 +40,7 @@ function textOf(parts: unknown): string {
   if (!Array.isArray(parts)) {
     return "";
   }
-  return parts
-    .map((part) =>
-      part && typeof part === "object" && "text" in part
-        ? String((part as { text: unknown }).text)
-        : ""
-    )
-    .join("")
-    .trim();
+  return parts.map(partText).join("").trim();
 }
 
 export async function endSession(input: {
