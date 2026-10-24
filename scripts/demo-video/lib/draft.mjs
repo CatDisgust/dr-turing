@@ -676,6 +676,10 @@ export function draftShot(aligned, window, options = {}) {
     clips,
     cursor: (aligned.cursor ?? []).filter((c) => inside(c.t)),
     footage: aligned.video,
+    // 停留（后期据此在「死锁」半亮、全亮时加提示音）
+    holds: (aligned.marks ?? [])
+      .filter((m) => m.name === "hold" && inside(m.t))
+      .map(({ label, ms, t }) => ({ label, ms, t })),
     stats: {
       cut: round3(raw - clips.reduce((n, c) => n + (c.to - c.from), 0)),
       edited: round3(edited),

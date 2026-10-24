@@ -1,6 +1,6 @@
 // 把一条录好的 take 接进后期工程：node scripts/use-take.mjs ../out/<take> [--no-footage]
 // 读 <take>/draft.json（先跑 align.mjs 和 draft.mjs），写 src/data/take.json；
-// 素材 screen.mov 复制到 public/takes/<take>.mov（--no-footage 时不复制，用占位画面）。
+// 素材 screen.mov 复制到 public/takes/<take>.mov（--no-footage 时不复制，用占位画面），音效写到 public/sfx/。
 // 再打印计时表：每个镜头剪完的画面多长、讲稿念完要多久、分镜给了多少秒
 
 import {
@@ -14,6 +14,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { SCRIPT } from "../src/data/script.ts";
 import { autoCues } from "../src/timing.ts";
+import { makeSfx } from "./sfx.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
@@ -35,9 +36,12 @@ if (!args.includes("--no-footage") && existsSync(source)) {
   copyFileSync(source, join(root, "public", footage));
 }
 
+// 点击、星星亮起的音效（自己合成的，见 scripts/sfx.mjs）
+makeSfx(join(root, "public/sfx"));
+
 writeFileSync(
   join(root, "src/data/take.json"),
-  `${JSON.stringify({ footage, shots: draft.shots, take }, null, 1)}\n`
+  `${JSON.stringify({ footage, sfx: true, shots: draft.shots, take }, null, 1)}\n`
 );
 
 // 有配音（scripts/temp-voice.mjs 量好的时长）就用配音，没有按每秒 4.2 字估

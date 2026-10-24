@@ -1,11 +1,14 @@
-import type {
-  CameraKey,
-  Click,
-  Clip,
-  CursorKey,
-  Edit,
-  Shot,
-  Viewport,
+import {
+  type CameraKey,
+  type Click,
+  type Clip,
+  type CursorKey,
+  type Edit,
+  layoutClips,
+  outputTime,
+  type Sfx,
+  type Shot,
+  type Viewport,
 } from "../edit";
 import { ending, gap, NEXT_DAY, PAGE, PRESET, pain } from "./animatic";
 import { SCRIPT } from "./script";
@@ -23,6 +26,7 @@ export type DraftShot = {
   camera: CameraKey[];
   cursor?: CursorKey[];
   clicks?: Click[];
+  holds?: { t: number; label?: string; ms?: number }[];
   viewport: Viewport | null;
   stats: { raw: number; edited: number };
 };
@@ -31,6 +35,8 @@ export type Take = {
   take: string | null;
   // public/ 下的素材路径；null 时用占位画面
   footage: string | null;
+  // use-take 写好了 public/sfx/ 的音效
+  sfx?: boolean;
   shots: DraftShot[];
 };
 
@@ -74,6 +80,33 @@ export function fitClips(clips: Clip[], need: number): Clip[] {
   ];
 }
 
+// 音效：点击只在原速、2 倍以内的片段里响（快放时一串咔哒反而吵）；「死锁」半亮、全亮时镜头到了星上响一声
+const CLICK_RATE = 2;
+const CHIMES: [RegExp, string][] = [
+  [/「死锁」全亮/, "sfx/chime-full.wav"],
+  [/「死锁」半亮/, "sfx/chime-half.wav"],
+];
+
+export function shotSfx(draft: DraftShot, clips: Clip[]): Sfx[] {
+  const laid = layoutClips(clips);
+  const clipAt = (t: number) => laid.find((c) => t >= c.from && t < c.to);
+  const at = (t: number) => Math.round(outputTime(laid, t) * 1000) / 1000;
+  const out: Sfx[] = [];
+  for (const c of draft.clicks ?? []) {
+    const clip = clipAt(c.t);
+    if (clip && clip.rate <= CLICK_RATE) {
+      out.push({ file: "sfx/click.wav", t: at(c.t), volume: 0.35 });
+    }
+  }
+  for (const h of draft.holds ?? []) {
+    const file = CHIMES.find(([re]) => re.test(h.label ?? ""))?.[1];
+    if (file && clipAt(h.t)) {
+      out.push({ file, t: at(h.t), volume: 0.45 });
+    }
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+
 function screenShot(take: Take, draft: DraftShot): Shot {
   const id = `s${draft.shot}`;
   const s = SCRIPT.find((x) => x.id === id);
@@ -82,11 +115,12 @@ function screenShot(take: Take, draft: DraftShot): Shot {
   }
   const intro = draft.shot === 3;
   const { cues, end, narration } = narrate(id, s.narration, intro ? 1.9 : 0.5);
+  const clips = fitClips(draft.clips, end + TAIL);
   return {
     badges: [{ text: draft.shot === 7 ? NEXT_DAY : PRESET }],
     camera: draft.camera,
     clicks: draft.clicks ?? [],
-    clips: fitClips(draft.clips, end + TAIL),
+    clips,
     cues,
     cursor: draft.cursor ?? [],
     footage: take.footage,
@@ -95,6 +129,7 @@ function screenShot(take: Take, draft: DraftShot): Shot {
     kind: "screen",
     narration,
     placeholder: s.picture,
+    sfx: take.sfx && take.footage ? shotSfx(draft, clips) : [],
     title: s.title,
     viewport: take.footage ? (draft.viewport ?? PAGE) : PAGE,
   };
