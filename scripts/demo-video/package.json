@@ -1,0 +1,20 @@
+{
+  "name": "dr-turing-demo-video",
+  "private": true,
+  "type": "module",
+  "description": "录演示视频：在 Mac 上用有界面的 Chrome + OBS 录线上网站，脚本按分镜操作并记事件日志（不进主项目依赖）",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "record": "node record.mjs",
+    "rehearse": "node record.mjs --no-obs",
+    "classify": "node classify-check.mjs",
+    "align": "node align.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "obs-websocket-js": "5.0.8",
+    "playwright": "1.64.1"
+  }
+}

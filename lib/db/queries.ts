@@ -18,6 +18,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { ArtifactKind } from "@/components/chat/artifact";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
+import type { StudentDump } from "../demo/snapshot";
 import { ChatbotError } from "../errors";
 import type {
   ConceptEvent,
@@ -35,6 +36,7 @@ import {
   conceptEvent,
   course,
   type DBMessage,
+  demoSnapshot,
   document,
   event,
   learnerState,
@@ -984,6 +986,243 @@ export async function resetStudent({ studentId }: { studentId: string }) {
     await db
       .delete(personalGraph)
       .where(eq(personalGraph.studentId, studentId));
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// 产品演示学生的全部记录整份导出（存档用）。时间列转成 ISO 字符串，整份能直接存进 JSONB
+export async function dumpStudent({
+  studentId,
+}: {
+  studentId: string;
+}): Promise<StudentDump> {
+  try {
+    const chats = await db
+      .select()
+      .from(chat)
+      .where(eq(chat.userId, studentId));
+    const chatIds = chats.map((c) => c.id);
+    const [
+      messages,
+      votes,
+      learnerStates,
+      transactions,
+      events,
+      studentModels,
+      conceptEvents,
+      personalGraphs,
+    ] = await Promise.all([
+      chatIds.length > 0
+        ? db.select().from(message).where(inArray(message.chatId, chatIds))
+        : [],
+      chatIds.length > 0
+        ? db.select().from(vote).where(inArray(vote.chatId, chatIds))
+        : [],
+      db
+        .select()
+        .from(learnerState)
+        .where(eq(learnerState.studentId, studentId)),
+      db.select().from(transaction).where(eq(transaction.studentId, studentId)),
+      db.select().from(event).where(eq(event.studentId, studentId)),
+      db
+        .select()
+        .from(studentModel)
+        .where(eq(studentModel.studentId, studentId)),
+      db
+        .select()
+        .from(conceptEvent)
+        .where(eq(conceptEvent.studentId, studentId)),
+      db
+        .select()
+        .from(personalGraph)
+        .where(eq(personalGraph.studentId, studentId)),
+    ]);
+    return JSON.parse(
+      JSON.stringify({
+        chats,
+        conceptEvents,
+        events,
+        learnerStates,
+        messages,
+        personalGraphs,
+        studentModels,
+        transactions,
+        votes,
+      })
+    ) as StudentDump;
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// 时间列从存档里的字符串变回 Date，其余原样
+function withDates<T>(rows: Record<string, unknown>[], keys: string[]): T[] {
+  return rows.map(
+    (row) =>
+      Object.fromEntries(
+        Object.entries(row).map(([k, v]) => [
+          k,
+          keys.includes(k) && typeof v === "string" ? new Date(v) : v,
+        ])
+      ) as T
+  );
+}
+
+// 把存档整份写回：先删掉这个学生现在的全部记录，再按存档插回去，一个事务里做完
+export async function restoreStudent({
+  studentId,
+  dump,
+}: {
+  studentId: string;
+  dump: StudentDump;
+}) {
+  try {
+    await db.transaction(async (tx) => {
+      const current = await tx
+        .select({ id: chat.id })
+        .from(chat)
+        .where(eq(chat.userId, studentId));
+      const ids = current.map((c) => c.id);
+      if (ids.length > 0) {
+        await tx.delete(vote).where(inArray(vote.chatId, ids));
+        await tx.delete(message).where(inArray(message.chatId, ids));
+        await tx.delete(stream).where(inArray(stream.chatId, ids));
+        await tx.delete(chat).where(inArray(chat.id, ids));
+      }
+      await tx
+        .delete(learnerState)
+        .where(eq(learnerState.studentId, studentId));
+      await tx.delete(transaction).where(eq(transaction.studentId, studentId));
+      await tx.delete(event).where(eq(event.studentId, studentId));
+      await tx
+        .delete(studentModel)
+        .where(eq(studentModel.studentId, studentId));
+      await tx
+        .delete(conceptEvent)
+        .where(eq(conceptEvent.studentId, studentId));
+      await tx
+        .delete(personalGraph)
+        .where(eq(personalGraph.studentId, studentId));
+
+      if (dump.chats.length > 0) {
+        await tx
+          .insert(chat)
+          .values(
+            withDates<typeof chat.$inferInsert>(dump.chats, [
+              "createdAt",
+              "reviewedAt",
+            ])
+          );
+      }
+      if (dump.messages.length > 0) {
+        await tx
+          .insert(message)
+          .values(
+            withDates<typeof message.$inferInsert>(dump.messages, ["createdAt"])
+          );
+      }
+      if (dump.votes.length > 0) {
+        await tx
+          .insert(vote)
+          .values(withDates<typeof vote.$inferInsert>(dump.votes, []));
+      }
+      if (dump.learnerStates.length > 0) {
+        await tx
+          .insert(learnerState)
+          .values(
+            withDates<typeof learnerState.$inferInsert>(dump.learnerStates, [
+              "updatedAt",
+            ])
+          );
+      }
+      if (dump.transactions.length > 0) {
+        await tx
+          .insert(transaction)
+          .values(
+            withDates<typeof transaction.$inferInsert>(dump.transactions, [
+              "createdAt",
+            ])
+          );
+      }
+      if (dump.events.length > 0) {
+        await tx
+          .insert(event)
+          .values(withDates<typeof event.$inferInsert>(dump.events, ["at"]));
+      }
+      if (dump.studentModels.length > 0) {
+        await tx
+          .insert(studentModel)
+          .values(
+            withDates<typeof studentModel.$inferInsert>(dump.studentModels, [
+              "updatedAt",
+            ])
+          );
+      }
+      if (dump.conceptEvents.length > 0) {
+        await tx
+          .insert(conceptEvent)
+          .values(
+            withDates<typeof conceptEvent.$inferInsert>(dump.conceptEvents, [
+              "at",
+            ])
+          );
+      }
+      if (dump.personalGraphs.length > 0) {
+        await tx
+          .insert(personalGraph)
+          .values(
+            withDates<typeof personalGraph.$inferInsert>(dump.personalGraphs, [
+              "updatedAt",
+            ])
+          );
+      }
+    });
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function saveDemoSnapshot({
+  name,
+  studentId,
+  data,
+}: {
+  name: string;
+  studentId: string;
+  data: StudentDump;
+}) {
+  try {
+    await db
+      .insert(demoSnapshot)
+      .values({ createdAt: new Date(), data, name, studentId })
+      .onConflictDoUpdate({
+        set: { createdAt: new Date(), data, studentId },
+        target: demoSnapshot.name,
+      });
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function getDemoSnapshot({ name }: { name: string }) {
+  try {
+    const [row] = await db
+      .select()
+      .from(demoSnapshot)
+      .where(eq(demoSnapshot.name, name));
+    return row ?? null;
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+export async function listDemoSnapshots() {
+  try {
+    return await db
+      .select({ createdAt: demoSnapshot.createdAt, name: demoSnapshot.name })
+      .from(demoSnapshot)
+      .orderBy(asc(demoSnapshot.createdAt));
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }

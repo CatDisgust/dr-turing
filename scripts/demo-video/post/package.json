@@ -1,0 +1,24 @@
+{
+  "name": "dr-turing-demo-video-post",
+  "private": true,
+  "type": "module",
+  "description": "演示视频后期：录屏素材 + 镜头放大 + 光标 + 字卡 + 字幕 + 配音音乐，在 Remotion 里合成",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts",
+    "still": "remotion still src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource/noto-sans-sc": "5.3.1",
+    "@remotion/cli": "4.0.538",
+    "@remotion/media-utils": "4.0.538",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "remotion": "4.0.538"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "typescript": "5.9.3"
+  }
+}
