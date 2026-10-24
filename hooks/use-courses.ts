@@ -26,12 +26,12 @@ export type OwnUpload = {
 type CoursesResponse = { courses: CourseOption[]; own: OwnUpload | null };
 
 // 选课列表（2026-10-24）。所有对话共用一份；学完一次（星图刷新）再重新取，复习数跟着变
+export const COURSES_URL = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/courses`;
+
 function useCoursesData() {
-  const { data, mutate } = useSWR<CoursesResponse>(
-    `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/courses`,
-    fetcher,
-    { revalidateOnFocus: false }
-  );
+  const { data, mutate } = useSWR<CoursesResponse>(COURSES_URL, fetcher, {
+    revalidateOnFocus: false,
+  });
   useEffect(() => {
     const refresh = () => mutate();
     window.addEventListener(LEARNER_REFRESH_EVENT, refresh);
