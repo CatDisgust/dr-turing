@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   alignEvents,
+  countShowinfo,
   editHints,
   findFlash,
   findFlashes,
   makeClock,
   parseSignalstats,
+  probeWindow,
 } from "../lib/align.mjs";
 
 // 造一段 60fps 的亮度序列：深色底（~20），在 flashAt 帧起闪白 width 帧
@@ -107,5 +109,27 @@ describe("时钟和对齐", () => {
       { t: 1.05, testid: "send-button", x: 3, y: 3 },
     ]);
     assert.deepEqual(hints.marks, [{ name: "shot.4.start", t: 2 }]);
+  });
+});
+
+describe("测帧率", () => {
+  test("测帧率时段：对到素材时间，两头各让 0.15 秒", () => {
+    const clock = makeClock([{ epochMs: 1000, videoSec: 1 }]);
+    const w = probeWindow(
+      [{ frames: 240, t: 2000, tEnd: 4000, type: "probe" }],
+      clock
+    );
+    assert.deepEqual(w, { from: 2.15, pageFps: 120, to: 3.85 });
+    assert.equal(probeWindow([], clock), null);
+  });
+
+  test("数 showinfo 的帧", () => {
+    const text = [
+      "[Parsed_showinfo_1 @ 0x1] config in time_base: 1/60",
+      "[Parsed_showinfo_1 @ 0x1] n:   0 pts:      0 pts_time:0",
+      "[Parsed_showinfo_1 @ 0x1] n:   1 pts:      1 pts_time:0.0166",
+      "frame=    2 fps=0.0 q=-0.0",
+    ].join("\n");
+    assert.equal(countShowinfo(text), 2);
   });
 });

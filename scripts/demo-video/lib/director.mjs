@@ -62,6 +62,15 @@ export class Director {
     await sleep(100);
   }
 
+  // 2 秒测帧率的动画（白条每帧挪一格），align.mjs 会数这段素材里不重复的帧
+  async probe() {
+    const result = await this.page.evaluate(() => window.__demo.probe(2000));
+    this.log.mark("probe", {
+      fps: Math.round((result.frames / (result.end - result.start)) * 1000),
+    });
+    return result;
+  }
+
   async flash(label) {
     const result = await this.page.evaluate(() => window.__demo.flash(50, 3));
     this.log.mark(`flash.${label}`, {

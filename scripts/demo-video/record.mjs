@@ -202,6 +202,12 @@ async function runTake(ctx) {
         .catch((error) => log.warn(`OBS 截帧失败：${error.message}`));
     }
     await d.flash("start");
+    if (obs) {
+      await sleep(300);
+      await d
+        .probe()
+        .catch((error) => log.warn(`测帧率失败：${error.message}`));
+    }
     await sleep(600);
     for (let shot = opts.fromShot; shot <= opts.toShot; shot += 1) {
       log.mark(`shot.${shot}.start`);

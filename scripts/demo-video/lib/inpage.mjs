@@ -272,5 +272,35 @@ export function installDemoLog(config) {
       requestAnimationFrame(step);
     });
 
-  window.__demo = { busy, flash, flush, version: 2 };
+  // 测帧率：盖一层深色，一根白条每帧挪一格，持续 ms 毫秒。每一帧画面都不一样，
+  // 后期数这段素材里不重复的帧，就是 OBS 实际录到的帧率
+  const probe = (ms = 2000) =>
+    new Promise((resolve) => {
+      const cover = document.createElement("div");
+      cover.style.cssText =
+        "position:fixed;inset:0;background:#101010;z-index:2147483647;pointer-events:none";
+      const bar = document.createElement("div");
+      bar.style.cssText =
+        "position:absolute;top:0;bottom:0;width:24px;left:0;background:#ffffff";
+      cover.append(bar);
+      document.documentElement.append(cover);
+      const start = now();
+      let n = 0;
+      const step = () => {
+        n += 1;
+        bar.style.transform = `translateX(${(n * 24) % innerWidth}px)`;
+        if (now() - start < ms) {
+          requestAnimationFrame(step);
+          return;
+        }
+        cover.remove();
+        const end = now();
+        push({ frames: n, t: r1(start), tEnd: r1(end), type: "probe" });
+        flush();
+        requestAnimationFrame(() => resolve({ end, frames: n, start }));
+      };
+      requestAnimationFrame(step);
+    });
+
+  window.__demo = { busy, flash, flush, probe, version: 2 };
 }
