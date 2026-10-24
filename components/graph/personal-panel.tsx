@@ -10,12 +10,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  ALL,
   CLUSTER,
   collapseCourses,
   type MergeTarget,
   mergeCandidates,
   type Star,
   type StarMap,
+  scopeStarMap,
+  starScopes,
 } from "@/lib/learner/star-map";
 import type { Ability } from "@/lib/types";
 
@@ -42,7 +45,8 @@ const HOW: Record<Star["evidence"][number]["how"], string> = {
 const day = (at: string) =>
   new Date(at).toLocaleDateString("zh-CN", { day: "numeric", month: "long" });
 
-export function PersonalPanel() {
+// courseId：在哪门课的对话里打开的，就先看那门课（2026-10-24 分课程看）
+export function PersonalPanel({ courseId }: { courseId?: string } = {}) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<MapData | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -50,10 +54,24 @@ export function PersonalPanel() {
   const [notice, setNotice] = useState<string | null>(null);
   // 展开了哪几门课（课内每门课先收成一团）
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const shown = useMemo(
-    () => (data ? collapseCourses(data, expanded) : null),
-    [data, expanded]
-  );
+  // 看哪一块：全部 / 某门课 / 课外。没手动选过时，在课里打开就先看这门课
+  const [picked, setPicked] = useState<string | null>(null);
+  const scopes = useMemo(() => (data ? starScopes(data) : []), [data]);
+  const home = courseId ? `course:${courseId}` : null;
+  const scope =
+    picked ??
+    (home && scopes.some((s) => s.id === home && s.count > 0) ? home : ALL);
+  const shown = useMemo(() => {
+    if (!data) {
+      return null;
+    }
+    // 单看一门课时不收成一团，直接画一颗颗星
+    const part = scopeStarMap(data, scope);
+    return collapseCourses(
+      part,
+      scope === ALL ? expanded : new Set([...expanded, scope])
+    );
+  }, [data, expanded, scope]);
 
   const load = useCallback(() => {
     fetch("/api/personal/map")
@@ -82,11 +100,20 @@ export function PersonalPanel() {
       const block = data?.graph.points.find((p) => p.id === id)?.lessonId;
       if (block) {
         setExpanded((e) => new Set([...e, block]));
+        // 点到别的块里的星（比如详情里的“常一起出现”），切到全部才看得见
+        if (scope !== ALL && block !== scope) {
+          setPicked(ALL);
+        }
       }
       setSelectedId(id);
     },
-    [data]
+    [data, scope]
   );
+  const pickScope = useCallback((id: string) => {
+    setPicked(id);
+    setSelectedId(null);
+    setMerging(false);
+  }, []);
   const fold = useCallback(() => {
     const block = data?.graph.points.find((p) => p.id === selectedId)?.lessonId;
     setExpanded((e) => new Set([...e].filter((b) => b !== block)));
@@ -168,8 +195,11 @@ export function PersonalPanel() {
                 我的星图
               </DialogTitle>
               <DialogDescription className="mt-2 text-stone-400 text-xs">
-                你学过、聊过的所有概念，不分哪门课。亮度是答题答出来的，这里只能看。
+                你学过、聊过的所有概念。亮度是答题答出来的，这里只能看。
               </DialogDescription>
+              {scopes.length > 2 ? (
+                <ScopeTabs current={scope} onPick={pickScope} scopes={scopes} />
+              ) : null}
             </div>
             <ul className="pointer-events-none absolute bottom-4 left-20 z-[5] flex flex-wrap gap-x-4 gap-y-1 text-stone-400 text-xs">
               <li>全亮：真会了</li>
@@ -180,9 +210,10 @@ export function PersonalPanel() {
                 选中一颗星：蓝色实线是意思上有关系，虚线是常一起出现
               </li>
             </ul>
-            {data && data.graph.points.length > 0 ? (
+            {data && shown && shown.graph.points.length > 0 ? (
               <GraphPanel
-                graph={shown?.graph ?? data.graph}
+                graph={shown.graph}
+                key={scope}
                 lights={shown?.lights}
                 onSelect={select}
                 plainTitles
@@ -231,6 +262,61 @@ export function PersonalPanel() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function ScopeTabs({
+  scopes,
+  current,
+  onPick,
+}: {
+  scopes: ReturnType<typeof starScopes>;
+  current: string;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div
+      className="pointer-events-auto mt-4 flex max-w-[60vw] flex-wrap gap-1.5"
+      data-testid="star-scopes"
+      role="tablist"
+    >
+      {scopes.map((s) => (
+        <ScopeTab
+          active={s.id === current}
+          key={s.id}
+          onPick={onPick}
+          scope={s}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ScopeTab({
+  scope,
+  active,
+  onPick,
+}: {
+  scope: ReturnType<typeof starScopes>[number];
+  active: boolean;
+  onPick: (id: string) => void;
+}) {
+  const pick = useCallback(() => onPick(scope.id), [onPick, scope.id]);
+  return (
+    <button
+      aria-selected={active}
+      className={
+        active
+          ? "rounded-full bg-white/15 px-3 py-1 text-stone-100 text-xs"
+          : "rounded-full px-3 py-1 text-stone-400 text-xs hover:bg-white/5 hover:text-stone-200"
+      }
+      data-testid={`scope-${scope.id}`}
+      onClick={pick}
+      role="tab"
+      type="button"
+    >
+      {scope.label} {scope.count}
+    </button>
   );
 }
 

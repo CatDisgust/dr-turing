@@ -435,3 +435,45 @@ export function collapseCourses(
     related,
   };
 }
+
+// 我的星图分课程看（用户 2026-10-24）：全部 / 每门课 / 课外。
+// 只收起图上画哪些星；星的详情、能并进哪个知识点还按全部的来
+export const ALL = "all";
+
+export function starScopes(
+  map: Pick<StarMap, "graph">
+): { id: string; label: string; count: number }[] {
+  const count = (id: string) =>
+    map.graph.points.filter((p) => p.lessonId === id).length;
+  return [
+    { count: map.graph.points.length, id: ALL, label: "全部" },
+    ...map.graph.lessons.map((l) => ({
+      count: count(l.id),
+      id: l.id,
+      label: l.title,
+    })),
+  ];
+}
+
+export function scopeStarMap(map: StarMap, scope: string): StarMap {
+  if (scope === ALL || !map.graph.lessons.some((l) => l.id === scope)) {
+    return map;
+  }
+  const keep = new Set(
+    map.graph.points.filter((p) => p.lessonId === scope).map((p) => p.id)
+  );
+  return {
+    ...map,
+    graph: {
+      ...map.graph,
+      edges: map.graph.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
+      lessons: map.graph.lessons.filter((l) => l.id === scope),
+      points: map.graph.points.filter((p) => keep.has(p.id)),
+    },
+    related: Object.fromEntries(
+      Object.entries(map.related)
+        .filter(([id]) => keep.has(id))
+        .map(([id, others]) => [id, others.filter((o) => keep.has(o.to))])
+    ),
+  };
+}

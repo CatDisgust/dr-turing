@@ -117,7 +117,7 @@ export function LearnerGraph({
         selectedId={selectedId}
         warnId={warnId}
       />
-      <PersonalPanel />
+      <PersonalPanel courseId={courseId} />
       {openPoint ? (
         <NodeDrawer
           node={state?.nodes[openPoint.id]}

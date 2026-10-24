@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { CourseGraph, PersonalGraph } from "@/lib/types";
 import {
+  ALL,
   buildStarMap,
   CLUSTER,
   collapseCourses,
   mergeCandidates,
+  OUTSIDE,
+  scopeStarMap,
+  starScopes,
 } from "../star-map";
 import { applyEvidence, emptyLearnerState } from "../update";
 
@@ -299,5 +303,40 @@ describe("我的星图", () => {
     expect(folded.related.kp_lock).toBeUndefined();
     const open = collapseCourses(map, new Set(["course:comp5348"]));
     expect(open.graph.points).toHaveLength(4);
+  });
+
+  it("分课程看：全部 / 每门课 / 课外，只画那一块的星和线，详情照旧全有", () => {
+    const map = buildStarMap({
+      courses: [course],
+      personal: personal(),
+      states: [stateWithLock()],
+    });
+    expect(starScopes(map)).toEqual([
+      { count: 4, id: ALL, label: "全部" },
+      { count: 2, id: "course:comp5348", label: "COMP5348" },
+      { count: 2, id: OUTSIDE, label: "课外" },
+    ]);
+    const inCourse = scopeStarMap(map, "course:comp5348");
+    expect(inCourse.graph.points.map((p) => p.id).sort()).toEqual([
+      "kp_dead",
+      "kp_lock",
+    ]);
+    expect(inCourse.graph.lessons.map((l) => l.id)).toEqual([
+      "course:comp5348",
+    ]);
+    // 连到课外的线不画
+    expect(
+      Object.values(inCourse.related)
+        .flat()
+        .every((o) => o.to.startsWith("kp_"))
+    ).toBe(true);
+    expect(inCourse.stars.pc_2).toBeDefined();
+    const outside = scopeStarMap(map, OUTSIDE);
+    expect(outside.graph.points.map((p) => p.id)).toEqual(["pc_1", "pc_2"]);
+    expect(outside.graph.edges).toEqual([]);
+    expect(outside.related.pc_2).toEqual([]);
+    // 全部、或者这门课已经不在了：原样
+    expect(scopeStarMap(map, ALL)).toBe(map);
+    expect(scopeStarMap(map, "course:gone")).toBe(map);
   });
 });
