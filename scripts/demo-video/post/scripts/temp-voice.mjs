@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCRIPT } from "../src/data/script.ts";
+import { LINES } from "../src/data/script.ts";
 import { countChars } from "../src/timing.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -122,7 +122,7 @@ mkdirSync(dir, { recursive: true });
 const voiceName = measureOnly ? (flag("--voice") ?? "自备") : pickVoice();
 const rate = flag("--rate");
 const files = {};
-for (const s of SCRIPT) {
+for (const s of LINES) {
   const wav = join(dir, `${s.id}.wav`);
   if (!measureOnly) {
     const aiff = join(dir, `${s.id}.aiff`);

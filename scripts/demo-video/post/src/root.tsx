@@ -2,7 +2,7 @@ import { Composition, Still } from "remotion";
 import { Cover } from "./cover";
 import { animatic } from "./data/animatic";
 import { engineTest } from "./data/engine-test";
-import { fromTake } from "./data/take";
+import { fromTake, shortFromTake } from "./data/take";
 import type { Edit } from "./edit";
 import { editDuration, Video } from "./video";
 
@@ -24,6 +24,7 @@ export function Root() {
       {comp("Animatic", animatic)}
       {comp("EngineTest", engineTest)}
       {fromTake ? comp("Take", fromTake) : null}
+      {shortFromTake ? comp("Short", shortFromTake) : null}
       <Still
         component={Cover}
         defaultProps={{ edit: fromTake ?? animatic }}

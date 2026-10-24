@@ -3,7 +3,9 @@ import {
   type Click,
   type Clip,
   type CursorKey,
+  cameraAt,
   type Edit,
+  HOME,
   layoutClips,
   outputTime,
   type Sfx,
@@ -11,8 +13,17 @@ import {
   shotDuration,
   type Viewport,
 } from "../edit";
-import { ending, gap, NEXT_DAY, PAGE, PRESET, pain } from "./animatic";
-import { SCRIPT } from "./script";
+import {
+  endCard,
+  ending,
+  gap,
+  NEXT_DAY,
+  PAGE,
+  PRESET,
+  pain,
+  painCard,
+} from "./animatic";
+import { LINES } from "./script";
 import TAKE from "./take.json";
 import { narrate, narrationDurations } from "./voice";
 
@@ -119,18 +130,66 @@ export function shotSfx(draft: DraftShot, clips: Clip[]): Sfx[] {
   return out.sort((a, b) => a.t - b.t);
 }
 
-function screenShot(take: Take, draft: DraftShot): Shot {
-  const id = `s${draft.shot}`;
-  const s = SCRIPT.find((x) => x.id === id);
+// 60 秒版只留素材里几个时间窗：剪辑单片段按窗口截取（加速倍数不变）
+export function clipWindows(
+  clips: Clip[],
+  windows: [number, number][]
+): Clip[] {
+  return windows.flatMap(([a, b]) =>
+    clips.flatMap((c) => {
+      const from = Math.max(c.from, a);
+      const to = Math.min(c.to, b);
+      return to - from > 1 / FPS ? [{ ...c, from, to }] : [];
+    })
+  );
+}
+
+// 窗口之间是硬切：每个窗口开头把镜头直接放到那一刻该在的位置（不从上一个窗口滑过来），
+// 只留窗口里的键；最后一个窗口结尾还放大着，就在结尾前 0.8 秒拉回全景（和完整版镜头结尾一样）
+export function windowCamera(
+  keys: CameraKey[],
+  windows: [number, number][]
+): CameraKey[] {
+  const out: CameraKey[] = [];
+  for (const [a, b] of windows) {
+    out.push({ ...cameraAt(keys, a), dur: 0, t: a });
+    out.push(...keys.filter((k) => k.t > a && k.t < b));
+  }
+  const end = windows.at(-1)?.[1];
+  if (end !== undefined && cameraAt(out, end - 0.8).zoom > 1.01) {
+    out.push({ ...HOME, dur: 0.8, t: end - 0.8 });
+  }
+  return out;
+}
+
+// 窗口用停留标记定位：label 匹配的那次停留的时刻 + offset 秒
+function holdAt(draft: DraftShot, label: RegExp, offset = 0): number {
+  const h = (draft.holds ?? []).find((x) => label.test(x.label ?? ""));
+  if (!h) {
+    throw new Error(`镜头 ${draft.shot} 里没有停留「${label.source}」`);
+  }
+  return h.t + offset;
+}
+
+function screenShot(
+  take: Take,
+  draft: DraftShot,
+  {
+    id = `s${draft.shot}`,
+    windows,
+  }: { id?: string; windows?: [number, number][] } = {}
+): Shot {
+  const s = LINES.find((x) => x.id === id);
   if (!s) {
     throw new Error(`讲稿里没有 ${id}`);
   }
   const intro = draft.shot === 3;
   const { cues, end, narration } = narrate(id, s.narration, intro ? 1.9 : 0.5);
-  const clips = fitClips(draft.clips, end + TAIL);
+  const picked = windows ? clipWindows(draft.clips, windows) : draft.clips;
+  const clips = fitClips(picked, end + TAIL);
   return {
     badges: [{ text: draft.shot === 7 ? NEXT_DAY : PRESET }],
-    camera: draft.camera,
+    camera: windows ? windowCamera(draft.camera, windows) : draft.camera,
     clicks: draft.clicks ?? [],
     clips,
     cues,
@@ -190,5 +249,40 @@ function liftAt(shots: Shot[]): number {
   );
 }
 
+// 60 秒版：痛点字卡 → 星图（镜头 3 全段）→ 很确定却答错、独立答对半亮（镜头 5 两个时间窗）
+// → 第二天答对全亮（镜头 7 到全亮为止）→ 收尾字卡
+export function shortEdit(take: Take): Edit | null {
+  const full = takeEdit(take);
+  const draft = (n: number) => take.shots.find((d) => d.shot === n);
+  const [d3, d5, d7] = [draft(3), draft(5), draft(7)];
+  if (!(full && d3 && d5 && d7)) {
+    return null;
+  }
+  const shots = [
+    painCard("m1"),
+    screenShot(take, d3, { id: "m2" }),
+    screenShot(take, d5, {
+      id: "m3",
+      windows: [
+        [d5.window.start, holdAt(d5, /以为学会了/, 2.5)],
+        [holdAt(d5, /独立答对/, -0.6), holdAt(d5, /「死锁」半亮/, 3)],
+      ],
+    }),
+    screenShot(take, d7, {
+      id: "m4",
+      windows: [[d7.window.start, holdAt(d7, /「死锁」全亮/, 3)]],
+    }),
+    endCard,
+  ];
+  return {
+    ...full,
+    music: full.music
+      ? { ...full.music, lift: { at: liftAt(shots), file: LIFT } }
+      : undefined,
+    shots,
+  };
+}
+
 export const currentTake = TAKE as Take;
 export const fromTake = takeEdit(currentTake);
+export const shortFromTake = shortEdit(currentTake);

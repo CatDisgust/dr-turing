@@ -2,14 +2,15 @@
 // 密钥只从环境变量 MINIMAX_API_KEY 或 post/.env.local 读，不打印、不写进任何文件。
 //   node scripts/minimax-voice.mjs --list                    列出账号能用的中文系统音色
 //   node scripts/minimax-voice.mjs --samples                 男声、女声各两种念同一段，存到 out/voice-samples/，挑一个
-//   node scripts/minimax-voice.mjs --voice <voice_id> [--speed 1]   八段全用这个声音
+//   node scripts/minimax-voice.mjs --voice <voice_id> [--speed 1] [--only m1,m2]   全部（完整版 s1–s8、60 秒版 m1–m4）或只念指定的几段
+//   （已经定稿的段落别重念：同一句每次合成出来都略有不同）
 // 国际站和国内站的密钥不通用：按 MINIMAX_HOST、api.minimax.io、api.minimax.cn、api.minimaxi.com 的顺序试，鉴权不过就换下一个
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SCRIPT } from "../src/data/script.ts";
+import { LINES, SCRIPT } from "../src/data/script.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
@@ -202,9 +203,10 @@ async function main() {
   if (!voice) {
     throw new Error("用 --list、--samples 或 --voice <voice_id>");
   }
+  const only = flag("--only")?.split(",");
   const dir = join(root, "public/voice");
   mkdirSync(dir, { recursive: true });
-  for (const s of SCRIPT) {
+  for (const s of LINES.filter((x) => !only || only.includes(x.id))) {
     const mp3 = join(dir, `${s.id}.mp3`);
     // biome-ignore lint/performance/noAwaitInLoops: 一段一段念
     const model = await speak(spoken(s.narration), voice, speed, mp3);

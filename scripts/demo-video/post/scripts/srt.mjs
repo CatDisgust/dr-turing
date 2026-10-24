@@ -1,4 +1,4 @@
-// 导出 SRT 字幕文件（和烧录字幕同一份时间）：node scripts/srt.mjs [Take|Animatic] [输出路径]
+// 导出 SRT 字幕文件（和烧录字幕同一份时间）：node scripts/srt.mjs [Take|Short|Animatic] [输出路径]
 // 默认 Take，写 out/Take.srt。src/data 里的 .ts 要用 esbuild 打包一下才能在 node 里跑（有 json 导入）
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -17,7 +17,7 @@ const bundled = await build({
   stdin: {
     contents: [
       'export { animatic } from "./src/data/animatic";',
-      'export { fromTake } from "./src/data/take";',
+      'export { fromTake, shortFromTake } from "./src/data/take";',
       'export { shotDuration, subtitleText } from "./src/edit";',
     ].join("\n"),
     loader: "ts",
@@ -25,11 +25,12 @@ const bundled = await build({
   },
   write: false,
 });
-const { animatic, fromTake, shotDuration, subtitleText } = await import(
-  `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`
-);
+const { animatic, fromTake, shortFromTake, shotDuration, subtitleText } =
+  await import(
+    `data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`
+  );
 
-const edit = name === "Animatic" ? animatic : fromTake;
+const edit = { Animatic: animatic, Short: shortFromTake, Take: fromTake }[name];
 if (!edit) {
   console.error(`没有 ${name}：先跑 use-take.mjs`);
   process.exit(1);
