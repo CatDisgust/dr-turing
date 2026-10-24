@@ -11,15 +11,24 @@ function load(name: string): string {
   return raw.replace(/^---\n[\s\S]*?\n---\n/, "").trim();
 }
 
+// 画图（2026-10-24 用户要求）：聊天框会把 mermaid 代码块画成真图，别再画字符画。
+// 每段提示词后面都带上，和提示词一起缓存
+export const DIAGRAM_RULE = `画图：要用图说明关系（谁等谁、先后顺序、调用流程、结构）时，用 \`\`\`mermaid 代码块画，不要用字符画或 ASCII 框线。
+- 用 flowchart（flowchart LR 或 flowchart TD）或 sequenceDiagram，一张图不超过 8 个节点
+- 节点文字用中文，并用双引号包起来，例如 A["事务 A<br/>持有 X"]；箭头上的字也加引号，例如 A -->|"等 Y"| B
+- 只画一张小图，图前后用一两句话说明它在说什么。一步一步的时间线用普通文字或表格，不用画图`;
+
 // 按 plan.prompt 每轮只加载一段：讲解用 Aha v0.2.0 SKILL.md 原文，其余动作各有一段短提示词
 export const ahaPrompt = load("aha-SKILL.md");
 
+const withDiagrams = (prompt: string) => `${prompt}\n\n${DIAGRAM_RULE}`;
+
 export const tutorPrompts: Record<TutorPlan["prompt"], string> = {
-  aha: ahaPrompt,
-  counterexample: load("counterexample.md"),
-  min_hint: load("min_hint.md"),
-  question: load("question.md"),
-  review: load("review.md"),
+  aha: withDiagrams(ahaPrompt),
+  counterexample: withDiagrams(load("counterexample.md")),
+  min_hint: withDiagrams(load("min_hint.md")),
+  question: withDiagrams(load("question.md")),
+  review: withDiagrams(load("review.md")),
 };
 
 const DISCLOSURE = {
@@ -32,7 +41,7 @@ const DISCLOSURE = {
 const REPRESENTATION = {
   analogy: "生活中的类比",
   code: "一小段代码",
-  diagram: "示意图（用文字或 ASCII 画）",
+  diagram: "示意图（用 mermaid 画）",
   formula: "公式",
 } as const;
 
