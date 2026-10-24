@@ -1295,7 +1295,7 @@ export async function touchInvite(code: string) {
 
 export async function updateInvite(
   code: string,
-  patch: Partial<Pick<Invite, "disabled" | "dailyLimit" | "name">>
+  patch: Partial<Pick<Invite, "code" | "disabled" | "dailyLimit" | "name">>
 ) {
   await db.update(invite).set(patch).where(eq(invite.code, code));
 }

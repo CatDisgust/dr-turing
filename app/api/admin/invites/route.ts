@@ -36,10 +36,7 @@ export async function POST(request: Request) {
   if (!name) {
     return Response.json({ error: "给这个同学起个名字" }, { status: 400 });
   }
-  // 随机部分 6 位，撞上已有的码就再换一个
-  const tries = Array.from({ length: 5 }, () => makeCode(name));
-  const taken = await Promise.all(tries.map((c) => getInviteByCode(c)));
-  const code = tries.find((_, i) => !taken[i]);
+  const code = await freshCode(name);
   if (!code) {
     return Response.json({ error: "没开成，再点一次" }, { status: 500 });
   }
@@ -59,9 +56,20 @@ export async function PATCH(request: Request) {
     code?: string;
     disabled?: boolean;
     dailyLimit?: number;
+    rotate?: boolean;
   };
-  if (!(body.code && (await getInviteByCode(body.code)))) {
+  const row = body.code ? await getInviteByCode(body.code) : null;
+  if (!(body.code && row)) {
     return Response.json({ error: "没有这个邀请码" }, { status: 404 });
+  }
+  // 换码：登录链接被转出去了，旧码作废、换一个新的，账号和学习记录不动
+  if (body.rotate) {
+    const code = await freshCode(row.name);
+    if (!code) {
+      return Response.json({ error: "没换成，再点一次" }, { status: 500 });
+    }
+    await updateInvite(body.code, { code });
+    return Response.json({ code, ok: true });
   }
   await updateInvite(body.code, {
     ...(typeof body.disabled === "boolean" ? { disabled: body.disabled } : {}),
@@ -70,6 +78,13 @@ export async function PATCH(request: Request) {
       : { dailyLimit: limitOf(body.dailyLimit) }),
   });
   return Response.json({ ok: true });
+}
+
+// 随机部分 6 位，撞上已有的码就再换一个
+async function freshCode(name: string) {
+  const tries = Array.from({ length: 5 }, () => makeCode(name));
+  const taken = await Promise.all(tries.map((c) => getInviteByCode(c)));
+  return tries.find((_, i) => !taken[i]);
 }
 
 function limitOf(value: unknown) {

@@ -83,7 +83,7 @@ export function AdminPanel() {
   const patch = useCallback(
     async (
       code: string,
-      change: { disabled?: boolean; dailyLimit?: number }
+      change: { disabled?: boolean; dailyLimit?: number; rotate?: boolean }
     ) => {
       await fetch("/api/admin/invites", {
         body: JSON.stringify({ code, ...change }),
@@ -208,7 +208,7 @@ function InviteLine({
   row: InviteRow;
   onPatch: (
     code: string,
-    change: { disabled?: boolean; dailyLimit?: number }
+    change: { disabled?: boolean; dailyLimit?: number; rotate?: boolean }
   ) => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -220,6 +220,12 @@ function InviteLine({
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }, [row.code]);
+
+  // 登录链接被转出去了：旧码立刻失效，换的新码要重新发给他
+  const rotate = useCallback(
+    () => onPatch(row.code, { rotate: true }),
+    [onPatch, row.code]
+  );
 
   const toggle = useCallback(
     () => onPatch(row.code, { disabled: !row.disabled }),
@@ -260,6 +266,14 @@ function InviteLine({
       <td className="whitespace-nowrap py-2">
         <button className="dt-text-btn" onClick={copy} type="button">
           {copied ? "已复制" : "复制登录链接"}
+        </button>
+        <button
+          className="dt-text-btn"
+          onClick={rotate}
+          title="旧码立刻作废，学习记录不动；新登录链接要重新发给他"
+          type="button"
+        >
+          换码
         </button>
         <button className="dt-text-btn" onClick={toggle} type="button">
           {row.disabled ? "恢复" : "停用"}
