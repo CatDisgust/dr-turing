@@ -10,6 +10,7 @@ import { QR, SITE_URL } from "../data/qr";
 import type { CardKind } from "../edit";
 import { C, FONT } from "../theme";
 import { Sky, Star } from "./sky";
+import { STORY_TEXT, StoryCard } from "./story";
 
 // 字卡：镜头 1 痛点、镜头 2 现有方案缺一步、试点计划、收尾。黑底夜空，和星图一个世界
 
@@ -85,48 +86,82 @@ const center = {
   justifyContent: "center",
 } as const;
 
+// 一个元素在某个时刻轻轻跳一下（配音念到这个数字时）
+function Pulse({ at, children }: { at?: number; children: ReactNode }) {
+  const { t } = useT();
+  const p =
+    at === undefined
+      ? 0
+      : interpolate(t, [at, at + 0.25, at + 0.6], [0, 1, 0], {
+          extrapolateLeft: "clamp",
+          extrapolateRight: "clamp",
+        });
+  return <div style={{ transform: `scale(${1 + 0.07 * p})` }}>{children}</div>;
+}
+
+// 痛点：标题和两个数字一开场就打出来，不等配音念到；念到哪个数字，那个数字跳一下。
+// 出处写清楚比的是谁（都和没用过 AI 的同学比），字号够大
 function PainCard({ beats }: { beats: Record<string, number> }) {
-  const practice = beats.practice ?? 7.5;
-  const exam = beats.exam ?? 10.5;
+  const practice = beats.practice ?? 0.7;
+  const exam = beats.exam ?? 1.3;
   const stat = (label: string, color: string, node: ReactNode) => (
     <div
       style={{
         alignItems: "center",
         display: "flex",
         flexDirection: "column",
-        width: 420,
+        width: 440,
       }}
     >
-      <div style={{ color: C.textOnSkySoft, fontSize: 40 }}>{label}</div>
-      <div style={{ color, fontSize: 150, fontWeight: 700, lineHeight: 1.1 }}>
+      <div style={{ color: C.textOnSkySoft, fontSize: 44 }}>{label}</div>
+      <div style={{ color, fontSize: 160, fontWeight: 700, lineHeight: 1.1 }}>
         {node}
       </div>
     </div>
   );
   return (
     <AbsoluteFill style={center}>
-      <Appear at={beats.title ?? 0.3}>
+      <Appear at={beats.title ?? 0.15}>
         <div style={{ fontSize: 96, fontWeight: 700, letterSpacing: 4 }}>
           AI 让你以为学会了
         </div>
       </Appear>
-      <div style={{ display: "flex", gap: 120, marginTop: 90 }}>
+      <div style={{ display: "flex", gap: 120, marginTop: 80 }}>
         <Pop at={practice}>
-          {stat(
-            "用 AI 练习时",
-            C.green,
-            <CountUp at={practice} sign="+" to={48} />
-          )}
+          <Pulse at={beats.practiceSaid}>
+            {stat(
+              "用 AI 练习时",
+              C.green,
+              <CountUp at={practice} sign="+" to={48} />
+            )}
+          </Pulse>
         </Pop>
         <Pop at={exam}>
-          {stat("拿掉 AI 考试", C.red, <CountUp at={exam} sign="−" to={17} />)}
+          <Pulse at={beats.examSaid}>
+            {stat(
+              "拿走 AI 考试",
+              C.red,
+              <CountUp at={exam} sign="−" to={17} />
+            )}
+          </Pulse>
         </Pop>
       </div>
-      <div style={{ color: C.textOnSkySoft, fontSize: 30, marginTop: 56 }}>
-        <Appear at={practice}>
-          近千名高中生对照实验，和不用 AI 的同学比 · Bastani 等，PNAS 2025
-        </Appear>
-      </div>
+      <Appear at={exam + 0.3}>
+        <div
+          style={{
+            color: C.textOnSkySoft,
+            fontSize: 36,
+            lineHeight: 1.5,
+            marginTop: 56,
+            textAlign: "center",
+          }}
+        >
+          <div>
+            土耳其近千名高中生 · 数学课对照实验 · 都和没用过 AI 的同学比
+          </div>
+          <div>Bastani 等，PNAS 2025</div>
+        </div>
+      </Appear>
     </AbsoluteFill>
   );
 }
@@ -325,9 +360,11 @@ export function Card({
       {kind === "gap" ? <GapCard beats={beats} /> : null}
       {kind === "pilot" ? <PilotCard beats={beats} /> : null}
       {kind === "end" ? <EndCard beats={beats} /> : null}
+      {kind === "story" ? <StoryCard beats={beats} /> : null}
     </AbsoluteFill>
   );
 }
 
 export const CARD_TEXT =
-  "AI让你以为学会了用练习时拿掉考试近千名高中生对照实验和不的同学比Bastani等PNAS2025少给答案、多反问：能减少伤害但你分不清：看懂了，还是真会了下一步：小规模试点「隔天独立答对率」检验第二天不看提示还能吗表面记忆淡以后（）按遗忘曲线一段时间再测Dr.Turing，让真的学会。dr-turing-81so.vercel.app配音+−%0123456789";
+  STORY_TEXT +
+  "AI让你以为学会了用练习时拿掉考试近千名高中生对照实验和不的同学比Bastani等PNAS2025少给答案、多反问：能减少伤害但你分不清：看懂了，还是真会了下一步：小规模试点「隔天独立答对率」检验第二天不看提示还能吗表面记忆淡以后（）按遗忘曲线一段时间再测Dr.Turing，让真的学会。dr-turing-81so.vercel.app配音+−%0123456789土耳其数课都没过走";

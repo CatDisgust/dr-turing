@@ -1,4 +1,5 @@
-import type { Edit, Shot } from "../edit";
+import type { Cue, Edit, Narration, Sfx, Shot } from "../edit";
+import { wordAt } from "../timing";
 import { LINES, SCRIPT } from "./script";
 import { narrate, narrationDurations } from "./voice";
 
@@ -10,10 +11,14 @@ export const PRESET = "演示账号 · 学习记录为预置";
 export const LATER = "模拟一段时间后（预置数据）";
 export const PAGE = { height: 720, scale: 1, width: 1280, x: 0, y: 0 };
 
+// 字卡念完只留一小口气就切（之前两张字卡之间空了 1.7 秒）
+const CARD_LEAD = 0.3;
+const CARD_TAIL = 0.45;
+
 export function card(
   id: string,
   kind: "pain" | "gap",
-  narrationStart = 0.4
+  narrationStart = CARD_LEAD
 ): Shot {
   const s = LINES.find((x) => x.id === id);
   if (!s) {
@@ -24,7 +29,7 @@ export function card(
     card: kind,
     cues,
     // 有配音就跟着配音走；没有就至少占分镜给的时长
-    duration: narration ? end + 0.8 : Math.max(s.slot, end + 0.8),
+    duration: narration ? end + CARD_TAIL : Math.max(s.slot, end + 0.8),
     id,
     kind: "card",
     narration,
@@ -61,25 +66,121 @@ function screen(
   };
 }
 
-// 两个数字跟着配音出现：“用 AI 练习时成绩高了 48%”“拿掉 AI，考试反而低了 17%”
+// 两个数字一开场就出来；配音念到“练习”“拿走（拿掉）”时各跳一下
 export function painCard(id: string): Shot {
   const shot = card(id, "pain");
   if (shot.kind === "card") {
-    const at = (needle: string) =>
-      shot.cues.find((c) => c.text.includes(needle))?.start ?? 0;
-    shot.beats = { exam: at("拿掉"), practice: at("用 AI 练习") };
+    const beats: Record<string, number> = {};
+    for (const [key, re] of [
+      ["practiceSaid", /练习/],
+      ["examSaid", /拿[走掉]/],
+    ] as const) {
+      const cue = shot.cues.find((c) => re.test(c.text));
+      if (cue) {
+        beats[key] = cue.start;
+      }
+    }
+    shot.beats = beats;
   }
   return shot;
 }
 
-export const pain = painCard("s1");
+// 开场动画（components/story.tsx）：三段配音 s1a、s1b、s1c 加 s2 都在一张字卡里，
+// 中间按配音算好各个动作的时刻。s1b 念完先停一下音乐出“然后呢？”，再把 AI 拿走。
+// 60 秒版不要 s2（question: false），盖完章就切
+export function story({ question = true } = {}): Shot {
+  let at = 0.35;
+  const said: { cues: Cue[]; end: number; narration?: Narration }[] = [];
+  const say = (id: string, gapBefore: number) => {
+    const s = LINES.find((x) => x.id === id);
+    if (!s) {
+      throw new Error(id);
+    }
+    at += gapBefore;
+    const r = narrate(id, s.narration, at);
+    said.push(r);
+    at = r.end;
+    return r;
+  };
+  const word = (r: { cues: Cue[] }, w: string, fallback: number) =>
+    wordAt(r.cues, w) ?? fallback;
 
-export const gap = card("s2", "gap");
-if (gap.kind === "card") {
-  gap.beats = {
-    line2: gap.cues.find((c) => c.text.includes("但"))?.start ?? 4,
+  const v1 = say("s1a", 0);
+  const ok1 = word(v1, "一看就懂", 1) + 0.3;
+  const ok2 = ok1 + 0.6;
+  const ok3 = Math.max(ok2 + 0.5, word(v1, "以为自己会了", ok2) + 0.2);
+
+  const v2 = say("s1b", 0.3);
+  const chartIn = v2.cues[0].start - 0.2;
+  // 柱子落到头的时刻对着念到数字；从念到“用 AI 练习”“考试”开始长
+  const bar1 = word(v2, "48%", chartIn + 3);
+  const bar1From = Math.min(bar1 - 0.8, word(v2, "用 AI 练习", bar1 - 1.5));
+
+  const what = v2.end + 0.2;
+  const yank = what + 1;
+  const v3 = say("s1c", yank + 0.45 - v2.end);
+  const bar2 = word(v3, "17%", yank + 3);
+  const bar2From = Math.min(bar2 - 0.8, word(v3, "考试", bar2 - 1.5));
+
+  const stamp = v3.end + 0.1;
+  const v4 = question ? say("s2", stamp + 0.7 - v3.end) : undefined;
+  const never = Number.POSITIVE_INFINITY;
+  const words = v4 ? word(v4, "分不清", v4.end - 3) - 0.1 : never;
+  const understood = v4 ? word(v4, "看懂了", words + 1) - 0.1 : never;
+  const mastered = v4 ? word(v4, "真会了", understood + 1) - 0.1 : never;
+
+  const sfx: Sfx[] = [
+    ...[ok1, ok2, ok3].map((t) => ({ file: "sfx/pop.wav", t, volume: 0.5 })),
+    { file: "sfx/thud.wav", t: bar1, volume: 0.3 },
+    { file: "sfx/whoosh.wav", t: yank - 0.1, volume: 0.6 },
+    { file: "sfx/thud.wav", t: bar2, volume: 0.65 },
+    { file: "sfx/thud.wav", t: stamp + 0.12, volume: 0.45 },
+    { file: "sfx/click.wav", t: stamp + 0.12, volume: 0.5 },
+    ...(v4
+      ? [
+          { file: "sfx/chime-half.wav", t: understood + 0.15, volume: 0.3 },
+          { file: "sfx/pop.wav", t: mastered + 0.1, volume: 0.4 },
+        ]
+      : []),
+  ];
+  const [first, ...rest] = said.flatMap((r) =>
+    r.narration ? [r.narration] : []
+  );
+  return {
+    beats: {
+      bar1,
+      bar1From,
+      bar2,
+      bar2From,
+      bar3: v4 ? v4.cues[0].start + 0.2 : never,
+      chartIn,
+      mastered,
+      ok1,
+      ok2,
+      ok3,
+      stamp,
+      // AI 的回答一下子刷满（讲得“太顺”）
+      stream0: 0.1,
+      stream1: Math.min(v1.end - 0.3, 1.9),
+      understood,
+      what,
+      words,
+      yank,
+    },
+    card: "story",
+    cues: said.flatMap((r) => r.cues),
+    duration: v4 ? v4.end + 0.5 : stamp + 1.4,
+    id: "s1",
+    kind: "card",
+    mute: [[what - 0.05, yank + 0.2]],
+    narration: first,
+    sfx,
+    title: "开场",
+    voices: rest,
   };
 }
+
+export const opening = story();
 
 const end = SCRIPT.find((x) => x.id === "s8");
 const endCues = narrate("s8", end?.narration ?? "", 0.3);
@@ -117,9 +218,8 @@ export const animatic: Edit = {
   height: 1080,
   narrationDurations,
   shots: [
-    pain,
-    gap,
-    screen("s3", { badge: PRESET, intro: true }),
+    opening,
+    screen("s3", { badge: PRESET }),
     screen("s4", { badge: PRESET }),
     screen("s5", { badge: PRESET }),
     screen("s6", { badge: PRESET }),

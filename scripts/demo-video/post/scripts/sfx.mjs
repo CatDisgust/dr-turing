@@ -3,6 +3,9 @@
 //   chime-half.wav  「死锁」半亮：两个音，柔和
 //   chime-full.wav  「死锁」全亮：三个音往上走，亮一些、尾音长一些
 //   low.wav         「以为学会了」红条：两个音往下走，低沉、短
+//   pop.wav         开场动画里冒出一个气泡（“懂了！”）：短促、往上挑
+//   whoosh.wav      开场动画里把 AI 窗口一把拿走：一阵风声
+//   thud.wav        开场动画里数字砸下去（−17%）：低沉的一下
 // 也可以单独跑：node scripts/sfx.mjs
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -98,6 +101,58 @@ export function chime(notes, decay, length, gap = 0.09) {
   return normalize(Array.from(out), 0.45);
 }
 
+// 气泡：正弦从 520 Hz 滑到 1040 Hz，80 毫秒
+export function pop() {
+  const n = Math.round(RATE * 0.12);
+  const out = new Float64Array(n);
+  let phase = 0;
+  for (let i = 0; i < n; i += 1) {
+    const t = i / RATE;
+    const f = 520 * 2 ** Math.min(1, t / 0.05);
+    phase += (2 * Math.PI * f) / RATE;
+    out[i] = Math.sin(phase) * Math.min(1, t / 0.003) * Math.exp(-t / 0.035);
+  }
+  return normalize(Array.from(out), 0.45);
+}
+
+// 风声：噪声过一个中心频率从 400 Hz 扫到 2400 Hz 再回落的带通，先渐强后渐弱
+export function whoosh(length = 0.55) {
+  const n = Math.round(RATE * length);
+  const rand = noise(11);
+  const out = new Float64Array(n);
+  let low = 0;
+  let band = 0;
+  for (let i = 0; i < n; i += 1) {
+    const p = i / n;
+    const fc = 400 + 2000 * Math.sin(Math.PI * Math.min(1, p * 1.3));
+    const f = 2 * Math.sin((Math.PI * fc) / RATE);
+    const high = rand() - low - 0.7 * band;
+    band += f * high;
+    low += f * band;
+    out[i] = band * Math.sin(Math.PI * p) ** 1.5;
+  }
+  return normalize(Array.from(out), 0.4);
+}
+
+// 砸下去：80 Hz 掉到 40 Hz 的低音加一下噪声的头，0.6 秒
+export function thud() {
+  const n = Math.round(RATE * 0.6);
+  const rand = noise(5);
+  const out = new Float64Array(n);
+  let phase = 0;
+  let low = 0;
+  for (let i = 0; i < n; i += 1) {
+    const t = i / RATE;
+    const f = 40 + 40 * Math.exp(-t / 0.08);
+    phase += (2 * Math.PI * f) / RATE;
+    low += 0.08 * (rand() - low);
+    out[i] =
+      Math.sin(phase) * Math.min(1, t / 0.002) * Math.exp(-t / 0.18) +
+      low * 2.5 * Math.exp(-t / 0.02);
+  }
+  return normalize(Array.from(out), 0.6);
+}
+
 export function makeSfx(dir) {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "click.wav"), wav(click()));
@@ -115,7 +170,18 @@ export function makeSfx(dir) {
     join(dir, "low.wav"),
     wav(chime([329.6, 277.2], 0.45, 1.2, 0.16))
   );
-  return ["click.wav", "chime-half.wav", "chime-full.wav", "low.wav"];
+  writeFileSync(join(dir, "pop.wav"), wav(pop()));
+  writeFileSync(join(dir, "whoosh.wav"), wav(whoosh()));
+  writeFileSync(join(dir, "thud.wav"), wav(thud()));
+  return [
+    "click.wav",
+    "chime-half.wav",
+    "chime-full.wav",
+    "low.wav",
+    "pop.wav",
+    "whoosh.wav",
+    "thud.wav",
+  ];
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

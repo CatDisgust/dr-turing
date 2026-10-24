@@ -1,8 +1,8 @@
 import { Composition, Still } from "remotion";
 import { Cover } from "./cover";
-import { animatic } from "./data/animatic";
+import { animatic, opening } from "./data/animatic";
 import { engineTest } from "./data/engine-test";
-import { fromTake, shortFromTake } from "./data/take";
+import { fromTake, MUSIC, shortFromTake } from "./data/take";
 import type { Edit } from "./edit";
 import { editDuration, Video } from "./video";
 
@@ -23,6 +23,8 @@ export function Root() {
     <>
       {comp("Animatic", animatic)}
       {comp("EngineTest", engineTest)}
+      {/* 只看开场动画（带音乐、音效），改开场时预览用 */}
+      {comp("Opening", { ...animatic, music: MUSIC, shots: [opening] })}
       {fromTake ? comp("Take", fromTake) : null}
       {shortFromTake ? comp("Short", shortFromTake) : null}
       <Still

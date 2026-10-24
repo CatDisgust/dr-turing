@@ -2,6 +2,7 @@ import {
   type CameraKey,
   type Click,
   type Clip,
+  type Cue,
   type CursorKey,
   cameraAt,
   type Edit,
@@ -10,19 +11,21 @@ import {
   outputTime,
   type Sfx,
   type Shot,
+  STAR_MAP_LEFT,
   shotDuration,
   sourceTime,
+  starMapView,
   type Viewport,
 } from "../edit";
+import { wordAt } from "../timing";
 import {
   endCard,
   ending,
-  gap,
   LATER,
+  opening,
   PAGE,
   PRESET,
-  pain,
-  painCard,
+  story,
 } from "./animatic";
 import { LINES } from "./script";
 import TAKE from "./take.json";
@@ -107,7 +110,7 @@ const CHIMES: [RegExp, string][] = [
 
 // 背景音乐（scripts/music.mjs 合成，bed.wav 约 -19 LUFS）：没人说话时约 -24 LUFS，
 // 说话时再压低 12 分贝，比配音（-16 LUFS）低 20 分贝；「死锁」全亮起叠上抬起层 lift.wav
-const MUSIC = { duckDb: 12, file: "music/bed.wav", volume: 0.57 };
+export const MUSIC = { duckDb: 12, file: "music/bed.wav", volume: 0.57 };
 const LIFT = "music/lift.wav";
 const CHIME_FULL = "sfx/chime-full.wav";
 
@@ -179,18 +182,23 @@ function screenShot(
     id = `s${draft.shot}`,
     windows: given,
     fit = false,
+    intro = false,
+    tour,
   }: {
     id?: string;
     windows?: [number, number][];
     // 讲稿念完（再留 TAIL）就结束这一镜，后面的画面不要
     fit?: boolean;
+    // 开头先叠 1.9 秒 Dr.Turing 标题卡（现在用角上的小 logo，不再单放）
+    intro?: boolean;
+    // 跟着讲稿推镜头：给出字幕时间（成片秒），返回要加的镜头键（成片秒）
+    tour?: (cues: Cue[], end: number) => CameraKey[];
   } = {}
 ): Shot {
   const s = LINES.find((x) => x.id === id);
   if (!s) {
     throw new Error(`讲稿里没有 ${id}`);
   }
-  const intro = draft.shot === 3;
   const { cues, end, narration } = narrate(id, s.narration, intro ? 1.9 : 0.5);
   const windows: [number, number][] | undefined =
     given ??
@@ -207,9 +215,19 @@ function screenShot(
       : undefined);
   const picked = windows ? clipWindows(draft.clips, windows) : draft.clips;
   const clips = fitClips(picked, end + TAIL);
+  const laid = layoutClips(clips);
+  const camera = windows ? windowCamera(draft.camera, windows) : draft.camera;
   return {
     badges: [{ text: draft.shot === 7 ? LATER : PRESET }],
-    camera: windows ? windowCamera(draft.camera, windows) : draft.camera,
+    camera: tour
+      ? [
+          ...camera,
+          ...tour(cues, laid.at(-1)?.outEnd ?? end).map((k) => ({
+            ...k,
+            t: sourceTime(laid, k.t),
+          })),
+        ]
+      : camera,
     clicks: draft.clicks ?? [],
     clips,
     cues,
@@ -226,6 +244,71 @@ function screenShot(
   };
 }
 
+// 星图抽屉里第 1 课（大多全亮）、第 2 课（大多半亮）的中心高度，网页坐标（录屏实测）
+const LESSON1_Y = 165;
+const LESSON2_Y = 355;
+
+// 镜头 3：念到“每个知识点是一颗星”推进星图，停在第 2 课（一片半亮）；
+// 念到“真会了”移到第 1 课（全亮）；结尾前 0.8 秒拉回全景
+export function starTour(cues: Cue[], end: number): CameraKey[] {
+  const keys: CameraKey[] = [];
+  const star = wordAt(cues, "每个知识点") ?? wordAt(cues, "看懂了");
+  const mastered = wordAt(cues, "真会了");
+  if (star !== undefined) {
+    keys.push({ ...starMapView(LESSON2_Y), dur: 1, t: star - 0.2 });
+  }
+  if (mastered !== undefined) {
+    keys.push({ ...starMapView(LESSON1_Y), dur: 0.9, t: mastered - 0.1 });
+  }
+  if (keys.length > 0) {
+    keys.push({ ...HOME, dur: 0.8, t: end - 0.8 });
+  }
+  return keys;
+}
+
+// 开场动画问完“看懂了？真会了？”，接一段产品画面（无配音，约 3.4 秒）：红条「你很确定，但答错了」
+// （镜头已经推在红条上），再硬切到星图上「死锁」那颗星和「以为会了，还没亮」，然后进镜头 3
+const CAUGHT = 3.4;
+
+export function caught(take: Take, d5: DraftShot): Shot {
+  const bar = holdAt(d5, /以为学会了/);
+  // 推到红条上的那个镜头键；星的位置用镜头 5 里推到星图上的那个键
+  const barKey = d5.camera.findLast((k) => k.t <= bar && k.zoom > 1);
+  const starKey = d5.camera.find((k) => k.zoom > 1 && k.x > STAR_MAP_LEFT);
+  const after = d5.clips.find((c) => c.from > bar + 1 && (c.rate ?? 1) === 1);
+  if (!(barKey && starKey && after)) {
+    throw new Error("镜头 5 里找不到红条、星图镜头或红条后的原速片段");
+  }
+  const windows: [number, number][] = [
+    [barKey.t, bar + 2],
+    [after.from, after.to],
+  ];
+  const clips = fitClips(clipWindows(d5.clips, windows), CAUGHT);
+  return {
+    badges: [{ text: PRESET }],
+    camera: [
+      { dur: 0, t: barKey.t, x: barKey.x, y: barKey.y, zoom: barKey.zoom },
+      {
+        dur: 0,
+        t: after.from,
+        x: starKey.x,
+        y: starKey.y,
+        zoom: starKey.zoom,
+      },
+    ],
+    clicks: [],
+    clips,
+    cues: [],
+    cursor: d5.cursor ?? [],
+    footage: take.footage,
+    id: "s2b",
+    kind: "screen",
+    sfx: take.sfx && take.footage ? shotSfx(d5, clips) : [],
+    title: "以为会了",
+    viewport: take.footage ? (d5.viewport ?? PAGE) : PAGE,
+  };
+}
+
 export function takeEdit(take: Take): Edit | null {
   if (!take.take || take.shots.length === 0) {
     return null;
@@ -233,8 +316,13 @@ export function takeEdit(take: Take): Edit | null {
   const shots = take.shots
     .filter((d) => d.shot >= 3 && d.shot <= 7)
     .toSorted((a, b) => a.shot - b.shot)
-    .map((d) => screenShot(take, d));
-  const all = [pain, gap, ...shots, ...ending];
+    .map((d) =>
+      d.shot === 3
+        ? screenShot(take, d, { fit: true, tour: starTour })
+        : screenShot(take, d)
+    );
+  const d5 = take.shots.find((d) => d.shot === 5);
+  const all = [opening, ...(d5 ? [caught(take, d5)] : []), ...shots, ...ending];
   return {
     fps: FPS,
     height: 1080,
@@ -279,8 +367,8 @@ export function shortEdit(take: Take): Edit | null {
     return null;
   }
   const shots = [
-    painCard("m1"),
-    screenShot(take, d3, { fit: true, id: "m2" }),
+    story({ question: false }),
+    screenShot(take, d3, { fit: true, id: "m2", tour: starTour }),
     screenShot(take, d5, {
       id: "m3",
       windows: [

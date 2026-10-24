@@ -131,6 +131,7 @@ export function ScreenScene({ shot }: { shot: ScreenShot }) {
           />
         ) : null}
       </div>
+      <CornerLogo left={win.x} top={win.y} />
       <Badges
         badges={shot.badges ?? []}
         right={width - win.x - win.w}
@@ -198,6 +199,31 @@ function Placeholder({ shot }: { shot: ScreenShot }) {
           width: 640,
         }}
       />
+    </div>
+  );
+}
+
+// 窗口上方那条靠左一直挂着小号的 Dr.Turing（角标在右边），不再单放一张标题卡
+function CornerLogo({ left, top }: { left: number; top: number }) {
+  return (
+    <div
+      style={{
+        alignItems: "center",
+        color: C.textOnSky,
+        display: "flex",
+        fontFamily: FONT,
+        fontSize: 26,
+        fontWeight: 700,
+        gap: 10,
+        height: top,
+        left: left + 4,
+        opacity: 0.85,
+        position: "absolute",
+        top: 0,
+      }}
+    >
+      <Star level="full" size={28} />
+      Dr.Turing
     </div>
   );
 }
