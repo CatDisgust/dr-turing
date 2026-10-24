@@ -5,11 +5,17 @@ import {
   type FormEvent,
   type ReactNode,
   useCallback,
+  useRef,
   useState,
 } from "react";
 import {
-  buildCourse,
+  assembleLessons,
+  cachedLesson,
+  cacheLesson,
+  extractLesson,
+  forgetLessons,
   type LessonFile,
+  type LessonResult,
   lessonTitleOf,
   sortLessonFiles,
 } from "@/lib/graph/build-client";
@@ -46,6 +52,19 @@ export function CourseUploadForm({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<UploadDone | null>(null);
   const [agreed, setAgreed] = useState(false);
+  // 断了能续：已经抽好的课（按第几课，从 0 数）和没抽成的课的原因
+  const results = useRef<Map<number, LessonResult>>(new Map());
+  const [got, setGot] = useState(0);
+  const [failed, setFailed] = useState<Record<number, string>>({});
+
+  const keep = useCallback((index: number, result: LessonResult | null) => {
+    if (result) {
+      results.current.set(index, result);
+    } else {
+      results.current.delete(index);
+    }
+    setGot(results.current.size);
+  }, []);
 
   const onName = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => setName(event.target.value),
@@ -60,6 +79,9 @@ export function CourseUploadForm({
   const onFiles = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const files = sortLessonFiles([...(event.target.files ?? [])]);
+      results.current = new Map();
+      setGot(0);
+      setFailed({});
       setSteps({});
       setDone(null);
       setError(null);
@@ -85,48 +107,117 @@ export function CourseUploadForm({
     [limits]
   );
 
-  const onTitle = useCallback((index: number, lessonTitle: string) => {
-    setLessons((current) =>
-      current.map((lesson, i) =>
-        i === index ? { ...lesson, title: lessonTitle } : lesson
-      )
-    );
-  }, []);
+  // 改了课名，这一课要按新课名重抽
+  const onTitle = useCallback(
+    (index: number, lessonTitle: string) => {
+      keep(index, null);
+      setLessons((current) =>
+        current.map((lesson, i) =>
+          i === index ? { ...lesson, title: lessonTitle } : lesson
+        )
+      );
+    },
+    [keep]
+  );
+
+  const step = useCallback(
+    (key: string, text: string) =>
+      setSteps((current) => ({ ...current, [key]: text })),
+    []
+  );
+
+  // 抽一课：这台设备上有抽好的就直接用，不再花钱；失败了记下原因，不影响别的课
+  const extractOne = useCallback(
+    async (index: number) => {
+      const lesson = lessons[index];
+      const key = `第 ${index + 1} 课`;
+      const cached = cachedLesson(lesson, index + 1);
+      if (cached) {
+        keep(index, cached);
+        step(key, "完成（之前抽好的）");
+        return;
+      }
+      setFailed(({ [index]: _, ...rest }) => rest);
+      try {
+        const result = await extractLesson(lesson, index + 1, (text) =>
+          step(key, text)
+        );
+        cacheLesson(lesson, index + 1, result);
+        keep(index, result);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        setFailed((current) => ({ ...current, [index]: message }));
+        step(key, "没成功");
+      }
+    },
+    [keep, lessons, step]
+  );
+
+  const retry = useCallback(
+    async (index: number) => {
+      setError(null);
+      setRunning(true);
+      await extractOne(index);
+      setRunning(false);
+    },
+    [extractOne]
+  );
 
   const start = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
       setError(null);
       setDone(null);
-      setSteps({});
       setRunning(true);
+      // 只跑还没抽好的课，几课一起跑
+      const missing = lessons
+        .map((_, i) => i)
+        .filter((i) => !results.current.has(i));
+      await Promise.all(missing.map((i) => extractOne(i)));
+      const left = lessons.length - results.current.size;
+      if (left > 0) {
+        setError(
+          `有 ${left} 课没抽成，点那一课后面的「重试」，或者再点「继续生成」。抽好的课不会重跑。`
+        );
+        setRunning(false);
+        return;
+      }
       try {
-        const run = await buildCourse({
-          lessons,
+        const assemble = await assembleLessons({
           name: name.trim(),
-          onStep: (key, step) =>
-            setSteps((current) => ({ ...current, [key]: step })),
+          onStep: (text) => step("合图", text),
+          results: lessons.map(
+            (_, i) => results.current.get(i) as LessonResult
+          ),
         });
-        if (!run.assemble.saved) {
+        if (!assemble.saved) {
           throw new Error("星图生成了，但没存进数据库，看一下 Vercel 日志");
         }
         const result = {
-          courseId: run.assemble.graph.courseId,
-          lessons: run.assemble.graph.lessons.length,
-          name: run.assemble.graph.name,
-          points: run.assemble.graph.points.length,
+          courseId: assemble.graph.courseId,
+          lessons: assemble.graph.lessons.length,
+          name: assemble.graph.name,
+          points: assemble.graph.points.length,
         };
+        forgetLessons(lessons);
+        results.current = new Map();
+        setGot(0);
+        setSteps({});
         setDone(result);
         setName("");
         setLessons([]);
         setAgreed(false);
         onDone?.(result);
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        const message = e instanceof Error ? e.message : String(e);
+        setError(
+          `合成星图没成功：${message}。各课都抽好了，再点「继续生成」只重做这一步。`
+        );
+        step("合图", "没成功");
       }
       setRunning(false);
     },
-    [lessons, name, onDone]
+    [extractOne, lessons, name, onDone, step]
   );
 
   const locked = running || Boolean(blocked);
@@ -178,9 +269,11 @@ export function CourseUploadForm({
         <ol className="flex flex-col gap-2" data-testid="course-lessons">
           {lessons.map((lesson, i) => (
             <LessonLine
+              failed={failed[i]}
               index={i}
               key={lesson.file.name}
               lesson={lesson}
+              onRetry={retry}
               onTitle={onTitle}
               running={running}
               step={steps[`第 ${i + 1} 课`]}
@@ -218,7 +311,7 @@ export function CourseUploadForm({
           disabled={!ready}
           type="submit"
         >
-          {running ? "生成中…" : "生成星图"}
+          {running ? "生成中…" : got > 0 ? "继续生成" : "生成星图"}
         </button>
         {running ? (
           <span className="text-[13px] text-muted-foreground">
@@ -247,20 +340,25 @@ function LessonLine({
   index,
   lesson,
   step,
+  failed,
   running,
   onTitle,
+  onRetry,
 }: {
   index: number;
   lesson: LessonFile;
   step?: string;
+  failed?: string;
   running: boolean;
   onTitle: (index: number, title: string) => void;
+  onRetry: (index: number) => void;
 }) {
   const onChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) =>
       onTitle(index, event.target.value),
     [index, onTitle]
   );
+  const retry = useCallback(() => onRetry(index), [index, onRetry]);
   return (
     <li className="flex flex-wrap items-center gap-2 text-[14px]">
       <span className="w-12 shrink-0 text-muted-foreground">
@@ -273,9 +371,26 @@ function LessonLine({
         onChange={onChange}
         value={lesson.title}
       />
-      <span className="w-40 shrink-0 truncate text-muted-foreground">
+      <span
+        className="w-40 shrink-0 truncate text-muted-foreground"
+        data-testid={`lesson-step-${index + 1}`}
+      >
         {step ?? ""}
       </span>
+      {failed ? (
+        <span className="flex w-full items-center gap-2 pl-14 text-[13px] text-[var(--duo-red-ink)]">
+          <span className="min-w-0 flex-1">{failed}</span>
+          <button
+            className="dt-text-btn shrink-0"
+            data-testid={`lesson-retry-${index + 1}`}
+            disabled={running}
+            onClick={retry}
+            type="button"
+          >
+            重试这一课
+          </button>
+        </span>
+      ) : null}
     </li>
   );
 }
