@@ -223,7 +223,7 @@ export async function POST(request: Request) {
 
   try {
     const {
-      courseId,
+      courseId: requestedCourseId,
       id,
       message,
       selectedVisibilityType,
@@ -253,8 +253,11 @@ export async function POST(request: Request) {
 
     const chat = await getChatById({ id });
     let titlePromise: Promise<string> | null = null;
+    // 学哪门课：老对话按开对话时选的；新对话按这次选的（课不存在就当不选课）
+    let courseId: string | undefined;
 
     if (chat) {
+      courseId = chat.courseId ?? undefined;
       if (chat.userId !== session.user.id) {
         return new ChatbotError("forbidden:chat").toResponse();
       }
@@ -262,7 +265,12 @@ export async function POST(request: Request) {
         await reopenChat({ id });
       }
     } else {
+      courseId =
+        requestedCourseId && (await getCourseById({ id: requestedCourseId }))
+          ? requestedCourseId
+          : undefined;
       await saveChat({
+        courseId: courseId ?? null,
         id,
         title: "新对话",
         userId: session.user.id,

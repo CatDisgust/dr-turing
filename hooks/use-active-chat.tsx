@@ -9,6 +9,7 @@ import {
   type Dispatch,
   type ReactNode,
   type SetStateAction,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -23,7 +24,12 @@ import { toast } from "@/components/chat/toast";
 import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { useAutoResume } from "@/hooks/use-auto-resume";
 import {
-  COURSE_ID,
+  lastPickedCourse,
+  NONE,
+  rememberCourse,
+  useCourses,
+} from "@/hooks/use-courses";
+import {
   GRADED_EVENT,
   LEARNER_REFRESH_EVENT,
   NODE_TOUCHED_EVENT,
@@ -51,6 +57,11 @@ type ActiveChatContextValue = {
   showCreditCardAlert: boolean;
   // 试用账号今天的消息用完了（2026-10-24），对话里不给“重试”
   limitReached: boolean;
+  // 这次对话学哪门课；null = 不选课。老对话按开头选的，新对话可以换（2026-10-24 选课）
+  courseId: string | null;
+  // 课程列表还没取到时为 false，这时先别画课程相关的东西
+  courseReady: boolean;
+  pickCourse: (id: string | null) => void;
   setShowCreditCardAlert: Dispatch<SetStateAction<boolean>>;
 };
 
@@ -88,6 +99,34 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     fetcher,
     { revalidateOnFocus: false }
   );
+
+  // 新对话选的课：先用上次选的，没选过就用第一门课。对话一开始就以库里记的为准
+  const courses = useCourses();
+  const [picked, setPicked] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (picked !== undefined || !courses) {
+      return;
+    }
+    const last = lastPickedCourse();
+    if (last === NONE) {
+      setPicked(null);
+    } else {
+      setPicked(
+        courses.find((c) => c.id === last)?.id ?? courses[0]?.id ?? null
+      );
+    }
+  }, [courses, picked]);
+  const pickCourse = useCallback((id: string | null) => {
+    setPicked(id);
+    rememberCourse(id);
+  }, []);
+  const savedCourse: string | null | undefined = isNewChat
+    ? undefined
+    : chatData?.courseId;
+  const courseId = savedCourse === undefined ? (picked ?? null) : savedCourse;
+  const courseReady = savedCourse !== undefined || picked !== undefined;
+  const courseRef = useRef(courseId);
+  courseRef.current = courseId;
 
   const initialMessages: ChatMessage[] = isNewChat
     ? []
@@ -183,7 +222,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
             ...(isToolApprovalContinuation
               ? { messages: request.messages }
               : { message: lastMessage }),
-            courseId: COURSE_ID,
+            courseId: courseRef.current ?? undefined,
             selectedVisibilityType: visibility,
             ...request.body,
           },
@@ -266,11 +305,14 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     () => ({
       addToolApprovalResponse,
       chatId,
+      courseId,
+      courseReady,
       input,
       isLoading: !isNewChat && isLoading,
       isReadonly,
       limitReached,
       messages,
+      pickCourse,
       regenerate,
       sendMessage,
       setInput,
@@ -299,6 +341,9 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       votes,
       showCreditCardAlert,
       limitReached,
+      courseId,
+      courseReady,
+      pickCourse,
     ]
   );
 

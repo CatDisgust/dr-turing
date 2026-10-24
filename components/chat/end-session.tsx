@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { COURSE_ID, LEARNER_REFRESH_EVENT } from "@/lib/constants";
+import { LEARNER_REFRESH_EVENT } from "@/lib/constants";
 import type { SessionReport } from "@/lib/types";
 
 // 顶栏“结束本次学习”：跑会后复核，弹出这次的会话报告
@@ -39,7 +39,7 @@ export function EndSession({
     setError(null);
     try {
       const res = await fetch(`/api/session/${chatId}/end`, {
-        body: JSON.stringify({ courseId: COURSE_ID }),
+        body: JSON.stringify({}),
         headers: { "content-type": "application/json" },
         method: "POST",
       });

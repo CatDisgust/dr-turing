@@ -35,6 +35,8 @@ export async function GET(request: Request) {
   const isReadonly = !session?.user || session.user.id !== chat.userId;
 
   return Response.json({
+    // 这次对话学哪门课；null = 不选课
+    courseId: chat.courseId,
     isReadonly,
     messages: convertToUIMessages(messages),
     userId: chat.userId,

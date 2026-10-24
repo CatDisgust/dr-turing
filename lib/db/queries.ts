@@ -99,14 +99,17 @@ export async function saveChat({
   userId,
   title,
   visibility,
+  courseId,
 }: {
   id: string;
   userId: string;
   title: string;
   visibility: VisibilityType;
+  courseId?: string | null;
 }) {
   try {
     return await db.insert(chat).values({
+      courseId: courseId ?? null,
       createdAt: new Date(),
       id,
       title,
@@ -662,6 +665,23 @@ export async function getCourseById({ id }: { id: string }) {
   try {
     const [row] = await db.select().from(course).where(eq(course.id, id));
     return row ?? null;
+  } catch (error) {
+    throw new ChatbotError("bad_request:database", { cause: error });
+  }
+}
+
+// 选课列表：只要名字和每门课几课，不带整份图谱
+export async function listCourses() {
+  try {
+    const rows = await db
+      .select({ graph: course.graph, id: course.id, name: course.name })
+      .from(course)
+      .orderBy(asc(course.name));
+    return rows.map((row) => ({
+      id: row.id,
+      lessons: row.graph.lessons.length,
+      name: row.name,
+    }));
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }

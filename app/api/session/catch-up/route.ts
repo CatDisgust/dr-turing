@@ -6,7 +6,7 @@ import { catchUpSessions } from "@/lib/tutor/session";
 export const maxDuration = 300;
 
 const bodySchema = z.object({
-  courseId: z.string().max(64),
+  courseId: z.string().max(64).optional(),
   exceptChatId: z.string().uuid(),
 });
 
@@ -16,6 +16,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "bad request" }, { status: 400 });
   }
   const session = await auth();
-  await catchUpSessions({ ...parsed.data, studentId: session.user.id });
+  await catchUpSessions({
+    exceptChatId: parsed.data.exceptChatId,
+    studentId: session.user.id,
+  });
   return Response.json({ ok: true });
 }

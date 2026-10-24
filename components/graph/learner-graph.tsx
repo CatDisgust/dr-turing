@@ -5,7 +5,7 @@ import { NodeDrawer } from "@/components/graph/node-drawer";
 import { PersonalPanel } from "@/components/graph/personal-panel";
 import { SkyMap } from "@/components/graph/sky-map";
 import { useLearnerState } from "@/hooks/use-learner-state";
-import { COURSE_ID, GRADED_EVENT, NODE_TOUCHED_EVENT } from "@/lib/constants";
+import { GRADED_EVENT, NODE_TOUCHED_EVENT } from "@/lib/constants";
 import { type Light, nodeLight } from "@/lib/learner/light";
 import type { CourseGraph } from "@/lib/types";
 
@@ -20,26 +20,28 @@ type Graded = {
 // 聊天右边的图谱：按当前学生的状态点亮，画成星图（sky-map.tsx）。归类一到就先把那个点当“正在学”，
 // 批改完、回答结束再从库里刷新。很确定却答错的那颗标成“以为会了”。点一颗星打开抽屉，看证据原话
 export function LearnerGraph({
+  courseId,
   sessionId,
   onStartLearning,
 }: {
+  courseId: string;
   sessionId: string;
   // 抽屉里点“开始学习”时调用，由对话那边发消息
   onStartLearning?: (kpId: string, name: string) => void;
 }) {
   const [graph, setGraph] = useState<CourseGraph | null>(null);
-  const state = useLearnerState();
+  const state = useLearnerState(courseId);
   const [touched, setTouched] = useState<{ kpId: string; name: string }>();
   const [graded, setGraded] = useState<Graded>();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/course/${COURSE_ID}`)
+    fetch(`/api/course/${courseId}`)
       .then((response) => response.json())
       .then((body) => setGraph(body.graph ?? null))
       .catch(() => setGraph(null));
-  }, []);
+  }, [courseId]);
 
   useEffect(() => {
     const onTouched = (event: Event) => {

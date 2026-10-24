@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { COURSE_ID } from "@/lib/constants";
 import {
   getChatById,
   getLearnerState,
@@ -88,9 +87,11 @@ export async function PATCH(request: Request) {
 
   // 点赞点踩也是学生的反应（学生建模方案 A）：记进 Event 表，点踩计入投入度 W。
   // 记不上不影响投票本身
+  // 不选课的对话没有课程状态，只记投票
   try {
     await recordVote({
       chatId,
+      courseId: chat.courseId,
       messageId,
       studentId: session.user.id,
       type: type === "up" ? "thumbs_up" : "thumbs_down",
@@ -104,11 +105,15 @@ export async function PATCH(request: Request) {
 
 async function recordVote(input: {
   chatId: string;
+  courseId: string | null;
   messageId: string;
   studentId: string;
   type: "thumbs_up" | "thumbs_down";
 }) {
-  const key = { courseId: COURSE_ID, studentId: input.studentId };
+  if (!input.courseId) {
+    return;
+  }
+  const key = { courseId: input.courseId, studentId: input.studentId };
   const state = await getLearnerState(key);
   if (!state) {
     return;
