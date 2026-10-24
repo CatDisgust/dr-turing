@@ -9,6 +9,7 @@ import {
 } from "remotion";
 import {
   cameraAt,
+  cameraKeysOut,
   cursorAt,
   layoutClips,
   project,
@@ -41,7 +42,7 @@ export function ScreenScene({ shot }: { shot: ScreenShot }) {
   const win = windowRect(width, height);
   const laid = layoutClips(shot.clips);
   const src = sourceTime(laid, out);
-  const cam = cameraAt(shot.camera, src);
+  const cam = cameraAt(cameraKeysOut(shot.camera, laid), out);
   const s = (win.w / VIEW_W) * cam.zoom;
   const v = shot.viewport;
 
