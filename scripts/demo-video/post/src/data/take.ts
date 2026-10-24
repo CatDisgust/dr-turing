@@ -38,16 +38,34 @@ const FPS = 60;
 // 讲稿念完后至少再留这么久画面
 const TAIL = 0.6;
 
-// 讲稿比画面长时，在最后一帧停住补够（计时样带用，正式剪辑再细调）
-export function padClips(clips: Clip[], need: number): Clip[] {
-  const have = clips.reduce((n, c) => n + (c.to - c.from) / (c.rate ?? 1), 0);
-  const last = clips.at(-1);
+// 讲稿比画面长时先把加速段放慢（倍数最低到 1），还不够再在最后一帧停住补够（计时样带用，正式剪辑再细调）
+export function fitClips(clips: Clip[], need: number): Clip[] {
+  const len = (c: Clip) => (c.to - c.from) / (c.rate ?? 1);
+  let out = clips.map((c) => ({ ...c }));
+  for (let i = 0; i < 4; i += 1) {
+    const have = out.reduce((n, c) => n + len(c), 0);
+    const sped = out.filter((c) => (c.rate ?? 1) > 1);
+    const spedLen = sped.reduce((n, c) => n + len(c), 0);
+    if (need <= have + 0.01 || sped.length === 0) {
+      break;
+    }
+    const f = (spedLen + need - have) / spedLen;
+    out = out.map((c) => {
+      if ((c.rate ?? 1) <= 1) {
+        return c;
+      }
+      const rate = Math.round(((c.rate ?? 1) / f) * 10) / 10;
+      return rate > 1.05 ? { ...c, rate } : { from: c.from, to: c.to };
+    });
+  }
+  const have = out.reduce((n, c) => n + len(c), 0);
+  const last = out.at(-1);
   if (!last || need <= have + 0.01) {
-    return clips;
+    return out;
   }
   const frame = 1 / FPS;
   return [
-    ...clips,
+    ...out,
     {
       from: last.to - frame,
       rate: frame / (need - have),
@@ -68,7 +86,7 @@ function screenShot(take: Take, draft: DraftShot): Shot {
     badges: [{ text: draft.shot === 7 ? NEXT_DAY : PRESET }],
     camera: draft.camera,
     clicks: draft.clicks ?? [],
-    clips: padClips(draft.clips, end + TAIL),
+    clips: fitClips(draft.clips, end + TAIL),
     cues,
     cursor: draft.cursor ?? [],
     footage: take.footage,

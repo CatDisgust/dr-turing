@@ -153,8 +153,27 @@ export function sourceTime(laid: LaidClip[], out: number): number {
   return clip.from + local * clip.rate;
 }
 
-export function clipAt(laid: LaidClip[], out: number): LaidClip | undefined {
-  return laid.find((c) => out >= c.outStart && out < c.outEnd);
+// “已加速 ×N”角标显示的倍数：两段加速之间夹着不到 0.5 秒的原速，角标不熄（免得一闪一闪）
+const BADGE_GAP = 0.5;
+
+export function speedAt(laid: LaidClip[], out: number): number {
+  const i = laid.findIndex((c) => out >= c.outStart && out < c.outEnd);
+  const clip = laid[i];
+  if (!clip) {
+    return 1;
+  }
+  if (clip.rate > 1) {
+    return clip.rate;
+  }
+  const prev = laid[i - 1];
+  const next = laid[i + 1];
+  return prev &&
+    next &&
+    prev.rate > 1 &&
+    next.rate > 1 &&
+    clip.outEnd - clip.outStart < BADGE_GAP
+    ? prev.rate
+    : 1;
 }
 
 const easeInOutCubic = (x: number) =>

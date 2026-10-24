@@ -89,7 +89,7 @@ export function Badges({ badges, speed }: { badges: Badge[]; speed: number }) {
       </div>
       {speed > 1 ? (
         <div style={{ ...pill, position: "absolute", right: 28, top: 24 }}>
-          已加速 ×{Math.round(speed)}
+          已加速 ×{speed >= 2 ? Math.round(speed) : speed.toFixed(1)}
         </div>
       ) : null}
     </>
