@@ -5,6 +5,7 @@ import {
   draftCamera,
   draftClips,
   draftTake,
+  editSpans,
   shotWindows,
   thinkingSpans,
 } from "../lib/draft.mjs";
@@ -134,7 +135,46 @@ describe("剪辑单草稿", () => {
     assert.deepEqual(shot.clicks, [{ t: 20, x: 745, y: 674 }]);
     assert.deepEqual(shot.cursor, [{ t: 20, x: 745, y: 674 }]);
     assert.equal(shot.stats.raw, 44);
-    assert.equal(shot.stats.edited, 35.75);
-    assert.equal(shot.stats.sped.length, 1);
+    // 思考 21–30 加速到 0.75 秒，出字 30–40 加速 3 倍
+    assert.equal(shot.stats.edited, 29.083);
+    assert.equal(shot.stats.sped.length, 2);
+  });
+
+  test("要剪的时段：思考、出字、复核等待、先不做题、模拟第二天", () => {
+    const aligned = {
+      marks: [
+        mark("shot.7.start", 100),
+        mark("wait.next-day.start", 100.5),
+        mark("wait.next-day.end", 102),
+        { label: "输入框", name: "click", t: 108 },
+        { label: "先不做题", name: "click", t: 120 },
+        mark("wait.reply.镜头7-skip.start", 120.2),
+        mark("wait.reply.镜头7-skip.end", 126),
+        mark("wait.review.shot7.start", 130),
+        mark("wait.review.shot7.end", 170),
+        mark("shot.7.end", 180),
+      ],
+      ui: [stream(109, "start"), ui(115, "reply-shown", 1), stream(119, "end")],
+    };
+    const spans = editSpans(aligned, { end: 180, start: 100 });
+    assert.deepEqual(
+      spans.map((s) => [s.kind, s.start, s.end]),
+      [
+        ["think", 109, 115],
+        ["stream", 115, 119],
+        ["cut", 100, 106.5],
+        ["cut", 118.8, 126.3],
+        ["review", 130, 170],
+      ]
+    );
+    const clips = draftClips({ end: 180, start: 100 }, spans);
+    assert.deepEqual(clips, [
+      { from: 106.5, to: 109 },
+      { from: 109, rate: 8, to: 115 },
+      { from: 115, rate: 3, to: 118.8 },
+      { from: 126.3, to: 130 },
+      { from: 130, rate: 50, to: 170 },
+      { from: 170, to: 180 },
+    ]);
   });
 });

@@ -1,6 +1,7 @@
 import { Composition } from "remotion";
 import { animatic } from "./data/animatic";
 import { engineTest } from "./data/engine-test";
+import { fromTake } from "./data/take";
 import type { Edit } from "./edit";
 import { editDuration, Video } from "./video";
 
@@ -21,6 +22,7 @@ export function Root() {
     <>
       {comp("Animatic", animatic)}
       {comp("EngineTest", engineTest)}
+      {fromTake ? comp("Take", fromTake) : null}
     </>
   );
 }

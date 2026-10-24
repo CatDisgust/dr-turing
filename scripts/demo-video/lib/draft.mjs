@@ -6,6 +6,8 @@
 // 导师“思考中”（只显示等待动画、画面不动）超过 maxIdle 秒就加速到不超过 maxIdle 秒，画面会自动标“已加速”
 const MAX_IDLE = 0.8;
 const MIN_RATE = 2;
+// 导师出字加速几倍（画面也标“已加速”）；计时样带再按讲稿逐镜调
+const STREAM_RATE = 3;
 // 导师回复第一次露出内容时，页面上会出现的东西（任意一个出现就算思考结束）
 const SHOWN_KEYS = new Set([
   "reply-shown",
@@ -76,60 +78,145 @@ export function appearances(ui, key) {
   return out;
 }
 
-// 导师思考中的时段：开始忙 → 回复第一次露出内容（找不到就到忙完为止）
-export function thinkingSpans(ui) {
+// 导师每一轮回复：开始忙 → 第一次露出内容（shown）→ 忙完。找不到露出就记成忙完那一刻
+export function replySpans(ui) {
   const spans = [];
   for (let i = 0; i < ui.length; i += 1) {
     const e = ui[i];
     if (e.type !== "stream" || e.state !== "start") {
       continue;
     }
+    let shown = null;
     let end = null;
     for (let j = i + 1; j < ui.length; j += 1) {
       const f = ui[j];
       if (f.type === "stream" && f.state === "end") {
-        end ??= f.v;
-        break;
-      }
-      if (f.type === "ui" && SHOWN_KEYS.has(f.key) && f.value) {
         end = f.v;
         break;
       }
+      if (
+        shown === null &&
+        f.type === "ui" &&
+        SHOWN_KEYS.has(f.key) &&
+        f.value
+      ) {
+        shown = f.v;
+      }
     }
     if (end !== null && end > e.v) {
-      spans.push({ end, start: e.v });
+      spans.push({ end, shown: shown ?? end, start: e.v });
     }
   }
   return spans;
 }
 
-// 镜头时段切成片段：思考超过 maxIdle 的部分加速到 maxIdle 秒，其余原速
+// 导师思考中的时段：开始忙 → 回复第一次露出内容
+export function thinkingSpans(ui) {
+  return replySpans(ui)
+    .filter((s) => s.shown > s.start)
+    .map((s) => ({ end: s.shown, start: s.start }));
+}
+
+// 剪辑要处理的时段：
+//  think  思考中（只有等待动画）→ 加速到 maxIdle 秒以内
+//  stream 导师出字 → 加速 streamRate 倍（短于 2 秒不动）
+//  review 结束学习后的复核等待 → 加速到 maxIdle 秒以内
+//  cut    剪掉：点“先不做题”和它引出的那一轮回复；镜头 7 开头模拟第二天、重开页面
+export function editSpans(aligned, window) {
+  const ui = aligned.ui ?? [];
+  const marks = aligned.marks ?? [];
+  const spans = [];
+  for (const r of replySpans(ui)) {
+    if (r.shown > r.start) {
+      spans.push({ end: r.shown, kind: "think", start: r.start });
+    }
+    if (r.end - r.shown > 2) {
+      spans.push({ end: r.end, kind: "stream", start: r.shown });
+    }
+  }
+  for (const m of marks) {
+    const review = m.name.match(/^wait\.(review\..+)\.start$/);
+    if (review) {
+      const end = marks.find(
+        (e) => e.name === `wait.${review[1]}.end` && e.t >= m.t
+      );
+      if (end) {
+        spans.push({ end: end.t, kind: "review", start: m.t });
+      }
+    }
+    if (m.name === "click" && m.label === "先不做题") {
+      const end = marks.find(
+        (e) => /^wait\.reply\..*-skip\.end$/.test(e.name) && e.t >= m.t
+      );
+      if (end) {
+        spans.push({ end: end.t + 0.3, kind: "cut", start: m.t - 1.2 });
+      }
+    }
+    if (m.name === "wait.next-day.start" && m.t >= window.start) {
+      const next = marks.find(
+        (e) => e.name === "click" && e.t > m.t && e.t <= window.end
+      );
+      if (next) {
+        spans.push({ end: next.t - 1.5, kind: "cut", start: window.start });
+      }
+    }
+  }
+  return spans;
+}
+
+const PRIORITY = { cut: 0, review: 1, stream: 3, think: 2 };
+
+// 镜头时段切成片段：cut 剪掉，think / review 加速到 maxIdle 秒以内，stream 加速 streamRate 倍，其余原速。
+// 时段重叠时按 cut > review > think > stream 取舍，后来的被前面的占掉的部分丢弃
 export function draftClips(
   window,
-  idle,
-  { maxIdle = MAX_IDLE, minRate = MIN_RATE } = {}
+  spans,
+  { maxIdle = MAX_IDLE, minRate = MIN_RATE, streamRate = STREAM_RATE } = {}
 ) {
-  const clips = [];
-  let t = window.start;
-  const spans = idle
+  const clipped = spans
     .map((s) => ({
       end: Math.min(s.end, window.end),
+      kind: s.kind ?? "think",
       start: Math.max(s.start, window.start),
     }))
-    .filter((s) => s.end - s.start > maxIdle)
-    .toSorted((a, b) => a.start - b.start);
-  for (const s of spans) {
-    if (s.start < t) {
-      continue;
+    .filter((s) =>
+      s.kind === "stream" ? s.end - s.start > 2 : s.end - s.start > maxIdle
+    )
+    .toSorted((a, b) => PRIORITY[a.kind] - PRIORITY[b.kind]);
+  // 按优先级放进去，和已放的重叠就裁掉重叠部分
+  const placed = [];
+  for (const s of clipped) {
+    let pieces = [s];
+    for (const p of placed) {
+      pieces = pieces.flatMap((q) => {
+        if (q.end <= p.start || q.start >= p.end) {
+          return [q];
+        }
+        return [
+          { ...q, end: p.start },
+          { ...q, start: p.end },
+        ].filter((r) => r.end - r.start > 0.05);
+      });
     }
+    placed.push(...pieces);
+  }
+  const clips = [];
+  let t = window.start;
+  for (const s of placed.toSorted((a, b) => a.start - b.start)) {
     if (s.start > t) {
       clips.push({ from: round3(t), to: round3(s.start) });
     }
-    const rate = Math.max(
-      minRate,
-      Math.ceil((s.end - s.start) / maxIdle - 1e-9)
-    );
-    clips.push({ from: round3(s.start), rate, to: round3(s.end) });
+    const len = s.end - s.start;
+    if (s.kind === "stream") {
+      clips.push({
+        from: round3(s.start),
+        rate: streamRate,
+        to: round3(s.end),
+      });
+    } else if (s.kind !== "cut") {
+      const rate = Math.max(minRate, Math.ceil(len / maxIdle - 1e-9));
+      clips.push({ from: round3(s.start), rate, to: round3(s.end) });
+    }
     t = s.end;
   }
   if (window.end > t) {
@@ -194,8 +281,7 @@ export function draftCamera(window, { marks, ui, cursor }) {
 // 一个镜头的完整草稿
 export function draftShot(aligned, window, options = {}) {
   const ui = aligned.ui ?? [];
-  const idle = thinkingSpans(ui);
-  const clips = draftClips(window, idle, options);
+  const clips = draftClips(window, editSpans(aligned, window), options);
   const inside = (t) => t >= window.start - 0.5 && t <= window.end + 0.5;
   const raw = window.end - window.start;
   const edited = clips.reduce((n, c) => n + (c.to - c.from) / (c.rate ?? 1), 0);
@@ -212,6 +298,7 @@ export function draftShot(aligned, window, options = {}) {
     cursor: (aligned.cursor ?? []).filter((c) => inside(c.t)),
     footage: aligned.video,
     stats: {
+      cut: round3(raw - clips.reduce((n, c) => n + (c.to - c.from), 0)),
       edited: round3(edited),
       raw: round3(raw),
       sped: clips.filter((c) => c.rate).map((c) => ({ ...c })),

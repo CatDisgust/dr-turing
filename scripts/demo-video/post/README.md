@@ -29,6 +29,20 @@ npx remotion still src/index.ts EngineTest out/engine.png --frame=108
 
 素材、配音、音乐都放在 `public/` 下。这些是大文件，不进仓库。
 
+## 用真实录制做计时样带
+
+在 `scripts/demo-video` 里录完一条后：
+
+```bash
+node align.mjs out/<take>      # 对时间，写 aligned.json
+node draft.mjs out/<take>      # 剪辑单草稿，写 draft.json
+cd post
+node scripts/use-take.mjs ../out/<take>   # 接进后期工程，复制素材，打印计时表（也写进 <take>/timing.md）
+npx remotion render src/index.ts Take out/take.mp4
+```
+
+剪辑单草稿的规则：导师思考和结束学习后的复核等待加速到 0.8 秒以内；导师出字加速 3 倍；点“先不做题”那一段和镜头 7 开头模拟第二天、重开页面剪掉；打字时镜头放大 1.4 倍，“从你会的…讲起”标签、红条、判分出现时放大 2 倍。讲稿比画面长的镜头，在最后一帧停住补够。
+
 ## 约定
 
 - 录屏坐标用网页的 CSS 像素，窗口内容是 1280×720。成片 1920×1080，不放大时正好铺满。

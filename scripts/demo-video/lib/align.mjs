@@ -104,7 +104,11 @@ export function editHints(events, clock, { minGapMs = 33 } = {}) {
       cursor.push({ t: round3(clock(e.t)), x: e.x, y: e.y });
       clicks.push({ t: round3(clock(e.t)), testid: e.testid, x: e.x, y: e.y });
     } else if (e.type === "mark") {
-      marks.push({ name: e.name, t: round3(clock(e.t)) });
+      marks.push({
+        name: e.name,
+        t: round3(clock(e.t)),
+        ...(e.label ? { label: e.label } : {}),
+      });
     }
   }
   return { clicks, cursor, marks };
