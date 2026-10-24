@@ -22,6 +22,7 @@ import {
   getLearnerState,
   getMessageCountByUserId,
   getMessagesByChatId,
+  getSpend,
   reopenChat,
   saveChat,
   saveEvents,
@@ -35,7 +36,9 @@ import { ChatbotError } from "@/lib/errors";
 import { computeAbilities, describeAbilities } from "@/lib/learner/abilities";
 import { engagementOf, nextTurn } from "@/lib/learner/events";
 import { emptyLearnerState } from "@/lib/learner/update";
+import { MICRO_PER_CENT } from "@/lib/pricing";
 import { auth } from "@/lib/session";
+import { chargeTo, recordUsage } from "@/lib/spend";
 import {
   diagnosisAnswer,
   diagnosisSkip,
@@ -234,6 +237,7 @@ export async function POST(request: Request) {
     } = requestBody;
 
     const session = await auth();
+    chargeTo(session.user.id);
 
     if (message?.role !== "user") {
       return new ChatbotError("bad_request:api").toResponse();
@@ -247,6 +251,11 @@ export async function POST(request: Request) {
       });
       if (sent >= session.invite.dailyLimit) {
         return new ChatbotError("rate_limit:chat").toResponse();
+      }
+      // 试用额度：花到上限就停（管理员不限）。差一点没到的这一轮照常讲完，最多超一轮的钱
+      const spent = await getSpend(session.user.id);
+      if (spent >= session.invite.budgetCents * MICRO_PER_CENT) {
+        return new ChatbotError("rate_limit:budget").toResponse();
       }
       touchInvite(session.invite.code).catch(() => undefined);
     }
@@ -484,6 +493,7 @@ export async function POST(request: Request) {
             // biome-ignore lint/performance/noAwaitInLoops: 失败后才重试，本来就是顺序的
             await pipeClaudeToUI(claudeStream, writer, onFirstText);
             const final = await claudeStream.finalMessage();
+            recordUsage(final.model, final.usage);
             refused = final.stop_reason === "refusal";
             break;
           } catch (error) {

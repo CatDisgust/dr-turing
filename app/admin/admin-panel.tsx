@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { dollars } from "@/lib/pricing";
 import { CoursesSection } from "./courses-section";
 
 type InviteRow = {
@@ -14,11 +15,20 @@ type InviteRow = {
   name: string;
   disabled: boolean;
   dailyLimit: number;
+  budgetCents: number;
+  spentMicroUsd: number;
   createdAt: string;
   lastSeenAt: string | null;
   chats: number;
   messagesToday: number;
   messagesTotal: number;
+};
+
+type Change = {
+  disabled?: boolean;
+  dailyLimit?: number;
+  budgetUsd?: number;
+  rotate?: boolean;
 };
 
 type FeedbackRow = {
@@ -81,10 +91,7 @@ export function AdminPanel() {
   );
 
   const patch = useCallback(
-    async (
-      code: string,
-      change: { disabled?: boolean; dailyLimit?: number; rotate?: boolean }
-    ) => {
+    async (code: string, change: Change) => {
       await fetch("/api/admin/invites", {
         body: JSON.stringify({ code, ...change }),
         headers: { "content-type": "application/json" },
@@ -152,6 +159,7 @@ export function AdminPanel() {
                 <th className="py-2 pr-3 font-normal">对话</th>
                 <th className="py-2 pr-3 font-normal">今天 / 上限</th>
                 <th className="py-2 pr-3 font-normal">总消息</th>
+                <th className="py-2 pr-3 font-normal">已花 / 额度</th>
                 <th className="py-2 font-normal" />
               </tr>
             </thead>
@@ -206,10 +214,7 @@ function InviteLine({
   onPatch,
 }: {
   row: InviteRow;
-  onPatch: (
-    code: string,
-    change: { disabled?: boolean; dailyLimit?: number; rotate?: boolean }
-  ) => void;
+  onPatch: (code: string, change: Change) => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -242,6 +247,22 @@ function InviteLine({
     [onPatch, row.code, row.dailyLimit]
   );
 
+  const setBudget = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const usd = Number(event.target.value);
+      if (
+        event.target.value !== "" &&
+        usd >= 0 &&
+        Math.round(usd * 100) !== row.budgetCents
+      ) {
+        onPatch(row.code, { budgetUsd: usd });
+      }
+    },
+    [onPatch, row.code, row.budgetCents]
+  );
+
+  const over = row.spentMicroUsd >= row.budgetCents * 10_000;
+
   return (
     <tr
       className={`border-t-2 ${row.disabled ? "text-muted-foreground" : ""}`}
@@ -263,6 +284,22 @@ function InviteLine({
         />
       </td>
       <td className="py-2 pr-3">{row.messagesTotal}</td>
+      <td
+        className={`whitespace-nowrap py-2 pr-3 ${over ? "text-[var(--duo-red-ink)]" : ""}`}
+        data-testid="invite-spend"
+        title={over ? "额度用完了，他现在发不了消息；加额度就能接着学" : ""}
+      >
+        {dollars(row.spentMicroUsd)} / $
+        <input
+          aria-label="试用额度（美元）"
+          className="dt-input h-8 w-16 px-2 text-[14px]"
+          defaultValue={row.budgetCents / 100}
+          min={0}
+          onBlur={setBudget}
+          step="any"
+          type="number"
+        />
+      </td>
       <td className="whitespace-nowrap py-2">
         <button className="dt-text-btn" onClick={copy} type="button">
           {copied ? "已复制" : "复制登录链接"}

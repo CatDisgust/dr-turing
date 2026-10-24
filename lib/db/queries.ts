@@ -13,6 +13,7 @@ import {
   lt,
   ne,
   type SQL,
+  sql,
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -47,6 +48,7 @@ import {
   personalGraph,
   type StudentEvent,
   type Suggestion,
+  spend,
   stream,
   studentModel,
   suggestion,
@@ -1295,12 +1297,40 @@ export async function touchInvite(code: string) {
 
 export async function updateInvite(
   code: string,
-  patch: Partial<Pick<Invite, "code" | "disabled" | "dailyLimit" | "name">>
+  patch: Partial<
+    Pick<Invite, "budgetCents" | "code" | "disabled" | "dailyLimit" | "name">
+  >
 ) {
   await db.update(invite).set(patch).where(eq(invite.code, code));
 }
 
+// 试用额度：每次调完 Claude 把这次的钱加到这个账号上（并发也不会丢）
+export async function addSpend(userId: string, microUsd: number) {
+  if (microUsd <= 0) {
+    return;
+  }
+  await db
+    .insert(spend)
+    .values({ microUsd, userId })
+    .onConflictDoUpdate({
+      set: {
+        microUsd: sql`${spend.microUsd} + ${microUsd}`,
+        updatedAt: new Date(),
+      },
+      target: spend.userId,
+    });
+}
+
+export async function getSpend(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ microUsd: spend.microUsd })
+    .from(spend)
+    .where(eq(spend.userId, userId));
+  return row?.microUsd ?? 0;
+}
+
 export type InviteUsage = Invite & {
+  spentMicroUsd: number;
   chats: number;
   messagesToday: number;
   messagesTotal: number;
@@ -1329,6 +1359,7 @@ export async function listInvitesWithUsage(): Promise<InviteUsage[]> {
         chats: chats?.n ?? 0,
         messagesToday: today,
         messagesTotal: total?.n ?? 0,
+        spentMicroUsd: await getSpend(row.userId),
       };
     })
   );
