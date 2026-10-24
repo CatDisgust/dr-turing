@@ -48,6 +48,12 @@ const HOLD_ZOOM = [
 ];
 const TYPING_ZOOM = 1.4;
 const SIM_ZOOM = 1.4;
+// 对话列在网页 x 104–784：落在这一列里的放大，横向整列框进来、最多 1.75 倍（可见 731px 宽），左右不切字
+const CHAT = { center: 444, maxZoom: 1.75, right: 830 };
+const frameChat = (f) =>
+  f.x < CHAT.right
+    ? { ...f, x: CHAT.center, zoom: Math.min(f.zoom, CHAT.maxZoom) }
+    : f;
 // 镜头移动用多久（成片秒），加速段里按倍数换成素材秒，不会一闪而过
 const CAMERA_DUR = 0.8;
 
@@ -425,7 +431,7 @@ export function draftCamera(window, { marks, cursor }) {
     });
   }
   // 重叠时后来的接替前面的；每段结束后回全景，下一段紧接着开始就不回；同一时刻只留一个
-  const sorted = focus.toSorted((a, b) => a.from - b.from);
+  const sorted = focus.map(frameChat).toSorted((a, b) => a.from - b.from);
   const keys = [];
   for (let i = 0; i < sorted.length; i += 1) {
     const f = sorted[i];

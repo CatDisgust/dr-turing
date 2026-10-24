@@ -107,7 +107,7 @@ export async function shot4(d) {
     for (const t of [1, 2, 1, 2]) {
       // biome-ignore lint/performance/noAwaitInLoops: 按顺序点
       await d.actor.click(sim.getByTestId(`sim-step-${t}`), {
-        after: Math.round(d.actor.rng.range(900, 1300)),
+        after: Math.round(d.actor.rng.range(700, 1000)),
         label: `T${t} 走一步`,
         scroll: false,
       });

@@ -115,6 +115,19 @@ export type Edit = {
 export const VIEW_W = 1280;
 export const VIEW_H = 720;
 
+// 录屏装进成片中间的一个“窗口”，上面留一条放角标、下面留一条放字幕，都不挡网页上的按钮。
+// 1920×1080 成片：窗口 1536×864（网页的 1.2 倍），离上边 64、离下边 152
+export function windowRect(width: number, height: number) {
+  const w = Math.round(width * 0.8);
+  const h = Math.round((w * VIEW_H) / VIEW_W);
+  return {
+    h,
+    w,
+    x: Math.round((width - w) / 2),
+    y: Math.round((height * 64) / 1080),
+  };
+}
+
 export type LaidClip = Clip & {
   rate: number;
   outStart: number;
