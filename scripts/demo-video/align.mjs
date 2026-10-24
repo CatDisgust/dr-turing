@@ -78,6 +78,31 @@ function blanks(video) {
   return blankSpans(parseSignalstats(out, "YMIN"));
 }
 
+// 录屏中的截图只记了时间（director.screenshot 的 still），从素材里取那一帧，按网页 CSS 大小存
+function stills(video, events, clock) {
+  const shots = events.filter(
+    (e) => e.type === "mark" && e.name === "screenshot" && e.still && e.path
+  );
+  for (const e of shots) {
+    run("ffmpeg", [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-ss",
+      String(Math.max(0, clock(e.t))),
+      "-i",
+      video,
+      "-frames:v",
+      "1",
+      "-vf",
+      "scale=1280:-2",
+      e.path,
+    ]);
+  }
+  return shots.length;
+}
+
 // 测帧率那段里不重复的帧数 ÷ 时长 = OBS 实际录到的帧率（制作方案要求超过 50）
 function uniqueFps(video, window) {
   const result = spawnSync(
@@ -162,6 +187,10 @@ function main() {
       ? `空白帧 ${blank.length} 段（共 ${blank.reduce((n, b) => n + b.frames, 0)} 帧）：${blank.map((b) => `${b.from.toFixed(2)}s×${b.frames}`).join("、")}，剪辑单会剪掉`
       : "没有空白帧"
   );
+  const still = stills(video, log.events, clock);
+  if (still > 0) {
+    console.log(`从素材里取了 ${still} 张截图`);
+  }
   const probe = probeWindow(log.events, clock);
   if (probe) {
     probe.uniqueFps = uniqueFps(video, probe);

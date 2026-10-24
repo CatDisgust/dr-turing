@@ -15,6 +15,7 @@
 //  第二次及以后的“结束本次学习”：小结镜头 6 已经演过，从小结弹出前到关掉小结整段剪掉
 //  打开“我的星图”后星星还没画出来的那一下（空黑板）剪掉
 //  空白帧（整个窗口一片白，align.mjs 量出来的）剪掉，前后各多剪一点
+//  录制中用 page.screenshot 截图时 Chrome 会把窗口重画、1–5 帧大半是白的：截图标记前 0.16 秒到后 0.03 秒剪掉
 const MAX_IDLE = 0.8;
 const MIN_RATE = 2;
 const STREAM_MAX = 2;
@@ -60,6 +61,10 @@ const frameChat = (f) =>
 const CAMERA_DUR = 0.8;
 // 空白帧前后各多剪多少秒（60 帧/秒时略多于一帧，取整后也盖得住）
 const BLANK_PAD = 0.02;
+// 截图闪白在截图标记前 30–130 毫秒开始、最长 5 帧（2026-10-24 那条 take 量的），标记记在截完之后
+const SHOT_FLASH = { after: 0.03, before: 0.16 };
+// 镜头 7 新页面右栏开在“课件”（一片白），点“我的图谱”后多久星图画出来（量的约 0.2 秒）
+const TAB_SETTLE = 0.3;
 
 const round3 = (x) => Math.round(x * 1000) / 1000;
 
@@ -271,6 +276,13 @@ export function editSpans(aligned, window, o = {}) {
         spans.push({ end: m.t, kind: "cut", start: opened.t + 0.25 });
       }
     }
+    if (m.name === "screenshot" && !m.still) {
+      spans.push({
+        end: m.t + SHOT_FLASH.after,
+        kind: "cut",
+        start: m.t - SHOT_FLASH.before,
+      });
+    }
     if (m.name === "type.start") {
       const end = marks.find((e) => e.name === "type.end" && e.t >= m.t);
       if (end) {
@@ -298,8 +310,12 @@ export function editSpans(aligned, window, o = {}) {
         (e) => e.name === "click" && e.t > m.t && e.t <= window.end
       );
       if (next) {
+        // 第一下是切到“我的图谱”：从星图画出来之后开场，不拍右栏一片白的“课件”
         spans.push({
-          end: next.t - (o.lead ?? 1.5),
+          end:
+            next.label === "我的图谱"
+              ? next.t + TAB_SETTLE
+              : next.t - (o.lead ?? 1.5),
           kind: "cut",
           start: window.start,
         });

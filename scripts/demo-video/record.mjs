@@ -226,10 +226,12 @@ async function runTake(ctx) {
       ctx.onStop = async () => {
         if (recording) {
           recording = false;
+          d.recording = false;
           await obs.stopRecording();
         }
       };
       log.mark("record.start");
+      d.recording = true;
       await sleep(800);
       const framePath = join(ctx.dir, "obs-frame.png");
       await obs
@@ -262,7 +264,7 @@ async function runTake(ctx) {
       } catch (error) {
         facts = { error: error.message, warnings: [] };
         log.mark("error", { message: error.message, shot, stack: error.stack });
-        await d.screenshot(`shot${shot}-error`);
+        await d.screenshot(`shot${shot}-error`, { now: true });
       }
       log.mark(`shot.${shot}.end`);
       verdict[shot] = {
@@ -297,12 +299,13 @@ async function runTake(ctx) {
       reasons: [`准备阶段出错：${error.message}`],
       warnings: [],
     };
-    await d.screenshot("setup-error");
+    await d.screenshot("setup-error", { now: true });
   } finally {
     await d.flash("end").catch(() => null);
     if (recording) {
       await sleep(700);
       recording = false;
+      d.recording = false;
       const path = await obs.stopRecording().catch((error) => {
         log.warn(`停止录制失败：${error.message}`);
         return null;

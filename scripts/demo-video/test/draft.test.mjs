@@ -378,6 +378,46 @@ describe("剪辑单草稿", () => {
     );
   });
 
+  test("录制中 page.screenshot 的截图标记：前 0.16 秒到后 0.03 秒剪掉；从素材取的截图（still）不剪", () => {
+    const shot = (t, still) => ({
+      name: "screenshot",
+      t,
+      ...(still ? { still } : {}),
+    });
+    const spans = editSpans(
+      { marks: [shot(60.47), shot(80, true)] },
+      { end: 100, start: 0 }
+    );
+    assert.deepEqual(
+      kinds(spans, "cut").map(([k, a, b]) => [
+        k,
+        Number(a.toFixed(2)),
+        Number(b.toFixed(2)),
+      ]),
+      [["cut", 60.31, 60.5]]
+    );
+  });
+
+  test("镜头 7 第一下是切到“我的图谱”：从切过去 0.3 秒后开场", () => {
+    const spans = editSpans(
+      {
+        marks: [
+          mark("shot.7.start", 280),
+          mark("wait.next-day.start", 280.5),
+          mark("wait.next-day.end", 282),
+          { label: "我的图谱", name: "click", t: 292.26 },
+          { label: "输入框", name: "click", t: 296 },
+        ],
+      },
+      { end: 320, start: 280 },
+      { lead: 0.8 }
+    );
+    assert.deepEqual(
+      kinds(spans, "cut").map(([k, a, b]) => [k, a, Number(b.toFixed(2))]),
+      [["cut", 280, 292.56]]
+    );
+  });
+
   test("收紧的镜头：停留按比例缩短，全亮不缩；整轮快放压得更短", () => {
     const window = { end: 60, start: 0 };
     const marks = [hold(10, "答对了", 2000), hold(20, "「死锁」全亮", 3000)];

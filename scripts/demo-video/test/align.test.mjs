@@ -131,6 +131,13 @@ describe("时钟和对齐", () => {
       { t: 10_050, testid: "send-button", type: "pointerdown", x: 3, y: 3 },
       { name: "shot.4.start", t: 11_000, type: "mark" },
       { label: "检查题", ms: 3000, name: "hold", t: 12_000, type: "mark" },
+      {
+        name: "screenshot",
+        path: "x.png",
+        still: true,
+        t: 13_000,
+        type: "mark",
+      },
     ];
     assert.deepEqual(
       alignEvents(events.slice(0, 1), clock).map((e) => e.v),
@@ -147,6 +154,7 @@ describe("时钟和对齐", () => {
     assert.deepEqual(hints.marks, [
       { name: "shot.4.start", t: 2 },
       { label: "检查题", ms: 3000, name: "hold", t: 3 },
+      { name: "screenshot", still: true, t: 4 },
     ]);
   });
 });

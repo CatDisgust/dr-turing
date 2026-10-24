@@ -20,6 +20,8 @@ export class Director {
     this.deadlockId = deadlockId;
     this.dumped = 0;
     this.shots = 0;
+    // 录屏中（record.mjs 开录后设 true）
+    this.recording = false;
   }
 
   get assistants() {
@@ -45,12 +47,18 @@ export class Director {
     return (await locator.innerText()).replace(/\s+/g, " ").trim();
   }
 
-  async screenshot(name) {
+  // 存一张截图。录屏中不用 page.screenshot：它让 Chrome 把窗口重画，录进去 1–5 帧大半白的画面。
+  // 只记下时间（still），align.mjs 从录好的素材里取那一帧存到同一个文件名；出错时的截图照常立刻截
+  async screenshot(name, { now = false } = {}) {
     this.shots += 1;
     const path = join(
       this.dir,
       `${String(this.shots).padStart(2, "0")}-${name}.png`
     );
+    if (this.recording && !now) {
+      this.log.mark("screenshot", { path, still: true });
+      return;
+    }
     await this.page
       .screenshot({ caret: "initial", path, scale: "css" })
       .catch((error) => this.log.warn(`截图失败：${error.message}`));
