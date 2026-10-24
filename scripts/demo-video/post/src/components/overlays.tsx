@@ -2,8 +2,16 @@ import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { type Badge, type Cue, subtitleText } from "../edit";
 import { C, FONT } from "../theme";
 
-// 烧录字幕：思源黑体 52px，白字半透明深底；淡入淡出 0.12 秒
-export function Subtitles({ cues }: { cues: Cue[] }) {
+// 烧录字幕：思源黑体 52px，白字半透明深底；淡入淡出 0.12 秒。字幕条高约 86px
+export const SUBTITLE_H = 86;
+
+export function Subtitles({
+  cues,
+  bottom = 72,
+}: {
+  cues: Cue[];
+  bottom?: number;
+}) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -29,7 +37,7 @@ export function Subtitles({ cues }: { cues: Cue[] }) {
         opacity: fade,
         position: "absolute",
         right: 0,
-        ...(top ? { top: 64 } : { bottom: 72 }),
+        ...(top ? { top: 64 } : { bottom }),
       }}
     >
       <div
@@ -53,8 +61,20 @@ export function Subtitles({ cues }: { cues: Cue[] }) {
   );
 }
 
-// 角标：“演示账号，学习记录为预置”“模拟第二天（预置数据）”，以及加速时的“已加速 ×N”
-export function Badges({ badges, speed }: { badges: Badge[]; speed: number }) {
+// 角标：“演示账号，学习记录为预置”“模拟第二天（预置数据）”，以及加速时的“已加速 ×N”。角标高 42px
+export const BADGE_H = 42;
+
+export function Badges({
+  badges,
+  speed,
+  right,
+  top,
+}: {
+  badges: Badge[];
+  speed: number;
+  right: number;
+  top: number;
+}) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -63,23 +83,26 @@ export function Badges({ badges, speed }: { badges: Badge[]; speed: number }) {
   );
   const pill = {
     background: "rgba(37, 46, 60, 0.82)",
+    border: "1px solid rgba(255, 255, 255, 0.14)",
     borderRadius: 999,
+    boxSizing: "border-box",
     color: "#FFFFFF",
     fontFamily: FONT,
-    fontSize: 26,
-    padding: "6px 18px",
+    fontSize: 24,
+    height: BADGE_H,
+    lineHeight: `${BADGE_H - 2}px`,
+    padding: "0 18px",
   } as const;
-  // 右上角一列：先是预置说明，加速时下面再加一个（左上角是网站的 Logo，不能挡）
+  // 窗口上方那条里靠右排成一行：先是预置说明，加速时右边再加一个
   return (
     <div
       style={{
-        alignItems: "flex-end",
         display: "flex",
-        flexDirection: "column",
+        flexDirection: "row",
         gap: 10,
         position: "absolute",
-        right: 28,
-        top: 24,
+        right,
+        top,
       }}
     >
       {shown.map((b) => (

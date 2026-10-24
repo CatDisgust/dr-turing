@@ -45,9 +45,9 @@ describe("缓动和轨迹", () => {
 
   test("用时随距离变长，有上下限", () => {
     assert.equal(moveDurationMs(0), 0);
-    assert.ok(moveDurationMs(50) >= 300);
+    assert.ok(moveDurationMs(50) >= 200);
     assert.ok(moveDurationMs(200) < moveDurationMs(800));
-    assert.ok(moveDurationMs(5000) <= 1150);
+    assert.ok(moveDurationMs(5000) <= 800);
   });
 
   test("轨迹约 60 步每秒、终点精确、中间是弧不是折线", () => {

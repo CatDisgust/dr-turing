@@ -180,7 +180,7 @@ export class Actor {
     await sleep(holdMs);
   }
 
-  async click(locator, { after = 500, label, ...options } = {}) {
+  async click(locator, { after = 350, label, ...options } = {}) {
     const { point } = await this.moveToLocator(locator, options);
     const until = Date.now() + 20_000;
     // biome-ignore lint/performance/noAwaitInLoops: 等按钮能点
@@ -195,7 +195,7 @@ export class Actor {
       const top = document.elementFromPoint(p.x, p.y);
       return Boolean(top) && (el === top || el.contains(top));
     }, point);
-    await sleep(this.rng.range(140, 240));
+    await sleep(this.rng.range(80, 150));
     if (hit) {
       await this.page.mouse.down();
       await sleep(this.rng.range(60, 100));
@@ -213,7 +213,7 @@ export class Actor {
   }
 
   async type(locator, text, label) {
-    await this.click(locator, { after: 250, label: label ?? "输入框" });
+    await this.click(locator, { after: 200, label: label ?? "输入框" });
     const current = await locator.inputValue().catch(() => "");
     if (current) {
       await this.page.keyboard.press("ControlOrMeta+A");
@@ -232,6 +232,6 @@ export class Actor {
       await locator.fill(text);
     }
     this.log.mark("type.end", { label });
-    await sleep(this.rng.range(350, 600));
+    await sleep(this.rng.range(250, 400));
   }
 }

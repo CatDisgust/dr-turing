@@ -49,12 +49,12 @@ export function cubicBezier(p0, p1, p2, p3, t) {
   };
 }
 
-// 移动用时随距离增长（Fitts 定律的样子）：短距离约 0.3 秒，横穿整个画面约 1.1 秒
+// 移动用时随距离增长（Fitts 定律的样子）：短距离约 0.2 秒，横穿整个画面约 0.8 秒（粗剪里慢吞吞的移动太多，提了速）
 export function moveDurationMs(distance) {
   if (distance < 2) {
     return 0;
   }
-  return Math.round(clamp(260 + 150 * Math.log2(1 + distance / 60), 300, 1150));
+  return Math.round(clamp(180 + 110 * Math.log2(1 + distance / 60), 200, 800));
 }
 
 // 从 from 到 to 的鼠标轨迹：两个控制点在连线两侧偏一点，走成一条微弯的弧；

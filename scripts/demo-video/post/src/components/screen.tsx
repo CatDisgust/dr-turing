@@ -17,28 +17,38 @@ import {
   speedAt,
   VIEW_H,
   VIEW_W,
+  windowRect,
 } from "../edit";
 import { C, FONT } from "../theme";
-import { Badges, CursorArrow, Ripple, Subtitles } from "./overlays";
-import { Star } from "./sky";
+import {
+  BADGE_H,
+  Badges,
+  CursorArrow,
+  Ripple,
+  SUBTITLE_H,
+  Subtitles,
+} from "./overlays";
+import { Sky, Star } from "./sky";
 
 const RIPPLE_SECS = 0.45;
 
-// 一段录屏：按剪辑单取片段（可加速），按镜头键放大平移，画上光标和点击波纹，叠角标和字幕
+// 一段录屏：按剪辑单取片段（可加速），按镜头键放大平移，画上光标和点击波纹；
+// 网页装在夜空上的一个窗口里，角标在窗口上方、字幕在窗口下方，不挡网页
 export function ScreenScene({ shot }: { shot: ScreenShot }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const out = frame / fps;
+  const win = windowRect(width, height);
   const laid = layoutClips(shot.clips);
   const src = sourceTime(laid, out);
   const cam = cameraAt(shot.camera, src);
-  const s = (width / VIEW_W) * cam.zoom;
+  const s = (win.w / VIEW_W) * cam.zoom;
   const v = shot.viewport;
 
-  // 素材像素 → 成片：先换成网页坐标，再按镜头放大
+  // 素材像素 → 窗口：先换成网页坐标，再按镜头放大
   const k = s / v.scale;
-  const tx = width / 2 - cam.x * s - v.x * k;
-  const ty = height / 2 - cam.y * s - v.y * k;
+  const tx = win.w / 2 - cam.x * s - v.x * k;
+  const ty = win.h / 2 - cam.y * s - v.y * k;
   const layer = {
     height: v.height,
     left: 0,
@@ -50,53 +60,78 @@ export function ScreenScene({ shot }: { shot: ScreenShot }) {
   } as const;
 
   const cursor = cursorAt(shot.cursor, src);
-  const cursorOut = cursor ? project(cursor, cam, width, height) : null;
+  const cursorOut = cursor ? project(cursor, cam, win.w, win.h) : null;
   const ripples = shot.clicks
     .filter((c) => src >= c.t && src < c.t + RIPPLE_SECS)
     .map((c) => ({
       p: (src - c.t) / RIPPLE_SECS,
-      ...project(c, cam, width, height),
+      ...project(c, cam, win.w, win.h),
     }));
+  const below = height - win.y - win.h;
 
   return (
-    <AbsoluteFill style={{ background: C.page, overflow: "hidden" }}>
-      {shot.footage ? (
-        laid.map((clip) => (
-          <Sequence
-            durationInFrames={Math.max(
-              1,
-              Math.round((clip.outEnd - clip.outStart) * fps)
-            )}
-            from={Math.round(clip.outStart * fps)}
-            key={`${clip.from}-${clip.to}`}
-            layout="none"
-          >
-            <OffthreadVideo
-              muted
-              playbackRate={clip.rate}
-              src={staticFile(shot.footage as string)}
-              style={layer}
-              trimBefore={Math.round(clip.from * fps)}
-            />
-          </Sequence>
-        ))
-      ) : (
-        <div style={layer}>
-          <Placeholder shot={shot} />
-        </div>
-      )}
-      {ripples.map((r) => (
-        <Ripple key={`${r.x}-${r.y}`} p={r.p} x={r.x} y={r.y} />
-      ))}
-      {cursorOut ? (
-        <CursorArrow
-          size={34 * Math.sqrt(cam.zoom)}
-          x={cursorOut.x}
-          y={cursorOut.y}
-        />
-      ) : null}
-      <Badges badges={shot.badges ?? []} speed={speedAt(laid, out)} />
-      <Subtitles cues={shot.cues} />
+    <AbsoluteFill style={{ background: C.sky, overflow: "hidden" }}>
+      <Sky />
+      <div
+        style={{
+          background: C.page,
+          borderRadius: 16,
+          boxShadow:
+            "0 28px 90px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1)",
+          height: win.h,
+          left: win.x,
+          overflow: "hidden",
+          position: "absolute",
+          top: win.y,
+          width: win.w,
+        }}
+      >
+        {shot.footage ? (
+          laid.map((clip) => (
+            <Sequence
+              durationInFrames={Math.max(
+                1,
+                Math.round((clip.outEnd - clip.outStart) * fps)
+              )}
+              from={Math.round(clip.outStart * fps)}
+              key={`${clip.from}-${clip.to}`}
+              layout="none"
+            >
+              <OffthreadVideo
+                muted
+                playbackRate={clip.rate}
+                src={staticFile(shot.footage as string)}
+                style={layer}
+                trimBefore={Math.round(clip.from * fps)}
+              />
+            </Sequence>
+          ))
+        ) : (
+          <div style={layer}>
+            <Placeholder shot={shot} />
+          </div>
+        )}
+        {ripples.map((r) => (
+          <Ripple key={`${r.x}-${r.y}`} p={r.p} x={r.x} y={r.y} />
+        ))}
+        {cursorOut ? (
+          <CursorArrow
+            size={30 * Math.sqrt(cam.zoom)}
+            x={cursorOut.x}
+            y={cursorOut.y}
+          />
+        ) : null}
+      </div>
+      <Badges
+        badges={shot.badges ?? []}
+        right={width - win.x - win.w}
+        speed={speedAt(laid, out)}
+        top={Math.round((win.y - BADGE_H) / 2)}
+      />
+      <Subtitles
+        bottom={Math.round((below - SUBTITLE_H) / 2)}
+        cues={shot.cues}
+      />
       {shot.intro ? <TitleIntro t={out} /> : null}
     </AbsoluteFill>
   );
