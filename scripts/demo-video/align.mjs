@@ -34,18 +34,18 @@ function run(command, args) {
   return result.stdout;
 }
 
-function lumas(video, seek) {
-  const args = [
-    "-hide_banner",
-    "-nostats",
-    "-copyts",
-    ...seek,
+// 从素材第 from 秒起量 WINDOW_SEC 秒的每帧亮度，时间换回整条素材的秒数。
+// 不用 -copyts：带着它时输出的 -t 按原时间戳算，从中段起量会一帧都不出（2026-10-24 结尾闪白就是这样漏掉的）
+function lumas(video, from = 0) {
+  const args = ["-hide_banner", "-nostats"];
+  if (from > 0) {
+    args.push("-ss", String(from));
+  }
+  args.push(
     "-i",
     video,
     "-t",
     String(WINDOW_SEC),
-  ];
-  args.push(
     "-an",
     "-vf",
     `${REGION},signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-`,
@@ -53,7 +53,10 @@ function lumas(video, seek) {
     "null",
     "-"
   );
-  return parseSignalstats(run("ffmpeg", args));
+  return parseSignalstats(run("ffmpeg", args)).map((s) => ({
+    ...s,
+    t: s.t + from,
+  }));
 }
 
 // 测帧率那段里不重复的帧数 ÷ 时长 = OBS 实际录到的帧率（制作方案要求超过 50）
@@ -111,15 +114,13 @@ function main() {
   if (logged.length === 0) {
     throw new Error("log.json 里没有闪白记录");
   }
-  const [startFlash] = findFlashes(lumas(video, []));
+  const [startFlash] = findFlashes(lumas(video));
   if (!startFlash) {
     throw new Error("素材开头 40 秒里没找到闪白");
   }
   const anchors = [{ epochMs: logged[0].t, videoSec: startFlash.t }];
   if (logged.length > 1 && duration > WINDOW_SEC * 2) {
-    const endFlash = findFlashes(
-      lumas(video, ["-ss", String(duration - WINDOW_SEC)])
-    ).at(-1);
+    const endFlash = findFlashes(lumas(video, duration - WINDOW_SEC)).at(-1);
     if (endFlash) {
       anchors.push({ epochMs: logged.at(-1).t, videoSec: endFlash.t });
     } else {

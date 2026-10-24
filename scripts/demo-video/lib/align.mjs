@@ -108,6 +108,7 @@ export function editHints(events, clock, { minGapMs = 33 } = {}) {
         name: e.name,
         t: round3(clock(e.t)),
         ...(e.label ? { label: e.label } : {}),
+        ...(typeof e.ms === "number" ? { ms: e.ms } : {}),
       });
     }
   }
