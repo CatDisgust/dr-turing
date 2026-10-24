@@ -9,15 +9,19 @@ export const maxDuration = 60;
 
 const cases = evalSet.items as ClassifyCase[];
 
-// 跑评测集里的第 index 条：一次一条，页面那边控制并发、显示进度
+// 跑评测集里的第 index 条：一次一条，页面那边控制并发、显示进度。
+// 也可以直接给一句话：?question=…&accept=死锁（录演示视频前，用 scripts/demo-video/classify-check.mjs 查归类稳不稳）
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const index = Number(params.get("index"));
+  const question = params.get("question");
   // 页面上选的快路径模型，用来对比 Opus 低档和 Haiku 5.5
   const model = params.get("model");
   const fastModel =
     model && model in FAST_MODELS ? (model as FastModel) : undefined;
-  const item = cases[index];
+  const item: ClassifyCase | undefined = question
+    ? { accept: params.get("accept")?.split("|") ?? null, question }
+    : cases[index];
   if (!item) {
     return Response.json({ total: cases.length });
   }
