@@ -39,6 +39,9 @@ import {
   demoSnapshot,
   document,
   event,
+  feedback,
+  type Invite,
+  invite,
   learnerState,
   message,
   personalGraph,
@@ -1226,4 +1229,107 @@ export async function listDemoSnapshots() {
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }
+}
+
+// 试用账号：每个邀请码建一个自己的 User，学习记录全挂在这个 User 上
+export async function createInvite({
+  code,
+  name,
+  dailyLimit,
+}: {
+  code: string;
+  name: string;
+  dailyLimit?: number;
+}): Promise<Invite> {
+  const userId = generateUUID();
+  await db.insert(user).values({
+    email: `${code}@invite.dr-turing.local`.slice(0, 64),
+    id: userId,
+    name,
+  });
+  const [row] = await db
+    .insert(invite)
+    .values({ code, dailyLimit, name, userId })
+    .returning();
+  return row;
+}
+
+export async function getInviteByCode(code: string): Promise<Invite | null> {
+  const [row] = await db.select().from(invite).where(eq(invite.code, code));
+  return row ?? null;
+}
+
+export async function touchInvite(code: string) {
+  await db
+    .update(invite)
+    .set({ lastSeenAt: new Date() })
+    .where(eq(invite.code, code));
+}
+
+export async function updateInvite(
+  code: string,
+  patch: Partial<Pick<Invite, "disabled" | "dailyLimit" | "name">>
+) {
+  await db.update(invite).set(patch).where(eq(invite.code, code));
+}
+
+export type InviteUsage = Invite & {
+  chats: number;
+  messagesToday: number;
+  messagesTotal: number;
+};
+
+// 管理页：每个试用账号开了几次对话、发了多少条（今天 = 最近 24 小时，和每日上限同一口径）
+export async function listInvitesWithUsage(): Promise<InviteUsage[]> {
+  const rows = await db.select().from(invite).orderBy(desc(invite.createdAt));
+  return await Promise.all(
+    rows.map(async (row) => {
+      const [chats] = await db
+        .select({ n: count(chat.id) })
+        .from(chat)
+        .where(eq(chat.userId, row.userId));
+      const [total] = await db
+        .select({ n: count(message.id) })
+        .from(message)
+        .innerJoin(chat, eq(message.chatId, chat.id))
+        .where(and(eq(chat.userId, row.userId), eq(message.role, "user")));
+      const today = await getMessageCountByUserId({
+        differenceInHours: 24,
+        id: row.userId,
+      });
+      return {
+        ...row,
+        chats: chats?.n ?? 0,
+        messagesToday: today,
+        messagesTotal: total?.n ?? 0,
+      };
+    })
+  );
+}
+
+export async function addFeedback({
+  userId,
+  text,
+  page,
+}: {
+  userId: string;
+  text: string;
+  page?: string;
+}) {
+  await db.insert(feedback).values({ page, text, userId });
+}
+
+export async function listFeedback(limit = 100) {
+  return await db
+    .select({
+      createdAt: feedback.createdAt,
+      id: feedback.id,
+      name: user.name,
+      page: feedback.page,
+      text: feedback.text,
+    })
+    .from(feedback)
+    .innerJoin(user, eq(feedback.userId, user.id))
+    .orderBy(desc(feedback.createdAt))
+    .limit(limit);
 }

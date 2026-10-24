@@ -49,6 +49,8 @@ type ActiveChatContextValue = {
   isLoading: boolean;
   votes: Vote[] | undefined;
   showCreditCardAlert: boolean;
+  // 试用账号今天的消息用完了（2026-10-24），对话里不给“重试”
+  limitReached: boolean;
   setShowCreditCardAlert: Dispatch<SetStateAction<boolean>>;
 };
 
@@ -103,6 +105,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     regenerate,
     resumeStream,
     addToolApprovalResponse,
+    error: chatError,
   } = useChat<ChatMessage>({
     generateId: generateUUID,
     id: chatId,
@@ -256,6 +259,9 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     { revalidateOnFocus: false }
   );
 
+  const limitReached =
+    chatError instanceof ChatbotError && chatError.type === "rate_limit";
+
   const value = useMemo<ActiveChatContextValue>(
     () => ({
       addToolApprovalResponse,
@@ -263,6 +269,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       input,
       isLoading: !isNewChat && isLoading,
       isReadonly,
+      limitReached,
       messages,
       regenerate,
       sendMessage,
@@ -291,6 +298,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       isLoading,
       votes,
       showCreditCardAlert,
+      limitReached,
     ]
   );
 

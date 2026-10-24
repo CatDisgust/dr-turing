@@ -20,6 +20,7 @@ import {
   getChatById,
   getCourseById,
   getLearnerState,
+  getMessageCountByUserId,
   getMessagesByChatId,
   reopenChat,
   saveChat,
@@ -27,6 +28,7 @@ import {
   saveLearnerState,
   saveMessages,
   saveTransaction,
+  touchInvite,
   updateChatTitleById,
 } from "@/lib/db/queries";
 import { ChatbotError } from "@/lib/errors";
@@ -235,6 +237,18 @@ export async function POST(request: Request) {
 
     if (message?.role !== "user") {
       return new ChatbotError("bad_request:api").toResponse();
+    }
+
+    // 试用账号每天（最近 24 小时）最多发几条，管理页可改
+    if (session.invite) {
+      const sent = await getMessageCountByUserId({
+        differenceInHours: 24,
+        id: session.user.id,
+      });
+      if (sent >= session.invite.dailyLimit) {
+        return new ChatbotError("rate_limit:chat").toResponse();
+      }
+      touchInvite(session.invite.code).catch(() => undefined);
     }
 
     const chat = await getChatById({ id });
