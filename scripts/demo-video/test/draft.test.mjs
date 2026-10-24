@@ -6,6 +6,8 @@ import {
   draftTake,
   editSpans,
   fitCamera,
+  homeBeforeEnd,
+  PACE,
   shotWindows,
   thinkingSpans,
 } from "../lib/draft.mjs";
@@ -295,7 +297,28 @@ describe("剪辑单草稿", () => {
     );
   });
 
-  test("第二次结束学习：从点结束到点“我的星图”整段剪掉，第一次不剪", () => {
+  test("第二次结束学习：从小结弹出前剪到关掉小结之后，第一次不剪", () => {
+    const click = (t, label) => ({ label, name: "click", t });
+    const marks = [
+      click(10, "结束本次学习"),
+      mark("wait.review.shot6.start", 10.3),
+      mark("wait.review.shot6.end", 30),
+      click(33, "关闭小结"),
+      click(35, "我的星图"),
+      click(100, "结束本次学习"),
+      mark("wait.review.shot7.start", 100.3),
+      mark("wait.review.shot7.end", 120),
+      click(124, "关闭小结"),
+      click(126, "我的星图"),
+    ];
+    const spans = editSpans(
+      { marks, ui: [ui(100.25, "session-report", "本次学习小结")] },
+      { end: 200, start: 0 }
+    );
+    assert.deepEqual(kinds(spans, "cut"), [["cut", 100.2, 124.5]]);
+  });
+
+  test("第二次结束学习：没记到小结弹出、没点关闭时，退回按点击时间剪", () => {
     const click = (t, label) => ({ label, name: "click", t });
     const marks = [
       click(10, "结束本次学习"),
@@ -308,6 +331,199 @@ describe("剪辑单草稿", () => {
       click(126, "我的星图"),
     ];
     const spans = editSpans({ marks }, { end: 200, start: 0 });
-    assert.deepEqual(kinds(spans, "cut"), [["cut", 100.6, 125.2]]);
+    assert.deepEqual(kinds(spans, "cut"), [["cut", 100.2, 125.2]]);
+  });
+
+  test("打开我的星图：星星画出来之前的空黑板剪掉，很快就画出来的不剪", () => {
+    const click = (t, label) => ({ label, name: "click", t });
+    const spans = editSpans(
+      {
+        marks: [
+          click(10, "我的星图"),
+          mark("stars.shown", 10.7),
+          click(50, "我的星图"),
+          mark("stars.shown", 50.2),
+        ],
+      },
+      { end: 100, start: 0 }
+    );
+    assert.deepEqual(kinds(spans, "cut"), [["cut", 10.25, 10.7]]);
+  });
+
+  test("空白帧前后各多剪 0.02 秒，镜头外的不算", () => {
+    const window = { end: 100, start: 10 };
+    const aligned = {
+      blanks: [
+        { frames: 3, from: 5, to: 5.05 },
+        { frames: 3, from: 40, to: 40.05 },
+        { frames: 1, from: 60, to: 60.017 },
+      ],
+    };
+    const cuts = kinds(editSpans(aligned, window), "cut").map(([k, a, b]) => [
+      k,
+      Number(a.toFixed(3)),
+      Number(b.toFixed(3)),
+    ]);
+    assert.deepEqual(cuts, [
+      ["cut", 4.98, 5.07],
+      ["cut", 39.98, 40.07],
+      ["cut", 59.98, 60.037],
+    ]);
+    // 剪完的片段不碰空白帧（没动静的部分照常加速）
+    const clips = draftClips(window, editSpans(aligned, window));
+    for (const b of aligned.blanks) {
+      assert.ok(!clips.some((c) => c.from < b.to && c.to > b.from));
+    }
+    assert.deepEqual(
+      [39.98, 59.98].map((t) => clips.some((c) => c.to === t)),
+      [true, true]
+    );
+  });
+
+  test("录制中 page.screenshot 的截图标记：前 0.16 秒到后 0.03 秒剪掉；从素材取的截图（still）不剪", () => {
+    const shot = (t, still) => ({
+      name: "screenshot",
+      t,
+      ...(still ? { still } : {}),
+    });
+    const spans = editSpans(
+      { marks: [shot(60.47), shot(80, true)] },
+      { end: 100, start: 0 }
+    );
+    assert.deepEqual(
+      kinds(spans, "cut").map(([k, a, b]) => [
+        k,
+        Number(a.toFixed(2)),
+        Number(b.toFixed(2)),
+      ]),
+      [["cut", 60.31, 60.5]]
+    );
+  });
+
+  test("镜头 7 第一下是切到“我的图谱”：从切过去 0.3 秒后开场", () => {
+    const spans = editSpans(
+      {
+        marks: [
+          mark("shot.7.start", 280),
+          mark("wait.next-day.start", 280.5),
+          mark("wait.next-day.end", 282),
+          { label: "我的图谱", name: "click", t: 292.26 },
+          { label: "输入框", name: "click", t: 296 },
+        ],
+      },
+      { end: 320, start: 280 },
+      { lead: 0.8 }
+    );
+    assert.deepEqual(
+      kinds(spans, "cut").map(([k, a, b]) => [k, a, Number(b.toFixed(2))]),
+      [["cut", 280, 292.56]]
+    );
+  });
+
+  test("镜头 7 又聊哲学家就餐：从“先不做题”到点那颗星之前整段快放，复核等待并进去；连线停留剪掉", () => {
+    const click = (t, label) => ({ label, name: "click", t });
+    const window = { end: 430, start: 280 };
+    const aligned = {
+      marks: [
+        click(354.2, "先不做题"),
+        mark("wait.reply.镜头7-skip.start", 354.4),
+        mark("wait.reply.镜头7-skip.end", 362.8),
+        click(363.5, "输入框"),
+        mark("type.start", 364.2),
+        mark("type.end", 367),
+        mark("wait.reply.镜头7-哲学家就餐.start", 368.2),
+        mark("wait.reply.镜头7-哲学家就餐.end", 384.27),
+        click(386.5, "结束本次学习"),
+        mark("wait.review.shot7.start", 387),
+        mark("wait.review.shot7.end", 405),
+        click(408.7, "我的星图"),
+        click(414.9, "哲学家就餐"),
+        hold(415.5, "哲学家就餐：出处", 4000),
+        hold(421, "哲学家就餐：连线", 3000),
+      ],
+    };
+    const o = { ...PACE[7] };
+    const spans = editSpans(aligned, window, o);
+    assert.deepEqual(
+      kinds(spans, "fold").map(([k, a, b]) => [k, Number(a.toFixed(2)), b]),
+      [["fold", 353.6, 414.4]]
+    );
+    assert.deepEqual(
+      kinds(spans, "cut").map(([k, a, b]) => [k, Number(a.toFixed(2)), b]),
+      // 出处停留留 3×0.75 秒，多的剪掉；连线整段剪掉
+      [
+        ["cut", 417.75, 419.5],
+        ["cut", 420.7, 424],
+      ]
+    );
+    const clips = draftClips(window, spans, o);
+    const inFold = clips.filter((c) => c.from >= 353.6 && c.to <= 414.4);
+    assert.ok(inFold.every((c) => c.rate));
+    const out = inFold.reduce((n, c) => n + (c.to - c.from) / c.rate, 0);
+    assert.ok(out <= 1.5, `快放段成片 ${out} 秒`);
+    // 连线停留不放大镜头
+    const cam = draftCamera(window, {
+      cursor: [{ t: 0, x: 900, y: 300 }],
+      ...o,
+      marks: aligned.marks,
+    });
+    assert.ok(!cam.some((k) => k.t >= 420.5 && k.t < 424 && k.zoom > 1));
+  });
+
+  test("镜头结尾还放大着：结尾前 0.8 成片秒回全景；本来就回了全景的不动", () => {
+    const zoomed = { t: 174.245, x: 1139.5, y: 418.6, zoom: 2 };
+    const clips = [
+      { from: 169.991, rate: 3, to: 171.54 },
+      { from: 171.54, to: 176.545 },
+    ];
+    assert.deepEqual(homeBeforeEnd([zoomed], clips), [
+      zoomed,
+      { t: 175.745, x: 640, y: 360, zoom: 1 },
+    ]);
+    // 回全景的键落在最后一小段里（镜头 4 结尾）：挪到结尾前 0.8 秒，跨进加速段时按倍数换成素材秒
+    const card = { t: 72.721, x: 444, y: 427.7, zoom: 1.4 };
+    const tail = [
+      { from: 72.605, rate: 2, to: 75.421 },
+      { from: 76.021, to: 76.039 },
+    ];
+    assert.deepEqual(
+      homeBeforeEnd([card, { t: 76.021, x: 640, y: 360, zoom: 1 }], tail),
+      [card, { dur: 1.6, t: 73.857, x: 640, y: 360, zoom: 1 }]
+    );
+    const home = [zoomed, { t: 175, x: 640, y: 360, zoom: 1 }];
+    assert.deepEqual(homeBeforeEnd(home, clips), home);
+  });
+
+  test("收紧的镜头：停留按比例缩短，全亮不缩；整轮快放压得更短", () => {
+    const window = { end: 60, start: 0 };
+    const marks = [hold(10, "答对了", 2000), hold(20, "「死锁」全亮", 3000)];
+    const spans = editSpans({ marks }, window, { holdScale: 0.75 });
+    assert.deepEqual(kinds(spans, "keep", "cut"), [
+      ["keep", 10, 11.5],
+      ["cut", 11.5, 12],
+      ["keep", 20, 22],
+      ["cut", 22, 23],
+    ]);
+    const clips = draftClips(window, [{ end: 36, kind: "repeat", start: 30 }], {
+      repeatMax: 1.2,
+    });
+    assert.deepEqual(
+      clips.find((c) => c.from === 30),
+      { from: 30, rate: 5, to: 36 }
+    );
+  });
+
+  test("镜头 7 自动用收紧的节奏，别的镜头不变", () => {
+    const marks = [
+      mark("shot.6.start", 0),
+      hold(5, "答对了", 2000),
+      mark("shot.6.end", 20),
+      mark("shot.7.start", 20),
+      hold(25, "答对了", 2000),
+      mark("shot.7.end", 40),
+    ];
+    const [six, seven] = draftTake({ marks });
+    assert.ok(seven.clips.some((c) => c.from <= 26.5 && c.to === 26.5));
+    assert.ok(!six.clips.some((c) => c.to === 6.5));
   });
 });

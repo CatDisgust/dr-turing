@@ -18,6 +18,21 @@ JSON.stringify(list.map((w) => ({
 })));
 `;
 
+// 把 Chrome 叫到最前面（会切到它所在的桌面）。用 NSRunningApplication 按进程号激活，不需要“自动化”权限
+export function activateApp(pid) {
+  const jxa = `ObjC.import('AppKit');
+const app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(${Number(pid)});
+app.isNil() ? 'none' : String(app.activateWithOptions(2));`;
+  try {
+    return execFileSync("osascript", ["-l", "JavaScript", "-e", jxa], {
+      encoding: "utf8",
+      timeout: 15_000,
+    }).trim();
+  } catch {
+    return "error";
+  }
+}
+
 export function listWindows() {
   const out = execFileSync("osascript", ["-l", "JavaScript", "-e", JXA], {
     encoding: "utf8",

@@ -31,7 +31,7 @@ import {
 import { Director, REST } from "./lib/director.mjs";
 import { CANVAS, VIEW } from "./lib/geometry.mjs";
 import { TakeLog } from "./lib/log.mjs";
-import { listWindows, pickWindow } from "./lib/macwin.mjs";
+import { activateApp, listWindows, pickWindow } from "./lib/macwin.mjs";
 import { createRng, hashSeed } from "./lib/motion.mjs";
 import { ObsRecorder, ObsSetupError } from "./lib/obs.mjs";
 import { decodePng, looksBlank, lumaStats } from "./lib/png.mjs";
@@ -45,7 +45,7 @@ const USAGE = `用法：node record.mjs [选项]
   --to-shot M       录到镜头 M 为止，默认 7
   --shot N          只录镜头 N（等于 --from-shot N --to-shot N）
   --no-obs          不连 OBS（彩排：只跑浏览器、日志、截图和自动判定）
-  --obs-capture X   OBS 抓什么：window（默认，只抓这个 Chrome 窗口）或 display（整块屏幕再裁剪）
+  --obs-capture X   OBS 抓什么：window（默认，只抓这个 Chrome 窗口，找不到就停下）或 display（整块屏幕再裁剪，会录进挡在前面的窗口）
   --no-snapshots    镜头过了也不存档
   --seed S          鼠标轨迹和打字节奏的随机种子，默认 drturing
 
@@ -82,6 +82,36 @@ function keepAwake() {
   });
   child.on("error", () => null);
   return child;
+}
+
+// 找录屏用的 Chrome 窗口交给 OBS 只抓它。先把 Chrome 叫到最前面（被别的应用全屏挡在别的桌面时，
+// 窗口列表里没有它），找不到就多试几次，最后停下报错：不退回去抓整块屏幕，
+// 免得把挡在前面的别的窗口录进去（2026-10-24 第二条就录进了别的应用）
+async function findChromeWindow(browser, stage) {
+  const pid = (await browserPid(browser)) ?? undefined;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: 叫到前面、等它切过来，再找
+    await stage.page.bringToFront();
+    if (pid) {
+      activateApp(pid);
+    }
+    await sleep(800 * attempt);
+    const windows = listWindows();
+    const win = pickWindow(windows, { bounds: stage.bounds, pid });
+    if (win) {
+      return win.id;
+    }
+    // 只打印 Chrome 的窗口，不打印标题（别的标签页、别的应用的名字可能是私人的）
+    const seen = windows
+      .filter((w) => /chrom/i.test(w.owner ?? ""))
+      .map((w) => ({ bounds: w.bounds, layer: w.layer, pid: w.pid }));
+    console.log(
+      `注意：第 ${attempt} 次没在窗口列表里找到录屏用的 Chrome 窗口（要的 ${JSON.stringify(stage.bounds)}，进程 ${pid}；看到的 Chrome 窗口 ${JSON.stringify(seen)}）`
+    );
+  }
+  throw new Error(
+    "找不到录屏用的 Chrome 窗口，停下不录（不改成抓整块屏幕，免得录进别的窗口）。请别让别的应用全屏挡住它，再重跑；确实要抓整块屏幕就加 --obs-capture display"
+  );
 }
 
 async function saveSnapshot(ctx, shot) {
@@ -196,10 +226,12 @@ async function runTake(ctx) {
       ctx.onStop = async () => {
         if (recording) {
           recording = false;
+          d.recording = false;
           await obs.stopRecording();
         }
       };
       log.mark("record.start");
+      d.recording = true;
       await sleep(800);
       const framePath = join(ctx.dir, "obs-frame.png");
       await obs
@@ -232,7 +264,7 @@ async function runTake(ctx) {
       } catch (error) {
         facts = { error: error.message, warnings: [] };
         log.mark("error", { message: error.message, shot, stack: error.stack });
-        await d.screenshot(`shot${shot}-error`);
+        await d.screenshot(`shot${shot}-error`, { now: true });
       }
       log.mark(`shot.${shot}.end`);
       verdict[shot] = {
@@ -267,12 +299,13 @@ async function runTake(ctx) {
       reasons: [`准备阶段出错：${error.message}`],
       warnings: [],
     };
-    await d.screenshot("setup-error");
+    await d.screenshot("setup-error", { now: true });
   } finally {
     await d.flash("end").catch(() => null);
     if (recording) {
       await sleep(700);
       recording = false;
+      d.recording = false;
       const path = await obs.stopRecording().catch((error) => {
         log.warn(`停止录制失败：${error.message}`);
         return null;
@@ -365,17 +398,7 @@ async function main() {
       await stage.page.goto("about:blank");
       let windowId = null;
       if (opts.capture === "window") {
-        const win = pickWindow(listWindows(), {
-          bounds: stage.bounds,
-          pid: (await browserPid(browser)) ?? undefined,
-        });
-        if (win) {
-          windowId = win.id;
-        } else {
-          console.log(
-            "注意：没在窗口列表里找到录屏用的 Chrome 窗口，改成抓整块屏幕再裁剪"
-          );
-        }
+        windowId = await findChromeWindow(browser, stage);
       }
       capture = await obs.ensureCapture({
         geometry: stage.geometry,

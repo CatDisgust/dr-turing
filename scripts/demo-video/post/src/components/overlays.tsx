@@ -1,9 +1,13 @@
+import { createContext, useContext } from "react";
 import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import { type Badge, type Cue, subtitleText } from "../edit";
 import { C, FONT } from "../theme";
 
 // 烧录字幕：思源黑体 52px，白字半透明深底；淡入淡出 0.12 秒。字幕条高约 86px
 export const SUBTITLE_H = 86;
+
+// 无字幕版：渲染时传 --props='{"subtitles":false}'
+export const SubtitlesOn = createContext(true);
 
 export function Subtitles({
   cues,
@@ -14,9 +18,10 @@ export function Subtitles({
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const on = useContext(SubtitlesOn);
   const t = frame / fps;
   const cue = cues.find((c) => t >= c.start && t < c.end);
-  if (!cue) {
+  if (!(on && cue)) {
     return null;
   }
   const fade = Math.min(
@@ -61,7 +66,7 @@ export function Subtitles({
   );
 }
 
-// 角标：“演示账号，学习记录为预置”“模拟第二天（预置数据）”，以及加速时的“已加速 ×N”。角标高 42px
+// 角标：“演示账号，学习记录为预置”“模拟一段时间后（预置数据）”，以及加速时的“已加速 ×N”。角标高 42px
 export const BADGE_H = 42;
 
 export function Badges({

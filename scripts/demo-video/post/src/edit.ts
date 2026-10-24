@@ -15,7 +15,7 @@ export type Cue = {
 // 录屏里的一段：from–to 是素材时间，rate>1 表示加速（画面上会标“已加速”）
 export type Clip = { from: number; to: number; rate?: number };
 
-// 镜头从 t（素材时间）开始移向这个目标，用 dur 秒到位
+// 镜头从 t（素材时间）开始移向这个目标，用 dur 秒（素材秒，加速段里按倍数放大）到位；画面上换成成片时间走（cameraKeysOut）
 export type CameraKey = {
   t: number;
   x: number;
@@ -100,6 +100,8 @@ export type Music = {
   volume: number;
   // 说话时再压低多少分贝
   duckDb: number;
+  // 抬起层：和 file 拍子对齐，从成片第 at 秒起淡入到结尾（同样随说话压低）
+  lift?: { file: string; at: number };
 };
 
 export type Edit = {
@@ -166,6 +168,19 @@ export function sourceTime(laid: LaidClip[], out: number): number {
   return clip.from + local * clip.rate;
 }
 
+// 素材时间 → 成片时间；落在剪掉部分的算到下一段开头
+export function outputTime(laid: LaidClip[], src: number): number {
+  for (const c of laid) {
+    if (src < c.from) {
+      return c.outStart;
+    }
+    if (src < c.to) {
+      return c.outStart + (src - c.from) / c.rate;
+    }
+  }
+  return laid.at(-1)?.outEnd ?? src;
+}
+
 // “已加速 ×N”角标显示的倍数：两段加速之间夹着不到 0.5 秒的原速，角标不熄（免得一闪一闪）
 const BADGE_GAP = 0.5;
 
@@ -222,6 +237,28 @@ export function clampCamera(c: CameraState): CameraState {
 
 const DEFAULT_DUR = 0.8;
 
+// 镜头键换到成片时间，移动时长按键所在那一段的倍数换回成片秒。镜头在成片时间上走：
+// 移动跨进后面的加速段或剪辑点也照样走满，不会一两帧就跳过去（停留结尾紧跟加速、剪辑时的“啪”一下）
+export function cameraKeysOut(
+  keys: CameraKey[],
+  laid: LaidClip[]
+): CameraKey[] {
+  if (laid.length === 0) {
+    return keys;
+  }
+  return keys.map((k) => {
+    const clip =
+      laid.find((c) => k.t >= c.from && k.t < c.to) ??
+      laid.find((c) => c.from > k.t);
+    return {
+      ...k,
+      dur: (k.dur ?? DEFAULT_DUR) / (clip?.rate ?? 1),
+      t: outputTime(laid, k.t),
+    };
+  });
+}
+
+// 某一时刻的镜头（keys 和 t 用同一种时间：成片画面传 cameraKeysOut 换过的键和成片秒）
 export function cameraAt(keys: CameraKey[], src: number): CameraState {
   const sorted = [...keys].sort((a, b) => a.t - b.t);
   let state = HOME;

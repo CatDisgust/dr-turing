@@ -9,6 +9,7 @@ import {
 } from "remotion";
 import {
   cameraAt,
+  cameraKeysOut,
   cursorAt,
   layoutClips,
   project,
@@ -41,7 +42,7 @@ export function ScreenScene({ shot }: { shot: ScreenShot }) {
   const win = windowRect(width, height);
   const laid = layoutClips(shot.clips);
   const src = sourceTime(laid, out);
-  const cam = cameraAt(shot.camera, src);
+  const cam = cameraAt(cameraKeysOut(shot.camera, laid), out);
   const s = (win.w / VIEW_W) * cam.zoom;
   const v = shot.viewport;
 
@@ -88,12 +89,19 @@ export function ScreenScene({ shot }: { shot: ScreenShot }) {
         }}
       >
         {shot.footage ? (
-          laid.map((clip) => (
+          laid.map((clip, i) => (
             <Sequence
-              durationInFrames={Math.max(
-                1,
-                Math.round((clip.outEnd - clip.outStart) * fps)
-              )}
+              // 起止帧都从成片时间取整再相减：分别取整会在相邻两段之间漏出一帧白底。
+              // 最后一段一直放到镜头结束，镜头时长取整多出的那一帧也有画面
+              durationInFrames={
+                i === laid.length - 1
+                  ? Number.POSITIVE_INFINITY
+                  : Math.max(
+                      1,
+                      Math.round(clip.outEnd * fps) -
+                        Math.round(clip.outStart * fps)
+                    )
+              }
               from={Math.round(clip.outStart * fps)}
               key={`${clip.from}-${clip.to}`}
               layout="none"

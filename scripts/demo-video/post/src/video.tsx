@@ -8,7 +8,7 @@ import {
   useVideoConfig,
 } from "remotion";
 import { CARD_TEXT, Card } from "./components/cards";
-import { Subtitles } from "./components/overlays";
+import { Subtitles, SubtitlesOn } from "./components/overlays";
 import { ScreenScene } from "./components/screen";
 import { type Edit, type Music, type Shot, shotDuration } from "./edit";
 import { useFonts } from "./theme";
@@ -65,7 +65,13 @@ function ShotView({ shot }: { shot: Shot }) {
   );
 }
 
-export function Video({ edit }: { edit: Edit }) {
+export function Video({
+  edit,
+  subtitles = true,
+}: {
+  edit: Edit;
+  subtitles?: boolean;
+}) {
   const { fps } = useVideoConfig();
   useFonts(allText(edit));
   const shots = layoutShots(edit);
@@ -74,37 +80,51 @@ export function Video({ edit }: { edit: Edit }) {
   const { music } = edit;
 
   return (
-    <AbsoluteFill style={{ background: "#000" }}>
-      {shots.map(({ shot, start, end }) => (
-        <Sequence
-          durationInFrames={f(end) - f(start)}
-          from={f(start)}
-          key={shot.id}
-          name={shot.title}
-        >
-          <ShotView shot={shot} />
-          {shot.narration ? (
-            <Sequence from={f(shot.narration.start)} name="配音">
-              <Audio src={staticFile(shot.narration.file)} />
-            </Sequence>
-          ) : null}
-          {(shot.sfx ?? []).map((s) => (
-            <Sequence from={f(s.t)} key={`${s.file}-${s.t}`} name="音效">
-              <Audio src={staticFile(s.file)} volume={s.volume ?? 0.5} />
-            </Sequence>
-          ))}
-        </Sequence>
-      ))}
-      {music ? <MusicTrack music={music} spans={spans} /> : null}
-    </AbsoluteFill>
+    <SubtitlesOn.Provider value={subtitles}>
+      <AbsoluteFill style={{ background: "#000" }}>
+        {shots.map(({ shot, start, end }) => (
+          <Sequence
+            durationInFrames={f(end) - f(start)}
+            from={f(start)}
+            key={shot.id}
+            name={shot.title}
+          >
+            <ShotView shot={shot} />
+            {shot.narration ? (
+              <Sequence from={f(shot.narration.start)} name="配音">
+                <Audio src={staticFile(shot.narration.file)} />
+              </Sequence>
+            ) : null}
+            {(shot.sfx ?? []).map((s) => (
+              <Sequence from={f(s.t)} key={`${s.file}-${s.t}`} name="音效">
+                <Audio src={staticFile(s.file)} volume={s.volume ?? 0.5} />
+              </Sequence>
+            ))}
+          </Sequence>
+        ))}
+        {music ? (
+          <MusicTrack
+            end={shots.at(-1)?.end ?? 0}
+            music={music}
+            spans={spans}
+          />
+        ) : null}
+      </AbsoluteFill>
+    </SubtitlesOn.Provider>
   );
 }
 
-// 音乐：说话时压低 duckDb 分贝，每个说话段前后各留 RAMP 秒平滑压低、回升
+// 音乐：说话时压低 duckDb 分贝，每个说话段前后各留 RAMP 秒平滑压低、回升；成片最后 FADE_OUT 秒淡出。
+// 抬起层从 lift.at 前 LIFT_IN[0] 秒开始、用 LIFT_IN[1] 秒淡入
+const FADE_OUT = 3;
+const LIFT_IN = [0.3, 2.5] as const;
+
 function MusicTrack({
+  end,
   music,
   spans,
 }: {
+  end: number;
   music: Music;
   spans: (readonly [number, number])[];
 }) {
@@ -122,9 +142,32 @@ function MusicTrack({
           })
         )
       );
-      return music.volume * (1 - speaking + speaking * duck);
+      const fade = interpolate(t, [end - FADE_OUT, end - 0.1], [1, 0], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      });
+      return music.volume * (1 - speaking + speaking * duck) * fade;
     },
-    [duck, fps, music.volume, spans]
+    [duck, end, fps, music.volume, spans]
   );
-  return <Audio loop src={staticFile(music.file)} volume={volume} />;
+  const at = music.lift?.at ?? end;
+  const liftVolume = useCallback(
+    (frame: number) =>
+      volume(frame) *
+      interpolate(
+        frame / fps,
+        [at - LIFT_IN[0], at - LIFT_IN[0] + LIFT_IN[1]],
+        [0, 1],
+        { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+      ),
+    [at, fps, volume]
+  );
+  return (
+    <>
+      <Audio loop src={staticFile(music.file)} volume={volume} />
+      {music.lift ? (
+        <Audio loop src={staticFile(music.lift.file)} volume={liftVolume} />
+      ) : null}
+    </>
+  );
 }

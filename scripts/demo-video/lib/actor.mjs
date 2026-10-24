@@ -191,10 +191,19 @@ export class Actor {
       await sleep(200);
     }
     // 确认鼠标下面就是它（没有被别的东西挡住），否则退回 Playwright 自己的点击
-    const hit = await locator.evaluate((el, p) => {
-      const top = document.elementFromPoint(p.x, p.y);
-      return Boolean(top) && (el === top || el.contains(top));
-    }, point);
+    const isHit = () =>
+      locator.evaluate((el, p) => {
+        const top = document.elementFromPoint(p.x, p.y);
+        return Boolean(top) && (el === top || el.contains(top));
+      }, point);
+    let hit = await isHit();
+    // 鼠标路过别的按钮时弹出的提示（如消息上的“Copy”）可能正好盖在目标上，鼠标进了提示框它就不收：
+    // 按 Esc 关掉再看（2026-10-24 第三条就卡在“结束本次学习”上）
+    if (!hit && (await this.tooltipOpen())) {
+      await this.page.keyboard.press("Escape");
+      await sleep(300);
+      hit = await isHit();
+    }
     await sleep(this.rng.range(80, 150));
     if (hit) {
       await this.page.mouse.down();
@@ -210,6 +219,15 @@ export class Actor {
     }
     this.log.mark("click", { hit, label, x: this.mouse.x, y: this.mouse.y });
     await sleep(after);
+  }
+
+  async tooltipOpen() {
+    return (
+      (await this.page
+        .locator('[data-slot="tooltip-content"], [role="tooltip"]')
+        .count()
+        .catch(() => 0)) > 0
+    );
   }
 
   async type(locator, text, label) {

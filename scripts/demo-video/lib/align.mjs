@@ -2,8 +2,9 @@
 // 在素材里找到那一帧，两边一对就知道偏移。开头、结尾各闪一次，两点连线还能顺手校正时钟漂移。
 // 纯函数，test/align.test.mjs 有单测；align.mjs 用 ffmpeg 量每帧亮度后调用这里
 
-// 解析 ffmpeg `signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-` 的输出
-export function parseSignalstats(text) {
+// 解析 ffmpeg `signalstats,metadata=print:key=lavfi.signalstats.<key>:file=-` 的输出（默认平均亮度 YAVG）
+export function parseSignalstats(text, key = "YAVG") {
+  const pattern = new RegExp(`lavfi\\.signalstats\\.${key}=([\\d.]+)`);
   const samples = [];
   let frame = null;
   let t = null;
@@ -16,7 +17,7 @@ export function parseSignalstats(text) {
       t = Number(head[2]);
       continue;
     }
-    const value = line.match(/lavfi\.signalstats\.YAVG=([\d.]+)/);
+    const value = line.match(pattern);
     if (value && frame !== null) {
       samples.push({ frame, t, y: Number(value[1]) });
       frame = null;
@@ -73,6 +74,29 @@ export function findFlash(samples, options) {
   return findFlashes(samples, options)[0] ?? null;
 }
 
+// 空白帧：整个窗口一片白，连最暗的像素都亮过 minY（真网页上总有深色的字）。
+// 连着的并成一段 {from, to, frames}，to 是下一帧（第一张不白的）的时间；素材秒
+export function blankSpans(samples, { minY = 200 } = {}) {
+  const spans = [];
+  let open = null;
+  for (const s of samples) {
+    if (s.y >= minY) {
+      open ??= { frames: 0, from: s.t };
+      open.frames += 1;
+    } else if (open) {
+      spans.push({ ...open, to: s.t });
+      open = null;
+    }
+  }
+  if (open) {
+    // 素材最后一帧还是白的：按上一帧的间隔补一帧的时长
+    const last = samples.at(-1);
+    const prev = samples.at(-2);
+    spans.push({ ...open, to: last.t + (prev ? last.t - prev.t : 1 / 60) });
+  }
+  return spans;
+}
+
 // 一个或两个对齐点 → 时钟：epoch 毫秒 → 素材秒。两个点时按两点连线（含漂移），一个点时速率为 1
 export function makeClock(anchors) {
   if (!anchors?.length) {
@@ -109,6 +133,7 @@ export function editHints(events, clock, { minGapMs = 33 } = {}) {
         t: round3(clock(e.t)),
         ...(e.label ? { label: e.label } : {}),
         ...(typeof e.ms === "number" ? { ms: e.ms } : {}),
+        ...(e.still ? { still: true } : {}),
       });
     }
   }
