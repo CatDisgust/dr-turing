@@ -344,8 +344,12 @@ export function SkyMap({
       );
     for (const v of labelled) {
       const big = v.id === currentId || v.id === warnId;
-      const w = textWidth(v.name) * (big ? 1.12 : 1);
+      // 答错那颗名字下面还有一行「以为会了，还没亮」：宽度取两行里更宽的，免得靠边时第二行伸出画面
       const lines = v.id === warnId ? 2 : 1;
+      const w = Math.max(
+        textWidth(v.name) * (big ? 1.12 : 1),
+        lines === 2 ? textWidth(WARN_TEXT) : 0
+      );
       let best: { box: Box; cost: number; placement: Placement } | null = null;
       for (const [rank, placement] of PLACEMENTS.entries()) {
         const box = labelBox(placement, v.p, w, lines);
@@ -612,6 +616,9 @@ const LABEL_AT: Record<
   se: { anchor: "start", x: 8, y: 20 },
   sw: { anchor: "end", x: -8, y: 20 },
 };
+
+// 答错的星名字下面那行字
+const WARN_TEXT = "以为会了，还没亮";
 
 // 名字离别的星至少隔这么远（星本身加选中圈的大小）
 const STAR_GAP = 10;
@@ -930,7 +937,7 @@ function SkyStar({
           x={at.x}
           y={at.y + 17}
         >
-          以为会了，还没亮
+          {WARN_TEXT}
         </text>
       ) : null}
     </g>
