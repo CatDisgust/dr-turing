@@ -117,6 +117,10 @@ export function buildStarMap(input: {
     );
     const state = input.states.find((s) => s.courseId === course.courseId);
     const touched = course.points.filter((p) => {
+      // 编号带课 id 之前生成的课，和别的课可能撞号：先到先得，别把前一门课的星盖掉
+      if (stars[p.id]) {
+        return false;
+      }
       const node = state?.nodes[p.id];
       return (
         (node && (node.attempts.length > 0 || node.M >= HALF_M)) ||
