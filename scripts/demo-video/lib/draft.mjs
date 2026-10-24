@@ -117,13 +117,32 @@ export function thinkingSpans(ui) {
 }
 const holdCap = (label = "") =>
   HOLD_LONGER.find(([re]) => re.test(label))?.[1] ?? HOLD_MAX;
-// 停留多久（秒）：日志里记的是毫秒，超过上限的按上限算
-const holdLen = (m) => Math.min((m.ms ?? 0) / 1000, holdCap(m.label));
+// 镜头收紧时（PACE.holdScale）也不缩的停留：星星全亮是这一镜的落点
+const HOLD_FULL = /全亮/;
+// 停留多久（秒）：日志里记的是毫秒，超过上限的按上限算；scale 把上限按比例缩短
+const holdLen = (m, scale = 1) =>
+  Math.min(
+    (m.ms ?? 0) / 1000,
+    holdCap(m.label) * (HOLD_FULL.test(m.label ?? "") ? 1 : scale)
+  );
+
+// 个别镜头收得更紧（用户 2026-10-24 选“全保留、镜头 7 收紧”时用）：停留上限乘 holdScale，
+// 思考、出字、打字、整轮快放的上限换成更短的，第二天开场只留 lead 秒
+export const PACE = {
+  7: {
+    holdScale: 0.75,
+    lead: 0.8,
+    maxIdle: 0.6,
+    repeatMax: 1.2,
+    streamMax: 1.5,
+    typeMax: 1.5,
+  },
+};
 
 // 快放的整轮作答：反例追问、第二道起的独立题、复习后再答、第二次“考我”
 const REPEAT = /(?:独立题|考我)([2-9])$|再答\d+$|-反例$/;
 
-function repeatRounds(marks) {
+function repeatRounds(marks, scale = 1) {
   const rounds = [];
   for (const m of marks) {
     const hit = m.name.match(/^wait\.reply\.(.+)\.start$/);
@@ -143,7 +162,7 @@ function repeatRounds(marks) {
     let base = prev?.t ?? m.t;
     for (const e of marks) {
       if (e.name === "hold" && e.t >= base && e.t < m.t) {
-        base = e.t + holdLen(e);
+        base = e.t + holdLen(e, scale);
       }
     }
     const first = marks.find(
@@ -186,9 +205,10 @@ function idleSpans(aligned, window) {
 // 剪辑要处理的时段（kind 见文件开头）。另外：
 //  keep   停留：原速（不被当成 idle），超过上限的部分 cut
 //  cut    剪掉：镜头 7 开头模拟第二天、重开页面；第二次结束学习的小结；停留超长的尾巴
-export function editSpans(aligned, window) {
+export function editSpans(aligned, window, o = {}) {
   const ui = aligned.ui ?? [];
   const marks = aligned.marks ?? [];
+  const scale = o.holdScale ?? 1;
   const spans = [];
   for (const r of replySpans(ui)) {
     if (r.shown > r.start) {
@@ -198,7 +218,7 @@ export function editSpans(aligned, window) {
       spans.push({ end: r.end, kind: "stream", start: r.shown });
     }
   }
-  for (const r of repeatRounds(marks)) {
+  for (const r of repeatRounds(marks, scale)) {
     spans.push({ ...r, kind: "repeat" });
   }
   for (const m of marks) {
@@ -255,7 +275,7 @@ export function editSpans(aligned, window) {
       }
     }
     if (m.name === "hold" && typeof m.ms === "number") {
-      const kept = holdLen(m);
+      const kept = holdLen(m, scale);
       spans.push({ end: m.t + kept, kind: "keep", start: m.t });
       if (m.ms / 1000 > kept + 0.1) {
         spans.push({ end: m.t + m.ms / 1000, kind: "cut", start: m.t + kept });
@@ -275,7 +295,11 @@ export function editSpans(aligned, window) {
         (e) => e.name === "click" && e.t > m.t && e.t <= window.end
       );
       if (next) {
-        spans.push({ end: next.t - 1.5, kind: "cut", start: window.start });
+        spans.push({
+          end: next.t - (o.lead ?? 1.5),
+          kind: "cut",
+          start: window.start,
+        });
       }
     }
   }
@@ -305,7 +329,7 @@ function rateFor(kind, len, o) {
         ? 1
         : Math.min(TYPE_MAX_RATE, Math.max(o.minRate, fit(o.typeMax)));
     case "repeat":
-      return Math.max(o.minRate, fit(REPEAT_MAX));
+      return Math.max(o.minRate, fit(o.repeatMax));
     case "idle":
       return Math.max(o.minRate, fit(IDLE_MAX));
     case "keep":
@@ -321,7 +345,7 @@ function worth(kind, len, o) {
     case "stream":
       return len > 2;
     case "repeat":
-      return len > REPEAT_MAX;
+      return len > o.repeatMax;
     case "idle":
       return len > IDLE_GAP - 0.4;
     case "keep":
@@ -339,6 +363,7 @@ export function draftClips(window, spans, options = {}) {
   const o = {
     maxIdle: MAX_IDLE,
     minRate: MIN_RATE,
+    repeatMax: REPEAT_MAX,
     streamMax: STREAM_MAX,
     streamRate: STREAM_RATE,
     typeMax: TYPE_MAX,
@@ -402,7 +427,7 @@ export function draftClips(window, spans, options = {}) {
 const HOME = { x: 640, y: 360, zoom: 1 };
 
 // 镜头放大的草稿：打字时 1.4 倍看输入框；点模拟器时 1.4 倍看模拟器；鼠标停留处按 HOLD_ZOOM 放大，停完回全景
-export function draftCamera(window, { marks, cursor }) {
+export function draftCamera(window, { marks, cursor, holdScale = 1 }) {
   const inside = (t) => t >= window.start && t <= window.end;
   const at = (t) =>
     cursor.findLast((c) => c.t <= t) ?? cursor.find((c) => c.t >= t);
@@ -430,7 +455,7 @@ export function draftCamera(window, { marks, cursor }) {
       if (zoom && p) {
         focus.push({
           from: m.t - 0.3,
-          to: m.t + holdLen(m),
+          to: m.t + holdLen(m, holdScale),
           x: p.x,
           y: p.y,
           zoom,
@@ -502,7 +527,11 @@ export function fitCamera(keys, clips) {
 // 一个镜头的完整草稿
 export function draftShot(aligned, window, options = {}) {
   const ui = aligned.ui ?? [];
-  const clips = draftClips(window, editSpans(aligned, window), options);
+  const clips = draftClips(
+    window,
+    editSpans(aligned, window, options),
+    options
+  );
   const inside = (t) => t >= window.start - 0.5 && t <= window.end + 0.5;
   const raw = window.end - window.start;
   const edited = clips.reduce((n, c) => n + (c.to - c.from) / (c.rate ?? 1), 0);
@@ -511,6 +540,7 @@ export function draftShot(aligned, window, options = {}) {
     camera: fitCamera(
       draftCamera(window, {
         cursor: aligned.cursor ?? [],
+        holdScale: options.holdScale,
         marks: aligned.marks ?? [],
         ui,
       }),
@@ -537,6 +567,6 @@ export function draftTake(aligned, options = {}) {
   return shotWindows(aligned.marks ?? []).map((w) => ({
     shot: w.shot,
     window: { end: round3(w.end), start: round3(w.start) },
-    ...draftShot(aligned, w, options),
+    ...draftShot(aligned, w, { ...options, ...PACE[w.shot] }),
   }));
 }

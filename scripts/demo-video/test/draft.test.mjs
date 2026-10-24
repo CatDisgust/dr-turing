@@ -347,4 +347,37 @@ describe("剪辑单草稿", () => {
     );
     assert.deepEqual(kinds(spans, "cut"), [["cut", 10.25, 10.7]]);
   });
+
+  test("收紧的镜头：停留按比例缩短，全亮不缩；整轮快放压得更短", () => {
+    const window = { end: 60, start: 0 };
+    const marks = [hold(10, "答对了", 2000), hold(20, "「死锁」全亮", 3000)];
+    const spans = editSpans({ marks }, window, { holdScale: 0.75 });
+    assert.deepEqual(kinds(spans, "keep", "cut"), [
+      ["keep", 10, 11.5],
+      ["cut", 11.5, 12],
+      ["keep", 20, 22],
+      ["cut", 22, 23],
+    ]);
+    const clips = draftClips(window, [{ end: 36, kind: "repeat", start: 30 }], {
+      repeatMax: 1.2,
+    });
+    assert.deepEqual(
+      clips.find((c) => c.from === 30),
+      { from: 30, rate: 5, to: 36 }
+    );
+  });
+
+  test("镜头 7 自动用收紧的节奏，别的镜头不变", () => {
+    const marks = [
+      mark("shot.6.start", 0),
+      hold(5, "答对了", 2000),
+      mark("shot.6.end", 20),
+      mark("shot.7.start", 20),
+      hold(25, "答对了", 2000),
+      mark("shot.7.end", 40),
+    ];
+    const [six, seven] = draftTake({ marks });
+    assert.ok(seven.clips.some((c) => c.from <= 26.5 && c.to === 26.5));
+    assert.ok(!six.clips.some((c) => c.to === 6.5));
+  });
 });
