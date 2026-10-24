@@ -2,10 +2,12 @@ import { makeCode } from "@/lib/access";
 import {
   createInvite,
   getInviteByCode,
+  getLearnerStatesByStudent,
   listFeedback,
   listInvitesWithUsage,
   updateInvite,
 } from "@/lib/db/queries";
+import { learnStats } from "@/lib/learner/trial-stats";
 import { auth } from "@/lib/session";
 
 // 管理页：开邀请码、停用 / 恢复、改每日上限。proxy 已挡住非管理员，这里再查一次
@@ -17,10 +19,21 @@ export async function GET() {
   if (!(await isAdmin())) {
     return Response.json({ error: "只有管理员能用" }, { status: 403 });
   }
-  const [invites, feedback] = await Promise.all([
+  const [rows, feedback] = await Promise.all([
     listInvitesWithUsage(),
     listFeedback(),
   ]);
+  // 学得怎么样：答题、点亮、该复习（试用效果，2026-10-24）
+  const now = new Date().toISOString();
+  const invites = await Promise.all(
+    rows.map(async (row) => ({
+      ...row,
+      learn: learnStats(
+        await getLearnerStatesByStudent({ studentId: row.userId }),
+        now
+      ),
+    }))
+  );
   return Response.json({ feedback, invites });
 }
 

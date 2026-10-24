@@ -13,6 +13,7 @@ import {
   lt,
   ne,
   type SQL,
+  sql,
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -1301,6 +1302,8 @@ export async function updateInvite(
 }
 
 export type InviteUsage = Invite & {
+  // 在几个不同的日子（悉尼时间）发过消息：隔天还回来才算留下来了
+  daysActive: number;
   chats: number;
   messagesToday: number;
   messagesTotal: number;
@@ -1324,9 +1327,17 @@ export async function listInvitesWithUsage(): Promise<InviteUsage[]> {
         differenceInHours: 24,
         id: row.userId,
       });
+      const [days] = await db
+        .select({
+          n: sql<number>`count(distinct date((${message.createdAt} at time zone 'UTC') at time zone 'Australia/Sydney'))::int`,
+        })
+        .from(message)
+        .innerJoin(chat, eq(message.chatId, chat.id))
+        .where(and(eq(chat.userId, row.userId), eq(message.role, "user")));
       return {
         ...row,
         chats: chats?.n ?? 0,
+        daysActive: days?.n ?? 0,
         messagesToday: today,
         messagesTotal: total?.n ?? 0,
       };
