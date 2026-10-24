@@ -1,5 +1,6 @@
 import { getCourseById, saveCourse } from "@/lib/db/queries";
 import { applyReview, reviewOpSchema } from "@/lib/graph/review";
+import { canSeeCourse } from "@/lib/own-course";
 import { auth } from "@/lib/session";
 
 // 读一门课的图谱；POST 一个审阅操作（合并 / 改名 / 删除），存库后返回新图
@@ -8,8 +9,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const course = await getCourseById({ id });
-  if (!course) {
+  const [course, session] = await Promise.all([getCourseById({ id }), auth()]);
+  // 别人的私人课当作没有
+  if (!(course && canSeeCourse(course, session.user.id))) {
     return Response.json({ error: "这门课还没生成图谱" }, { status: 404 });
   }
   return Response.json({ graph: course.graph });

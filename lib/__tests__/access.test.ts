@@ -24,6 +24,13 @@ describe("gate", () => {
     expect(gate("/compare", "ming-abc", "boss")).toBe("forbidden");
   });
 
+  it("邀请码能传自己的课（生成图谱的接口里再查额度），自测页还是只给管理员", () => {
+    expect(gate("/my-course", "ming-abc", "boss")).toBe("pass");
+    expect(gate("/api/graph/extract", "ming-abc", "boss")).toBe("pass");
+    expect(gate("/api/graph/assemble", "ming-abc", "boss")).toBe("pass");
+    expect(gate("/graph", "ming-abc", "boss")).toBe("forbidden");
+  });
+
   it("前缀只按整段路径算", () => {
     expect(gate("/administer", "ming-abc", "boss")).toBe("pass");
     expect(gate("/api/courses", "ming-abc", "boss")).toBe("pass");

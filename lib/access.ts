@@ -13,7 +13,6 @@ export const ADMIN_PATHS = [
   "/course",
   "/api/admin",
   "/api/demo",
-  "/api/graph",
   "/api/eval",
 ];
 
