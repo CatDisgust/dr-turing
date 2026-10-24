@@ -10,7 +10,7 @@ import {
 import { learnStats } from "@/lib/learner/trial-stats";
 import { auth } from "@/lib/session";
 
-// 管理页：开邀请码、停用 / 恢复、改每日上限。proxy 已挡住非管理员，这里再查一次
+// 管理页：开邀请码、停用 / 恢复、改每日上限和试用额度。proxy 已挡住非管理员，这里再查一次
 async function isAdmin() {
   return (await auth()).role !== "trial";
 }
@@ -69,6 +69,7 @@ export async function PATCH(request: Request) {
     code?: string;
     disabled?: boolean;
     dailyLimit?: number;
+    budgetUsd?: number;
     rotate?: boolean;
   };
   const row = body.code ? await getInviteByCode(body.code) : null;
@@ -89,6 +90,9 @@ export async function PATCH(request: Request) {
     ...(body.dailyLimit === undefined
       ? {}
       : { dailyLimit: limitOf(body.dailyLimit) }),
+    ...(body.budgetUsd === undefined
+      ? {}
+      : { budgetCents: budgetOf(body.budgetUsd) }),
   });
   return Response.json({ ok: true });
 }
@@ -98,6 +102,12 @@ async function freshCode(name: string) {
   const tries = Array.from({ length: 5 }, () => makeCode(name));
   const taken = await Promise.all(tries.map((c) => getInviteByCode(c)));
   return tries.find((_, i) => !taken[i]);
+}
+
+// 额度按美元填，存美分；0 到 1000 美元之间，填错了就不改
+function budgetOf(value: unknown) {
+  const n = Math.round(Number(value) * 100);
+  return Number.isFinite(n) ? Math.min(Math.max(n, 0), 100_000) : 500;
 }
 
 function limitOf(value: unknown) {

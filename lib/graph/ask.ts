@@ -9,6 +9,7 @@ import {
   TIERS,
   type Tier,
 } from "@/lib/claude";
+import { recordUsage } from "@/lib/spend";
 
 type AskOptions = {
   tier?: Tier;
@@ -47,6 +48,7 @@ export async function askJson<T extends z.ZodType>(
   });
 
   const message = await stream.finalMessage();
+  recordUsage(message.model, message.usage);
   if (message.stop_reason === "refusal") {
     throw new Error("Claude 拒绝处理这份材料");
   }

@@ -16,7 +16,8 @@ export type Surface =
   | "vote"
   | "document"
   | "suggestions"
-  | "activate_gateway";
+  | "activate_gateway"
+  | "budget";
 
 export type ErrorCode = `${ErrorType}:${Surface}`;
 
@@ -26,6 +27,7 @@ export const visibilityBySurface: Record<Surface, ErrorVisibility> = {
   activate_gateway: "response",
   api: "response",
   auth: "response",
+  budget: "response",
   chat: "response",
   database: "log",
   document: "response",
@@ -98,6 +100,8 @@ export function getMessageByErrorCode(errorCode: ErrorCode): string {
 
     case "rate_limit:chat":
       return "今天能发的消息用完了，明天再来接着学。";
+    case "rate_limit:budget":
+      return "试用额度用完了。想接着学的话，跟给你邀请码的人说一声，加一点额度就能继续。";
     case "not_found:chat":
       return "The requested chat was not found. Please check the chat ID and try again.";
     case "forbidden:chat":

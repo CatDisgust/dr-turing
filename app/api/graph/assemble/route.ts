@@ -8,6 +8,8 @@ import { enrichPoints } from "@/lib/graph/enrich";
 import { matchLesson } from "@/lib/graph/match";
 import { namespacePoints } from "@/lib/graph/namespace";
 import { scoreGraph } from "@/lib/graph/score";
+import { auth } from "@/lib/session";
+import { chargeTo } from "@/lib/spend";
 import {
   type CourseGraph,
   knowledgePointSchema,
@@ -30,6 +32,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  chargeTo((await auth()).user.id);
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: "请求格式不对" }, { status: 400 });

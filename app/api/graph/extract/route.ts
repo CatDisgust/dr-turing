@@ -3,12 +3,15 @@ import { extractFilePoints } from "@/lib/graph/extract";
 import { readPageTexts } from "@/lib/graph/pdf";
 import { uploadLessonFile } from "@/lib/graph/upload";
 import { validatePoints } from "@/lib/graph/validate";
+import { auth } from "@/lib/session";
+import { chargeTo } from "@/lib/spend";
 
 // D2 自测用：传一个课件 PDF，上传到 Files API，抽知识点，核对页码。
 // 一行一个 JSON 往回推进度，免得长时间没响应
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
+  chargeTo((await auth()).user.id);
   const form = await request.formData();
   const file = form.get("file");
   const lessonIndex = Number(form.get("lessonIndex"));

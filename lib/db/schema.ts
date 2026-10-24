@@ -1,5 +1,6 @@
 import type { InferSelectModel } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   foreignKey,
   index,
@@ -263,6 +264,8 @@ export const demoSnapshot = pgTable("DemoSnapshot", {
 // 试用账号（2026-10-24 用户选邀请码登录）：管理员开一个码，学生输一次就记住。
 // 每个码对应一个 User；限额管理员可改
 export const invite = pgTable("Invite", {
+  // 试用额度：最多花多少 API 费（美分），默认 5 美元，管理员可改（2026-10-24）
+  budgetCents: integer("budgetCents").notNull().default(500),
   code: text("code").primaryKey().notNull(),
   courseLimit: integer("courseLimit").notNull().default(2),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
@@ -276,6 +279,16 @@ export const invite = pgTable("Invite", {
 });
 
 export type Invite = InferSelectModel<typeof invite>;
+
+// 每个账号调 Claude 一共花了多少（微美元 = 百万分之一美元），每次调用完原子地加上
+export const spend = pgTable("Spend", {
+  microUsd: bigint("microUsd", { mode: "number" }).notNull().default(0),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+  userId: uuid("userId")
+    .primaryKey()
+    .notNull()
+    .references(() => user.id),
+});
 
 // 试用同学点「反馈」写的一句话，管理页里看
 export const feedback = pgTable("Feedback", {

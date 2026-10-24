@@ -55,8 +55,8 @@ type ActiveChatContextValue = {
   isLoading: boolean;
   votes: Vote[] | undefined;
   showCreditCardAlert: boolean;
-  // 试用账号今天的消息用完了（2026-10-24），对话里不给“重试”
-  limitReached: boolean;
+  // 试用账号今天的消息或试用额度用完了（2026-10-24）：对话里只说明原因，不给“重试”
+  limitReached: string | null;
   // 这次对话学哪门课；null = 不选课。老对话按开头选的，新对话可以换（2026-10-24 选课）
   courseId: string | null;
   // 课程列表还没取到时为 false，这时先别画课程相关的东西
@@ -308,7 +308,9 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   );
 
   const limitReached =
-    chatError instanceof ChatbotError && chatError.type === "rate_limit";
+    chatError instanceof ChatbotError && chatError.type === "rate_limit"
+      ? chatError.message
+      : null;
 
   const value = useMemo<ActiveChatContextValue>(
     () => ({
