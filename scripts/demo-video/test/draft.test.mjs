@@ -6,6 +6,7 @@ import {
   draftTake,
   editSpans,
   fitCamera,
+  PACE,
   shotWindows,
   thinkingSpans,
 } from "../lib/draft.mjs";
@@ -416,6 +417,56 @@ describe("剪辑单草稿", () => {
       kinds(spans, "cut").map(([k, a, b]) => [k, a, Number(b.toFixed(2))]),
       [["cut", 280, 292.56]]
     );
+  });
+
+  test("镜头 7 又聊哲学家就餐：从“先不做题”到点那颗星之前整段快放，复核等待并进去；连线停留剪掉", () => {
+    const click = (t, label) => ({ label, name: "click", t });
+    const window = { end: 430, start: 280 };
+    const aligned = {
+      marks: [
+        click(354.2, "先不做题"),
+        mark("wait.reply.镜头7-skip.start", 354.4),
+        mark("wait.reply.镜头7-skip.end", 362.8),
+        click(363.5, "输入框"),
+        mark("type.start", 364.2),
+        mark("type.end", 367),
+        mark("wait.reply.镜头7-哲学家就餐.start", 368.2),
+        mark("wait.reply.镜头7-哲学家就餐.end", 384.27),
+        click(386.5, "结束本次学习"),
+        mark("wait.review.shot7.start", 387),
+        mark("wait.review.shot7.end", 405),
+        click(408.7, "我的星图"),
+        click(414.9, "哲学家就餐"),
+        hold(415.5, "哲学家就餐：出处", 4000),
+        hold(421, "哲学家就餐：连线", 3000),
+      ],
+    };
+    const o = { ...PACE[7] };
+    const spans = editSpans(aligned, window, o);
+    assert.deepEqual(
+      kinds(spans, "fold").map(([k, a, b]) => [k, Number(a.toFixed(2)), b]),
+      [["fold", 353.6, 414.4]]
+    );
+    assert.deepEqual(
+      kinds(spans, "cut").map(([k, a, b]) => [k, Number(a.toFixed(2)), b]),
+      // 出处停留留 3×0.75 秒，多的剪掉；连线整段剪掉
+      [
+        ["cut", 417.75, 419.5],
+        ["cut", 420.7, 424],
+      ]
+    );
+    const clips = draftClips(window, spans, o);
+    const inFold = clips.filter((c) => c.from >= 353.6 && c.to <= 414.4);
+    assert.ok(inFold.every((c) => c.rate));
+    const out = inFold.reduce((n, c) => n + (c.to - c.from) / c.rate, 0);
+    assert.ok(out <= 1.5, `快放段成片 ${out} 秒`);
+    // 连线停留不放大镜头
+    const cam = draftCamera(window, {
+      cursor: [{ t: 0, x: 900, y: 300 }],
+      ...o,
+      marks: aligned.marks,
+    });
+    assert.ok(!cam.some((k) => k.t >= 420.5 && k.t < 424 && k.zoom > 1));
   });
 
   test("收紧的镜头：停留按比例缩短，全亮不缩；整轮快放压得更短", () => {

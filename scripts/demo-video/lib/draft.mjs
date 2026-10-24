@@ -10,6 +10,7 @@
 //  type   打字                             → 不超过 2.2 秒，最多 8 倍
 //  repeat 快放的整轮（从点按钮到导师回完）→ 不超过 2 秒：镜头 5 的反例追问（分镜写明“加速”）、
 //         第二道起的独立题、复习后再答、点“先不做题”
+//  fold   收紧的镜头里整段快放（PACE.fold）：镜头 7 又聊哲学家就餐 → 结束学习 → 打开星图，每段不超过 1.5 秒
 //  idle   画面上什么都没动（没光标、没点击、页面没变）超过 1.2 秒 → 不超过 0.6 秒
 //  停留（hold：鼠标指着一处让观众看）原速，但最多留 2 秒（题目 2.4 秒、出处 3 秒、镜头 3 的星图全留），多的剪掉
 //  第二次及以后的“结束本次学习”：小结镜头 6 已经演过，从小结弹出前到关掉小结整段剪掉
@@ -136,8 +137,15 @@ const holdLen = (m, scale = 1) =>
 
 // 个别镜头收得更紧（用户 2026-10-24 选“全保留、镜头 7 收紧”时用）：停留上限乘 holdScale，
 // 思考、出字、打字、整轮快放的上限换成更短的，第二天开场只留 lead 秒
+// fold：匹配的那一问连同前面的“先不做题”、后面的结束学习和打开星图，整段快放到点那颗星之前（每段不超过 foldMax 秒），
+//       镜头 6 已经完整演过这一套，镜头 7 只交代“又聊了一句、星图里那颗星亮了”
+// dropHolds：这些停留整段剪掉（镜头 6 已经停过的连线）
 export const PACE = {
+  6: { holdScale: 0.85 },
   7: {
+    dropHolds: /连线/,
+    fold: /哲学家就餐/,
+    foldMax: 1.5,
     holdScale: 0.75,
     lead: 0.8,
     maxIdle: 0.6,
@@ -289,6 +297,43 @@ export function editSpans(aligned, window, o = {}) {
         spans.push({ end: end.t, kind: "type", start: m.t });
       }
     }
+    if (
+      o.fold &&
+      /^wait\.reply\..+\.end$/.test(m.name) &&
+      o.fold.test(m.name)
+    ) {
+      const asked = marks.findLast(
+        (e) => e.name === m.name.replace(/\.end$/, ".start") && e.t <= m.t
+      );
+      const typed =
+        asked &&
+        marks.findLast((e) => e.name === "type.start" && e.t <= asked.t);
+      const skip =
+        typed &&
+        marks.findLast(
+          (e) =>
+            e.name === "click" &&
+            e.label === "先不做题" &&
+            e.t <= typed.t &&
+            typed.t - e.t < 15
+        );
+      const star = marks.find(
+        (e) => e.name === "click" && e.t > m.t && o.fold.test(e.label ?? "")
+      );
+      spans.push({
+        end: star ? star.t - 0.5 : m.t,
+        kind: "fold",
+        start: skip ? skip.t - 0.6 : (typed?.t ?? m.t) - 0.8,
+      });
+    }
+    if (
+      m.name === "hold" &&
+      typeof m.ms === "number" &&
+      o.dropHolds?.test(m.label ?? "")
+    ) {
+      spans.push({ end: m.t + m.ms / 1000, kind: "cut", start: m.t - 0.3 });
+      continue;
+    }
     if (m.name === "hold" && typeof m.ms === "number") {
       const kept = holdLen(m, scale);
       spans.push({ end: m.t + kept, kind: "keep", start: m.t });
@@ -335,6 +380,8 @@ export function editSpans(aligned, window, o = {}) {
 
 const PRIORITY = {
   cut: 0,
+  // 比复核等待优先：快放段里的复核等待并进快放，不单独再压一次
+  fold: 0.5,
   idle: 7,
   keep: 6,
   repeat: 2,
@@ -356,6 +403,8 @@ function rateFor(kind, len, o) {
         : Math.min(TYPE_MAX_RATE, Math.max(o.minRate, fit(o.typeMax)));
     case "repeat":
       return Math.max(o.minRate, fit(o.repeatMax));
+    case "fold":
+      return Math.max(o.minRate, fit(o.foldMax));
     case "idle":
       return Math.max(o.minRate, fit(IDLE_MAX));
     case "keep":
@@ -372,6 +421,8 @@ function worth(kind, len, o) {
       return len > 2;
     case "repeat":
       return len > o.repeatMax;
+    case "fold":
+      return len > o.foldMax;
     case "idle":
       return len > IDLE_GAP - 0.4;
     case "keep":
@@ -387,6 +438,7 @@ function worth(kind, len, o) {
 // 时段重叠时按 PRIORITY 取舍（数小的优先），后来的被前面的占掉的部分丢弃
 export function draftClips(window, spans, options = {}) {
   const o = {
+    foldMax: REPEAT_MAX,
     maxIdle: MAX_IDLE,
     minRate: MIN_RATE,
     repeatMax: REPEAT_MAX,
@@ -453,7 +505,10 @@ export function draftClips(window, spans, options = {}) {
 const HOME = { x: 640, y: 360, zoom: 1 };
 
 // 镜头放大的草稿：打字时 1.4 倍看输入框；点模拟器时 1.4 倍看模拟器；鼠标停留处按 HOLD_ZOOM 放大，停完回全景
-export function draftCamera(window, { marks, cursor, holdScale = 1 }) {
+export function draftCamera(
+  window,
+  { marks, cursor, holdScale = 1, dropHolds = null }
+) {
   const inside = (t) => t >= window.start && t <= window.end;
   const at = (t) =>
     cursor.findLast((c) => c.t <= t) ?? cursor.find((c) => c.t >= t);
@@ -475,7 +530,11 @@ export function draftCamera(window, { marks, cursor, holdScale = 1 }) {
         });
       }
     }
-    if (m.name === "hold" && typeof m.ms === "number") {
+    if (
+      m.name === "hold" &&
+      typeof m.ms === "number" &&
+      !dropHolds?.test(m.label ?? "")
+    ) {
       const zoom = HOLD_ZOOM.find(([re]) => re.test(m.label ?? ""))?.[1];
       const p = at(m.t);
       if (zoom && p) {
@@ -566,6 +625,7 @@ export function draftShot(aligned, window, options = {}) {
     camera: fitCamera(
       draftCamera(window, {
         cursor: aligned.cursor ?? [],
+        dropHolds: options.dropHolds,
         holdScale: options.holdScale,
         marks: aligned.marks ?? [],
         ui,
