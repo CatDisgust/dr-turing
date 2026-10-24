@@ -6,7 +6,8 @@ import { narrate, narrationDurations } from "./voice";
 // 拿到真实录屏和配音后，用 full.ts 换掉占位
 
 export const PRESET = "演示账号 · 学习记录为预置";
-export const NEXT_DAY = "模拟第二天（预置数据）";
+// 镜头 7 的“过一段时间”是把演示学生的记录整体往前挪 24 小时模拟的
+export const LATER = "模拟一段时间后（预置数据）";
 export const PAGE = { height: 720, scale: 1, width: 1280, x: 0, y: 0 };
 
 export function card(
@@ -122,7 +123,7 @@ export const animatic: Edit = {
     screen("s4", { badge: PRESET }),
     screen("s5", { badge: PRESET }),
     screen("s6", { badge: PRESET }),
-    screen("s7", { badge: NEXT_DAY }),
+    screen("s7", { badge: LATER }),
     ...ending,
   ],
   width: 1920,

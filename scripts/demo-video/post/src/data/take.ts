@@ -17,7 +17,7 @@ import {
   endCard,
   ending,
   gap,
-  NEXT_DAY,
+  LATER,
   PAGE,
   PRESET,
   pain,
@@ -188,7 +188,7 @@ function screenShot(
   const picked = windows ? clipWindows(draft.clips, windows) : draft.clips;
   const clips = fitClips(picked, end + TAIL);
   return {
-    badges: [{ text: draft.shot === 7 ? NEXT_DAY : PRESET }],
+    badges: [{ text: draft.shot === 7 ? LATER : PRESET }],
     camera: windows ? windowCamera(draft.camera, windows) : draft.camera,
     clicks: draft.clicks ?? [],
     clips,
@@ -250,7 +250,7 @@ function liftAt(shots: Shot[]): number {
 }
 
 // 60 秒版：痛点字卡 → 星图（镜头 3 全段）→ 很确定却答错、独立答对半亮（镜头 5 两个时间窗）
-// → 第二天答对全亮（镜头 7 到全亮为止）→ 收尾字卡
+// → 过一段时间答对全亮（镜头 7 到全亮为止）→ 收尾字卡
 export function shortEdit(take: Take): Edit | null {
   const full = takeEdit(take);
   const draft = (n: number) => take.shots.find((d) => d.shot === n);

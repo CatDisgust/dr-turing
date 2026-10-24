@@ -66,7 +66,7 @@ export function Subtitles({
   );
 }
 
-// 角标：“演示账号，学习记录为预置”“模拟第二天（预置数据）”，以及加速时的“已加速 ×N”。角标高 42px
+// 角标：“演示账号，学习记录为预置”“模拟一段时间后（预置数据）”，以及加速时的“已加速 ×N”。角标高 42px
 export const BADGE_H = 42;
 
 export function Badges({

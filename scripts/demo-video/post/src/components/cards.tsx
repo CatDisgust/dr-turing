@@ -231,7 +231,7 @@ function PilotCard({ beats }: { beats: Record<string, number> }) {
       <div style={{ height: 36 }} />
       <Appear at={beats.metric ?? 0.7}>
         <div style={{ color: C.textOnSkySoft, fontSize: 48 }}>
-          检验：表面记忆淡了以后，不看提示还能答对吗（隔天独立答对率）
+          检验：按遗忘曲线隔一段时间再测，不看提示还能答对吗
         </div>
       </Appear>
     </AbsoluteFill>
@@ -330,4 +330,4 @@ export function Card({
 }
 
 export const CARD_TEXT =
-  "AI让你以为学会了用练习时拿掉考试近千名高中生对照实验和不的同学比Bastani等PNAS2025少给答案、多反问：能减少伤害但你分不清：看懂了，还是真会了下一步：小规模试点「隔天独立答对率」检验第二天不看提示还能吗表面记忆淡以后（）Dr.Turing，让真的学会。dr-turing-81so.vercel.app配音+−%0123456789";
+  "AI让你以为学会了用练习时拿掉考试近千名高中生对照实验和不的同学比Bastani等PNAS2025少给答案、多反问：能减少伤害但你分不清：看懂了，还是真会了下一步：小规模试点「隔天独立答对率」检验第二天不看提示还能吗表面记忆淡以后（）按遗忘曲线一段时间再测Dr.Turing，让真的学会。dr-turing-81so.vercel.app配音+−%0123456789";
