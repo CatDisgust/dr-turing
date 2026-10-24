@@ -35,8 +35,9 @@ export type Take = {
   take: string | null;
   // public/ 下的素材路径；null 时用占位画面
   footage: string | null;
-  // use-take 写好了 public/sfx/ 的音效
+  // use-take 写好了 public/sfx/ 的音效、public/music/bed.wav 的背景音乐
   sfx?: boolean;
+  music?: boolean;
   shots: DraftShot[];
 };
 
@@ -86,6 +87,9 @@ const CHIMES: [RegExp, string][] = [
   [/「死锁」全亮/, "sfx/chime-full.wav"],
   [/「死锁」半亮/, "sfx/chime-half.wav"],
 ];
+
+// 背景音乐（scripts/music.mjs 合成）：没人说话时约 -24 LUFS，说话时再压低 9 分贝（配音 -16 LUFS）
+const MUSIC = { duckDb: 9, file: "music/bed.wav", volume: 0.35 };
 
 export function shotSfx(draft: DraftShot, clips: Clip[]): Sfx[] {
   const laid = layoutClips(clips);
@@ -146,6 +150,7 @@ export function takeEdit(take: Take): Edit | null {
   return {
     fps: FPS,
     height: 1080,
+    music: take.music ? MUSIC : undefined,
     narrationDurations,
     shots: [pain, gap, ...shots, ...ending],
     width: 1920,

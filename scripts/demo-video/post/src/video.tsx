@@ -95,16 +95,22 @@ export function Video({ edit }: { edit: Edit }) {
           ))}
         </Sequence>
       ))}
-      {music ? <MusicTrack music={music} spans={spans} /> : null}
+      {music ? (
+        <MusicTrack end={shots.at(-1)?.end ?? 0} music={music} spans={spans} />
+      ) : null}
     </AbsoluteFill>
   );
 }
 
-// 音乐：说话时压低 duckDb 分贝，每个说话段前后各留 RAMP 秒平滑压低、回升
+// 音乐：说话时压低 duckDb 分贝，每个说话段前后各留 RAMP 秒平滑压低、回升；成片最后 FADE_OUT 秒淡出
+const FADE_OUT = 3;
+
 function MusicTrack({
+  end,
   music,
   spans,
 }: {
+  end: number;
   music: Music;
   spans: (readonly [number, number])[];
 }) {
@@ -122,9 +128,13 @@ function MusicTrack({
           })
         )
       );
-      return music.volume * (1 - speaking + speaking * duck);
+      const fade = interpolate(t, [end - FADE_OUT, end], [1, 0], {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      });
+      return music.volume * (1 - speaking + speaking * duck) * fade;
     },
-    [duck, fps, music.volume, spans]
+    [duck, end, fps, music.volume, spans]
   );
   return <Audio loop src={staticFile(music.file)} volume={volume} />;
 }
