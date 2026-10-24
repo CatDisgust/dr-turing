@@ -40,11 +40,19 @@ writeFileSync(
   `${JSON.stringify({ footage, shots: draft.shots, take }, null, 1)}\n`
 );
 
+// 有配音（scripts/temp-voice.mjs 量好的时长）就用配音，没有按每秒 4.2 字估
+const voiceFiles = JSON.parse(
+  readFileSync(join(root, "src/data/voice.json"), "utf8")
+).files;
 const rows = [];
 let total = 0;
 for (const shot of draft.shots.filter((s) => s.shot >= 3 && s.shot <= 7)) {
   const s = SCRIPT.find((x) => x.id === `s${shot.shot}`);
-  const voice = autoCues(s.narration, shot.shot === 3 ? 1.9 : 0.5).end + 0.6;
+  const start = shot.shot === 3 ? 1.9 : 0.5;
+  const voice =
+    (voiceFiles[s.id]
+      ? start + voiceFiles[s.id].duration
+      : autoCues(s.narration, start).end) + 0.6;
   const length = Math.max(shot.stats.edited, voice);
   total += length;
   rows.push(
@@ -54,7 +62,7 @@ for (const shot of draft.shots.filter((s) => s.shot >= 3 && s.shot <= 7)) {
 const table = [
   `# 计时表（${take}）`,
   "",
-  "单位秒。剪后画面 = 思考和复核等待加速、导师出字加速、剪掉“先不做题”和重开页面之后；讲稿 = 按每秒 4.2 字估的念完时间；成片取两者较长的。",
+  `单位秒。剪后画面 = 按剪辑单草稿加速、剪掉之后；讲稿 = ${Object.keys(voiceFiles).length > 0 ? "配音实际念完的时间" : "按每秒 4.2 字估的念完时间"}；成片取两者较长的。`,
   "",
   "| 镜头 | 原始 | 剪后画面 | 讲稿 | 分镜 | 成片 |",
   "| --- | --- | --- | --- | --- | --- |",

@@ -227,14 +227,18 @@ export function installDemoLog(config) {
   });
   setInterval(schedule, 500);
 
-  addEventListener("DOMContentLoaded", () =>
+  addEventListener("DOMContentLoaded", () => {
     push({
       dpr: devicePixelRatio,
       type: "page",
       url: location.href,
       viewport: { h: innerHeight, w: innerWidth },
-    })
-  );
+    });
+    // 录屏时不显示开发用的耗时行（“首字 4.9s（引擎…快路径 模型名）”，D12 验收用，不是给学生看的）
+    const style = document.createElement("style");
+    style.textContent = '[data-testid="timing"]{display:none!important}';
+    document.head.append(style);
+  });
 
   // 闪白：盖一层白，至少 frames 帧且至少 ms 毫秒，时间记进日志；后期在素材里找这一帧对时间
   const flash = (ms = 50, frames = 3, color = "#ffffff") =>

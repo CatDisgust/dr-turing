@@ -1,6 +1,6 @@
 import type { Edit, Shot } from "../edit";
-import { autoCues } from "../timing";
 import { SCRIPT } from "./script";
+import { narrate, narrationDurations } from "./voice";
 
 // 计时样带：字卡是真的，录屏镜头先用占位画面，字幕按语速估时间。
 // 拿到真实录屏和配音后，用 full.ts 换掉占位
@@ -18,13 +18,15 @@ export function card(
   if (!s) {
     throw new Error(id);
   }
-  const { cues, end } = autoCues(s.narration, narrationStart);
+  const { cues, end, narration } = narrate(id, s.narration, narrationStart);
   return {
     card: kind,
     cues,
-    duration: Math.max(s.slot, end + 0.8),
+    // 有配音就跟着配音走；没有就至少占分镜给的时长
+    duration: narration ? end + 0.8 : Math.max(s.slot, end + 0.8),
     id,
     kind: "card",
+    narration,
     title: s.title,
   };
 }
@@ -38,7 +40,7 @@ function screen(
     throw new Error(id);
   }
   const start = opts.intro ? 1.9 : 0.5;
-  const { cues, end } = autoCues(s.narration, start);
+  const { cues, end, narration } = narrate(id, s.narration, start);
   const duration = Math.max(s.slot, end + 1);
   return {
     badges: opts.badge ? [{ text: opts.badge }] : [],
@@ -51,6 +53,7 @@ function screen(
     id,
     intro: opts.intro,
     kind: "screen",
+    narration,
     placeholder: s.picture,
     title: s.title,
     viewport: PAGE,
@@ -73,7 +76,7 @@ if (gap.kind === "card") {
 }
 
 const end = SCRIPT.find((x) => x.id === "s8");
-const endCues = autoCues(end?.narration ?? "", 0.3);
+const endCues = narrate("s8", end?.narration ?? "", 0.3);
 
 // 结尾：试点计划字卡（无配音）+ 收尾字卡
 export const ending: Shot[] = [
@@ -95,6 +98,7 @@ export const ending: Shot[] = [
     duration: Math.max(7, endCues.end + 3),
     id: "s8b",
     kind: "card",
+    narration: endCues.narration,
     title: "收尾",
   },
 ];
@@ -102,6 +106,7 @@ export const ending: Shot[] = [
 export const animatic: Edit = {
   fps: 60,
   height: 1080,
+  narrationDurations,
   shots: [
     pain,
     gap,

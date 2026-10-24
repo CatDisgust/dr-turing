@@ -7,10 +7,10 @@ import type {
   Shot,
   Viewport,
 } from "../edit";
-import { autoCues } from "../timing";
 import { ending, gap, NEXT_DAY, PAGE, PRESET, pain } from "./animatic";
 import { SCRIPT } from "./script";
 import TAKE from "./take.json";
+import { narrate, narrationDurations } from "./voice";
 
 // 用一条真实录制出的计时样带：录屏镜头的片段、加速、镜头放大、光标都来自那条 take 的剪辑单草稿
 // （scripts/demo-video/draft.mjs），字卡和讲稿同计时样带。素材在 public/ 下就用真画面，没有就用占位画面。
@@ -81,7 +81,7 @@ function screenShot(take: Take, draft: DraftShot): Shot {
     throw new Error(`讲稿里没有 ${id}`);
   }
   const intro = draft.shot === 3;
-  const { cues, end } = autoCues(s.narration, intro ? 1.9 : 0.5);
+  const { cues, end, narration } = narrate(id, s.narration, intro ? 1.9 : 0.5);
   return {
     badges: [{ text: draft.shot === 7 ? NEXT_DAY : PRESET }],
     camera: draft.camera,
@@ -93,6 +93,7 @@ function screenShot(take: Take, draft: DraftShot): Shot {
     id,
     intro,
     kind: "screen",
+    narration,
     placeholder: s.picture,
     title: s.title,
     viewport: take.footage ? (draft.viewport ?? PAGE) : PAGE,
@@ -110,6 +111,7 @@ export function takeEdit(take: Take): Edit | null {
   return {
     fps: FPS,
     height: 1080,
+    narrationDurations,
     shots: [pain, gap, ...shots, ...ending],
     width: 1920,
   };

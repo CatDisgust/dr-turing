@@ -107,7 +107,7 @@ describe("剪辑单草稿", () => {
       { t: 17.6, x: 430, y: 616, zoom: 1.4 },
       { t: 19.5, x: 640, y: 360, zoom: 1 },
       { t: 31.2, x: 450, y: 110, zoom: 2 },
-      { t: 33.9, x: 640, y: 360, zoom: 1 },
+      { t: 33.5, x: 640, y: 360, zoom: 1 },
     ]);
   });
 
@@ -130,7 +130,7 @@ describe("剪辑单草稿", () => {
     assert.deepEqual(keys, [
       { t: 9.4, x: 550, y: 400, zoom: 1.4 },
       { t: 14.2, x: 560, y: 450, zoom: 1.4 },
-      { t: 16.9, x: 640, y: 360, zoom: 1 },
+      { t: 16.5, x: 640, y: 360, zoom: 1 },
     ]);
   });
 
@@ -173,22 +173,22 @@ describe("剪辑单草稿", () => {
     assert.deepEqual(shot.clicks, [{ t: 20, x: 745, y: 674 }]);
     assert.deepEqual(shot.cursor, [{ t: 20, x: 745, y: 674 }]);
     assert.equal(shot.stats.raw, 44);
-    // 思考 21–30 压到 0.75 秒，出字 30–40 压到 2.5 秒，16–20、40–60 画面不动也快放
+    // 思考 21–30 压到 0.75 秒，出字 30–40 压到 2 秒，16–20、40–60 画面不动也快放
     assert.deepEqual(shot.clips, [
       { from: 16, to: 16.2 },
       { from: 16.2, rate: 6, to: 19.8 },
       { from: 19.8, to: 21 },
       { from: 21, rate: 12, to: 30 },
-      { from: 30, rate: 4, to: 40 },
+      { from: 30, rate: 5, to: 40 },
       { from: 40, to: 40.2 },
       { from: 40.2, rate: 33, to: 59.8 },
       { from: 59.8, to: 60 },
     ]);
-    assert.equal(shot.stats.edited, 6.244);
+    assert.equal(shot.stats.edited, 5.744);
     assert.equal(shot.stats.sped.length, 4);
   });
 
-  test("要剪的时段：思考、出字、复核等待、先不做题、模拟第二天", () => {
+  test("要处理的时段：思考、出字、复核等待、先不做题快放、模拟第二天剪掉", () => {
     const aligned = {
       marks: [
         mark("shot.7.start", 100),
@@ -205,20 +205,26 @@ describe("剪辑单草稿", () => {
       ui: [stream(109, "start"), ui(115, "reply-shown", 1), stream(119, "end")],
     };
     const spans = editSpans(aligned, { end: 180, start: 100 });
-    assert.deepEqual(kinds(spans, "think", "stream", "cut", "review"), [
-      ["think", 109, 115],
-      ["stream", 115, 119],
-      ["cut", 100, 106.5],
-      ["cut", 118.8, 126.3],
-      ["review", 130, 170],
-    ]);
+    assert.deepEqual(
+      kinds(spans, "think", "stream", "cut", "repeat", "review"),
+      [
+        ["think", 109, 115],
+        ["stream", 115, 119],
+        ["cut", 100, 106.5],
+        ["repeat", 119.4, 126],
+        ["review", 130, 170],
+      ]
+    );
     const clips = draftClips({ end: 180, start: 100 }, spans);
     assert.deepEqual(clips, [
       { from: 106.5, rate: 3, to: 107.8 },
       { from: 107.8, to: 109 },
       { from: 109, rate: 8, to: 115 },
-      { from: 115, rate: 3, to: 118.8 },
-      { from: 126.3, rate: 6, to: 129.8 },
+      { from: 115, rate: 3, to: 119 },
+      { from: 119, to: 119.4 },
+      { from: 119.4, rate: 4, to: 126 },
+      { from: 126, to: 126.2 },
+      { from: 126.2, rate: 6, to: 129.8 },
       { from: 129.8, to: 130 },
       { from: 130, rate: 50, to: 170 },
       { from: 170, to: 170.2 },
@@ -227,7 +233,7 @@ describe("剪辑单草稿", () => {
     ]);
   });
 
-  test("停留原速、最多 2.4 秒（出处 3.2 秒），多的剪掉；停留不算画面不动", () => {
+  test("停留原速、最多 2 秒（题目 2.4 秒、出处 3 秒），多的剪掉；停留不算画面不动", () => {
     const window = { end: 20, start: 0 };
     const aligned = {
       cursor: [{ t: 0.5, x: 1, y: 1 }],
@@ -237,14 +243,14 @@ describe("剪辑单草稿", () => {
     assert.deepEqual(kinds(spans, "keep", "cut"), [
       ["keep", 1, 3.4],
       ["cut", 3.4, 4],
-      ["keep", 6, 9.2],
-      ["cut", 9.2, 10],
+      ["keep", 6, 9],
+      ["cut", 9, 10],
     ]);
     const clips = draftClips(window, spans);
     assert.deepEqual(clips.slice(0, 3), [
       { from: 0, to: 3.4 },
       { from: 4, rate: 3, to: 5.8 },
-      { from: 5.8, to: 9.2 },
+      { from: 5.8, to: 9 },
     ]);
   });
 
@@ -287,5 +293,21 @@ describe("剪辑单草稿", () => {
     assert.ok(
       clips.some((c) => c.from === 23.6 && c.to === 50 && c.rate === 14)
     );
+  });
+
+  test("第二次结束学习：从点结束到点“我的星图”整段剪掉，第一次不剪", () => {
+    const click = (t, label) => ({ label, name: "click", t });
+    const marks = [
+      click(10, "结束本次学习"),
+      mark("wait.review.shot6.start", 10.3),
+      mark("wait.review.shot6.end", 30),
+      click(35, "我的星图"),
+      click(100, "结束本次学习"),
+      mark("wait.review.shot7.start", 100.3),
+      mark("wait.review.shot7.end", 120),
+      click(126, "我的星图"),
+    ];
+    const spans = editSpans({ marks }, { end: 200, start: 0 });
+    assert.deepEqual(kinds(spans, "cut"), [["cut", 100.6, 125.2]]);
   });
 });

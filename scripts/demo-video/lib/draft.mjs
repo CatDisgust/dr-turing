@@ -6,22 +6,28 @@
 // 各种等待压到多长（秒），压不下的部分加速，画面自动标“已加速 ×N”。制作方案：等待一律剪掉或加速并标出来
 //  think  导师思考中（只有等待动画）      → 不超过 0.8 秒
 //  review 结束学习后的复核等待            → 不超过 0.8 秒
-//  stream 导师出字                         → 不超过 2.5 秒，至少 3 倍
+//  stream 导师出字                         → 不超过 2 秒，至少 3 倍
 //  type   打字                             → 不超过 2.2 秒，最多 8 倍
-//  repeat 第二轮起的重复作答（独立题 2、再答 1…）整轮 → 不超过 2 秒
-//  idle   画面上什么都没动（没光标、没点击、页面没变）超过 1.5 秒 → 不超过 0.6 秒
-//  停留（hold：鼠标指着一处让观众看）原速，但最多留 2.4 秒（出处 3.2 秒），多的剪掉
+//  repeat 快放的整轮（从点按钮到导师回完）→ 不超过 2 秒：镜头 5 的反例追问（分镜写明“加速”）、
+//         第二道起的独立题、复习后再答、点“先不做题”
+//  idle   画面上什么都没动（没光标、没点击、页面没变）超过 1.2 秒 → 不超过 0.6 秒
+//  停留（hold：鼠标指着一处让观众看）原速，但最多留 2 秒（题目 2.4 秒、出处 3 秒、镜头 3 的星图全留），多的剪掉
+//  第二次及以后的“结束本次学习”：小结镜头 6 已经演过，从点结束到点“我的星图”整段剪掉
 const MAX_IDLE = 0.8;
 const MIN_RATE = 2;
-const STREAM_MAX = 2.5;
+const STREAM_MAX = 2;
 const STREAM_RATE = 3;
 const TYPE_MAX = 2.2;
 const TYPE_MAX_RATE = 8;
 const REPEAT_MAX = 2;
-const IDLE_GAP = 1.5;
+const IDLE_GAP = 1.2;
 const IDLE_MAX = 0.6;
-const HOLD_MAX = 2.4;
-const HOLD_LONGER = [[/出处/, 3.2]];
+const HOLD_MAX = 2;
+const HOLD_LONGER = [
+  [/星图/, 60],
+  [/出处/, 3],
+  [/检查题|复习题/, 2.4],
+];
 
 // 导师回复第一次露出内容时，页面上会出现的东西（任意一个出现就算思考结束）
 const SHOWN_KEYS = new Set([
@@ -107,8 +113,8 @@ const holdCap = (label = "") =>
 // 停留多久（秒）：日志里记的是毫秒，超过上限的按上限算
 const holdLen = (m) => Math.min((m.ms ?? 0) / 1000, holdCap(m.label));
 
-// 重复作答的轮次：第二道起的独立题、复习后再答、第二次“考我”。整轮（从点作答框到导师回完）快放
-const REPEAT = /(?:独立题|考我)([2-9])$|再答\d+$/;
+// 快放的整轮作答：反例追问、第二道起的独立题、复习后再答、第二次“考我”
+const REPEAT = /(?:独立题|考我)([2-9])$|再答\d+$|-反例$/;
 
 function repeatRounds(marks) {
   const rounds = [];
@@ -172,7 +178,7 @@ function idleSpans(aligned, window) {
 
 // 剪辑要处理的时段（kind 见文件开头）。另外：
 //  keep   停留：原速（不被当成 idle），超过上限的部分 cut
-//  cut    剪掉：点“先不做题”和它引出的那一轮回复；镜头 7 开头模拟第二天、重开页面；停留超长的尾巴
+//  cut    剪掉：镜头 7 开头模拟第二天、重开页面；第二次结束学习的小结；停留超长的尾巴
 export function editSpans(aligned, window) {
   const ui = aligned.ui ?? [];
   const marks = aligned.marks ?? [];
@@ -197,6 +203,18 @@ export function editSpans(aligned, window) {
       if (end) {
         spans.push({ end: end.t, kind: "review", start: m.t });
       }
+      const again = marks.some(
+        (e) => /^wait\.review\..+\.start$/.test(e.name) && e.t < m.t
+      );
+      const ended = marks.findLast(
+        (e) => e.name === "click" && e.label === "结束本次学习" && e.t <= m.t
+      );
+      const opened = marks.find(
+        (e) => e.name === "click" && e.label === "我的星图" && e.t > m.t
+      );
+      if (again && ended && opened) {
+        spans.push({ end: opened.t - 0.8, kind: "cut", start: ended.t + 0.6 });
+      }
     }
     if (m.name === "type.start") {
       const end = marks.find((e) => e.name === "type.end" && e.t >= m.t);
@@ -211,12 +229,13 @@ export function editSpans(aligned, window) {
         spans.push({ end: m.t + m.ms / 1000, kind: "cut", start: m.t + kept });
       }
     }
+    // 点“先不做题”和它引出的那一轮快放（不剪：剪了的话聊天记录里会凭空多出这一问一答）
     if (m.name === "click" && m.label === "先不做题") {
       const end = marks.find(
         (e) => /^wait\.reply\..*-skip\.end$/.test(e.name) && e.t >= m.t
       );
       if (end) {
-        spans.push({ end: end.t + 0.3, kind: "cut", start: m.t - 1.2 });
+        spans.push({ end: end.t, kind: "repeat", start: m.t - 0.6 });
       }
     }
     if (m.name === "wait.next-day.start" && m.t >= window.start) {
