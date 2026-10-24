@@ -47,6 +47,7 @@ export function ChatShell() {
     setInput,
     visibilityType,
     isReadonly,
+    limitReached,
     isLoading,
     votes,
     showCreditCardAlert,
@@ -238,6 +239,7 @@ export function ChatShell() {
                 isArtifactVisible={isArtifactVisible}
                 isLoading={isLoading}
                 isReadonly={isReadonly}
+                limitReached={limitReached}
                 messages={messages}
                 onEditMessage={handleEditMessage}
                 regenerate={regenerate}

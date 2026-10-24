@@ -1,5 +1,6 @@
 import { getCourseById, saveCourse } from "@/lib/db/queries";
 import { applyReview, reviewOpSchema } from "@/lib/graph/review";
+import { auth } from "@/lib/session";
 
 // 读一门课的图谱；POST 一个审阅操作（合并 / 改名 / 删除），存库后返回新图
 export async function GET(
@@ -18,6 +19,10 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // 改课程图谱只给管理员，试用账号只能读
+  if ((await auth()).role === "trial") {
+    return Response.json({ error: "只有管理员能改图谱" }, { status: 403 });
+  }
   const { id } = await params;
   const op = reviewOpSchema.safeParse(await request.json().catch(() => null));
   if (!op.success) {

@@ -9,15 +9,28 @@ import { useDataStream } from "./data-stream-provider";
 import { Greeting } from "./greeting";
 import { PreviewMessage, ThinkingMessage } from "./message";
 
-// 出错兜底（D12）：请求本身失败（网络、服务器）时，提示留在对话里，点一下重发
+// 出错兜底（D12）：请求本身失败（网络、服务器）时，提示留在对话里，点一下重发。
+// 试用账号今天的消息用完了就只说明天再来，重试也没用
 function RetryNotice({
   onRetry,
+  limitReached,
 }: {
   onRetry: UseChatHelpers<ChatMessage>["regenerate"];
+  limitReached?: boolean;
 }) {
   const retry = useCallback(() => {
     onRetry();
   }, [onRetry]);
+  if (limitReached) {
+    return (
+      <div
+        className="rounded-2xl bg-[var(--duo-blue-soft)] px-4 py-2.5 text-[15px] text-[var(--duo-blue-ink)]"
+        data-testid="limit-notice"
+      >
+        今天能发的消息用完了，明天再来接着学。
+      </div>
+    );
+  }
   return (
     <div
       className="flex items-center gap-3 rounded-2xl bg-[var(--duo-red-soft)] px-4 py-2.5 text-[15px] text-[var(--duo-red-ink)]"
@@ -42,6 +55,7 @@ type MessagesProps = {
   isReadonly: boolean;
   isArtifactVisible: boolean;
   isLoading?: boolean;
+  limitReached?: boolean;
   onEditMessage?: (message: ChatMessage) => void;
 };
 
@@ -56,6 +70,7 @@ function PureMessages({
   isReadonly,
   isArtifactVisible,
   isLoading,
+  limitReached,
   onEditMessage,
 }: MessagesProps) {
   const {
@@ -129,7 +144,7 @@ function PureMessages({
           )}
 
           {status === "error" && !isReadonly ? (
-            <RetryNotice onRetry={regenerate} />
+            <RetryNotice limitReached={limitReached} onRetry={regenerate} />
           ) : null}
 
           <div

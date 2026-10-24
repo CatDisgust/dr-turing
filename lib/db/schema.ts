@@ -3,6 +3,7 @@ import {
   boolean,
   foreignKey,
   index,
+  integer,
   json,
   jsonb,
   pgTable,
@@ -256,3 +257,33 @@ export const demoSnapshot = pgTable("DemoSnapshot", {
   name: text("name").primaryKey().notNull(),
   studentId: uuid("studentId").notNull(),
 });
+
+// 试用账号（2026-10-24 用户选邀请码登录）：管理员开一个码，学生输一次就记住。
+// 每个码对应一个 User；限额管理员可改
+export const invite = pgTable("Invite", {
+  code: text("code").primaryKey().notNull(),
+  courseLimit: integer("courseLimit").notNull().default(2),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  dailyLimit: integer("dailyLimit").notNull().default(100),
+  disabled: boolean("disabled").notNull().default(false),
+  lastSeenAt: timestamp("lastSeenAt"),
+  name: text("name").notNull(),
+  userId: uuid("userId")
+    .notNull()
+    .references(() => user.id),
+});
+
+export type Invite = InferSelectModel<typeof invite>;
+
+// 试用同学点「反馈」写的一句话，管理页里看
+export const feedback = pgTable("Feedback", {
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  page: text("page"),
+  text: text("text").notNull(),
+  userId: uuid("userId")
+    .notNull()
+    .references(() => user.id),
+});
+
+export type Feedback = InferSelectModel<typeof feedback>;
