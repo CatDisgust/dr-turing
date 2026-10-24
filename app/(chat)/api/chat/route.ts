@@ -36,6 +36,7 @@ import { ChatbotError } from "@/lib/errors";
 import { computeAbilities, describeAbilities } from "@/lib/learner/abilities";
 import { engagementOf, nextTurn } from "@/lib/learner/events";
 import { emptyLearnerState } from "@/lib/learner/update";
+import { canSeeCourse } from "@/lib/own-course";
 import { MICRO_PER_CENT } from "@/lib/pricing";
 import { auth } from "@/lib/session";
 import { chargeTo, recordUsage } from "@/lib/spend";
@@ -274,9 +275,13 @@ export async function POST(request: Request) {
         await reopenChat({ id });
       }
     } else {
+      // 课不存在、或是别人的私人课，就当不选课
+      const requested = requestedCourseId
+        ? await getCourseById({ id: requestedCourseId })
+        : null;
       courseId =
-        requestedCourseId && (await getCourseById({ id: requestedCourseId }))
-          ? requestedCourseId
+        requested && canSeeCourse(requested, session.user.id)
+          ? requested.id
           : undefined;
       await saveChat({
         courseId: courseId ?? null,

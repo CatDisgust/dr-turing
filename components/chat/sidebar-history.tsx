@@ -24,7 +24,11 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useActiveChat } from "@/hooks/use-active-chat";
-import { type CourseOption, useCourses } from "@/hooks/use-courses";
+import {
+  type CourseOption,
+  useCourses,
+  useOwnUpload,
+} from "@/hooks/use-courses";
 import type { Chat } from "@/lib/db/schema";
 import type { User } from "@/lib/session";
 import { fetcher } from "@/lib/utils";
@@ -69,6 +73,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
   const pathname = usePathname();
   const id = pathname?.startsWith("/chat/") ? pathname.split("/")[2] : null;
   const courses = useCourses();
+  const own = useOwnUpload();
   const { courseId, courseReady, pickCourse } = useActiveChat();
 
   const {
@@ -196,6 +201,19 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                 open={open.has(course.id)}
               />
             ))}
+            {own ? (
+              <li>
+                <a
+                  className="flex items-center gap-1 rounded-lg py-1.5 pl-2 text-[13px] text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                  data-testid="upload-own"
+                  href="/my-course"
+                  title="传自己的课件，生成一门只有你能看到的课"
+                >
+                  <PlusIcon aria-hidden className="size-3.5 shrink-0" />
+                  上传我的课（{own.count}/{own.limit}）
+                </a>
+              </li>
+            ) : null}
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
@@ -296,6 +314,15 @@ function CourseFolder({
         >
           {course.name}
         </button>
+        {course.mine ? (
+          <span
+            className="shrink-0 rounded-full border border-sidebar-border px-1.5 text-[11px] text-sidebar-foreground/60"
+            data-testid={`mine-${course.id}`}
+            title="你自己传的课，只有你能看到"
+          >
+            我的
+          </span>
+        ) : null}
         {course.due > 0 ? (
           <span
             className="shrink-0 rounded-full bg-[var(--duo-blue-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--duo-blue-ink)]"

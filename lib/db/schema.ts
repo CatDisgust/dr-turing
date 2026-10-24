@@ -165,6 +165,9 @@ export const course = pgTable("Course", {
   graph: jsonb("graph").$type<CourseGraph>().notNull(),
   id: text("id").primaryKey().notNull(),
   name: text("name").notNull(),
+  // 谁传的课（第 4 步，2026-10-24）：空 = 管理员加的公开课，大家都能选；
+  // 有值 = 这个同学自己传的私人课，只有他自己能看能学
+  ownerId: uuid("ownerId").references(() => user.id),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
 
@@ -271,6 +274,8 @@ export const invite = pgTable("Invite", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   dailyLimit: integer("dailyLimit").notNull().default(100),
   disabled: boolean("disabled").notNull().default(false),
+  // 自己传课一共生成过几次（删了课再传也算），防烧钱
+  generations: integer("generations").notNull().default(0),
   lastSeenAt: timestamp("lastSeenAt"),
   name: text("name").notNull(),
   userId: uuid("userId")

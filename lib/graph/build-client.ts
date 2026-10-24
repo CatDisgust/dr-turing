@@ -36,8 +36,10 @@ export async function readProgress<T>(
   response: Response,
   onStep: (step: string) => void
 ): Promise<T> {
-  if (!response.body) {
-    throw new Error(`请求失败（${response.status}）`);
+  // 被挡下（超额度、文件太大……）时服务器回一个 {error} 而不是进度流
+  if (!(response.ok && response.body)) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error ?? `请求失败（${response.status}）`);
   }
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";

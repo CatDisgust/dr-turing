@@ -12,6 +12,7 @@ import {
   isNull,
   lt,
   ne,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -645,15 +646,18 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
 export async function saveCourse({
   graph,
   files,
+  ownerId,
 }: {
   graph: CourseGraph;
   files: string[];
+  // 只在新建时写；改已有的课不动它属于谁
+  ownerId?: string;
 }) {
   try {
     const row = { files, graph, id: graph.courseId, name: graph.name };
     return await db
       .insert(course)
-      .values(row)
+      .values({ ...row, ownerId })
       .onConflictDoUpdate({
         set: { ...row, updatedAt: new Date() },
         target: course.id,
@@ -672,21 +676,29 @@ export async function getCourseById({ id }: { id: string }) {
   }
 }
 
-// 选课列表和管理页课程表：只要名字、几课、几个知识点，不带整份图谱
-export async function listCourses() {
+// 选课列表和管理页课程表：只要名字、几课、几个知识点，不带整份图谱。
+// 给了 viewerId：公开课 + 他自己传的课；不给：只要公开课（管理页）
+export async function listCourses({ viewerId }: { viewerId?: string } = {}) {
   try {
     const rows = await db
       .select({
         graph: course.graph,
         id: course.id,
         name: course.name,
+        ownerId: course.ownerId,
         updatedAt: course.updatedAt,
       })
       .from(course)
+      .where(
+        viewerId
+          ? or(isNull(course.ownerId), eq(course.ownerId, viewerId))
+          : isNull(course.ownerId)
+      )
       .orderBy(asc(course.name));
     return rows.map((row) => ({
       id: row.id,
       lessons: row.graph.lessons.length,
+      mine: row.ownerId !== null,
       name: row.name,
       points: row.graph.points.length,
       updatedAt: row.updatedAt,
@@ -1281,6 +1293,32 @@ export async function createInvite({
     .values({ code, dailyLimit, name, userId })
     .returning();
   return row;
+}
+
+// 学生自己传课（第 4 步）：他现在有几门自己的课
+export async function countOwnCourses(userId: string): Promise<number> {
+  const [row] = await db
+    .select({ n: count(course.id) })
+    .from(course)
+    .where(eq(course.ownerId, userId));
+  return row?.n ?? 0;
+}
+
+// 有人学过这门课没有：学过就不许原地重新生成（编号会挂到别的知识点上）
+export async function courseHasLearners(courseId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ n: count(learnerState.studentId) })
+    .from(learnerState)
+    .where(eq(learnerState.courseId, courseId));
+  return (row?.n ?? 0) > 0;
+}
+
+// 生成成功一次就记一次（删了课再传也算）
+export async function bumpGenerations(code: string) {
+  await db
+    .update(invite)
+    .set({ generations: sql`${invite.generations} + 1` })
+    .where(eq(invite.code, code));
 }
 
 export async function getInviteByCode(code: string): Promise<Invite | null> {

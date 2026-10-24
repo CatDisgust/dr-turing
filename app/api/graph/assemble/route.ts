@@ -1,13 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import gold from "@/fixtures/gold/comp5348-w1-w3.json";
-import { saveCourse } from "@/lib/db/queries";
+import {
+  bumpGenerations,
+  courseHasLearners,
+  saveCourse,
+} from "@/lib/db/queries";
 import { makeCourseId } from "@/lib/graph/course-id";
 import { inferEdges } from "@/lib/graph/edges";
 import { enrichPoints } from "@/lib/graph/enrich";
 import { matchLesson } from "@/lib/graph/match";
 import { namespacePoints } from "@/lib/graph/namespace";
 import { scoreGraph } from "@/lib/graph/score";
+import { trialUploadBlock } from "@/lib/graph/upload-guard";
+import { OWN_LIMITS } from "@/lib/own-course";
 import { auth } from "@/lib/session";
 import { chargeTo } from "@/lib/spend";
 import {
@@ -32,12 +38,37 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  chargeTo((await auth()).user.id);
+  const session = await auth();
+  chargeTo(session.user.id);
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: "请求格式不对" }, { status: 400 });
   }
   const body = parsed.data;
+  // 试用同学只能新建自己的课，不能改别的课；课数和次数在这里再查一遍
+  const owner = session.invite ? session.user.id : undefined;
+  if (session.invite) {
+    const blocked =
+      body.courseId === undefined
+        ? await trialUploadBlock(session)
+        : "只能新建自己的课";
+    if (blocked) {
+      return Response.json({ error: blocked }, { status: 403 });
+    }
+    if (body.lessons.length > OWN_LIMITS.lessons) {
+      return Response.json(
+        { error: `一门课最多 ${OWN_LIMITS.lessons} 课` },
+        { status: 400 }
+      );
+    }
+  }
+  // 有人学过的课不许原地重新生成：知识点编号会指到别的点上，学生的亮度跟着挂错
+  if (body.courseId && (await courseHasLearners(body.courseId))) {
+    return Response.json(
+      { error: "这门课已经有人学过，不能原地重新生成。要更新就新建一门课。" },
+      { status: 409 }
+    );
+  }
   // 管理页加新课不带 id，这里起一个新的；/graph 自测页带 id 就是重新生成那门课
   const courseId = body.courseId ?? makeCourseId(body.name);
   const lessons = [...body.lessons].sort(
@@ -92,7 +123,11 @@ export async function POST(request: Request) {
           await saveCourse({
             files: lessons.flatMap(({ lesson }) => lesson.fileIds),
             graph,
+            ownerId: owner,
           });
+          if (session.invite) {
+            await bumpGenerations(session.invite.code);
+          }
         } catch (error) {
           console.error("save course error:", error);
           saved = false;
