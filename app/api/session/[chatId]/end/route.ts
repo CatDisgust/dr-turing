@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { auth } from "@/lib/session";
+import { chargeTo } from "@/lib/spend";
 import { endSession } from "@/lib/tutor/session";
 
 // 学生点“结束本次学习”：会后复核 + 会话报告。复核用 high，给足时间
@@ -18,6 +19,7 @@ export async function POST(
     return Response.json({ error: "bad request" }, { status: 400 });
   }
   const session = await auth();
+  chargeTo(session.user.id);
   try {
     const report = await endSession({
       chatId,

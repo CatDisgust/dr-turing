@@ -11,6 +11,7 @@ import {
   updateChatVisibilityById,
 } from "@/lib/db/queries";
 import { auth } from "@/lib/session";
+import { recordUsage } from "@/lib/spend";
 import { getTextFromMessage } from "@/lib/utils";
 
 export async function generateTitleFromUserMessage({
@@ -25,6 +26,7 @@ export async function generateTitleFromUserMessage({
     output_config: { effort: TIERS.fast.effort },
     system: titlePrompt,
   });
+  recordUsage(response.model, response.usage);
   const text = response.content
     .flatMap((block) => (block.type === "text" ? [block.text] : []))
     .join("");
