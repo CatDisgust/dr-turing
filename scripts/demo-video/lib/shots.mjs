@@ -91,6 +91,7 @@ export async function shot4(d) {
   const reply = d.lastAssistant();
   const startFrom = reply.getByTestId("start-from");
   facts.startFrom = await d.textOf(startFrom);
+  facts.replyText = await d.textOf(reply);
   if (facts.startFrom) {
     await d.actor.scrollIntoView(reply.getByTestId("plan"), {
       block: "nearest",

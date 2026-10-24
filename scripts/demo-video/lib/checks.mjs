@@ -112,6 +112,12 @@ export function verdictFor(shot, f = {}) {
       if (!f.lessonName) {
         warnings.push("顶栏没显示本课进度");
       }
+      // 模拟和检查题里 A、B 是锁，T1、T2 是事务；讲解要是把事务叫成 A、B，观众会搞混
+      if (/事务\s*[AB](?![a-z])/i.test(f.replyText ?? "")) {
+        warnings.push(
+          "讲解里把事务叫成了 A/B，和模拟里的锁 A、锁 B 撞名（挑别的 take）"
+        );
+      }
       break;
     case 5:
       need(

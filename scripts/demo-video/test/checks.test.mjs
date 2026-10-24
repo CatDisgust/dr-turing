@@ -104,6 +104,29 @@ describe("每个镜头的判定", () => {
     assert.ok(v.warnings.some((w) => w.includes("考我")));
   });
 
+  test("镜头 4 讲解把事务叫成 A/B（和锁 A、锁 B 撞名）只提醒；T1、T2 不提醒", () => {
+    const base = {
+      checkCard: "x",
+      lessonName: "第 2 课",
+      sim: true,
+      simStatus: "卡死了",
+      startFrom: "从你会的「悲观并发控制（加锁）」讲起",
+      touched: "死锁",
+      warnings: [],
+    };
+    const clash = verdictFor(4, {
+      ...base,
+      replyText: "事务 A：从账户 X 转 100 元到账户 Y",
+    });
+    assert.equal(clash.pass, true);
+    assert.ok(clash.warnings.some((w) => w.includes("撞名")));
+    const fine = verdictFor(4, {
+      ...base,
+      replyText: "事务 T1 先锁住了 A 行，接下来想锁 B 行",
+    });
+    assert.deepEqual(fine.warnings, []);
+  });
+
   test("镜头 5：以为学会了 + 半亮", () => {
     assert.ok(
       verdictFor(5, {
