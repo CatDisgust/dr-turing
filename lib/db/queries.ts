@@ -1330,6 +1330,8 @@ export async function getSpend(userId: string): Promise<number> {
 }
 
 export type InviteUsage = Invite & {
+  // 在几个不同的日子（悉尼时间）发过消息：隔天还回来才算留下来了
+  daysActive: number;
   spentMicroUsd: number;
   chats: number;
   messagesToday: number;
@@ -1354,9 +1356,17 @@ export async function listInvitesWithUsage(): Promise<InviteUsage[]> {
         differenceInHours: 24,
         id: row.userId,
       });
+      const [days] = await db
+        .select({
+          n: sql<number>`count(distinct date((${message.createdAt} at time zone 'UTC') at time zone 'Australia/Sydney'))::int`,
+        })
+        .from(message)
+        .innerJoin(chat, eq(message.chatId, chat.id))
+        .where(and(eq(chat.userId, row.userId), eq(message.role, "user")));
       return {
         ...row,
         chats: chats?.n ?? 0,
+        daysActive: days?.n ?? 0,
         messagesToday: today,
         messagesTotal: total?.n ?? 0,
         spentMicroUsd: await getSpend(row.userId),

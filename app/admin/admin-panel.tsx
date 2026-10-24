@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import type { LearnStats } from "@/lib/learner/trial-stats";
 import { dollars } from "@/lib/pricing";
 import { CoursesSection } from "./courses-section";
 
@@ -22,6 +23,8 @@ type InviteRow = {
   chats: number;
   messagesToday: number;
   messagesTotal: number;
+  daysActive: number;
+  learn: LearnStats;
 };
 
 type Change = {
@@ -172,6 +175,8 @@ export function AdminPanel() {
         </div>
       </section>
 
+      {invites && invites.length > 0 ? <TrialEffect invites={invites} /> : null}
+
       <CoursesSection />
 
       <section className="flex flex-col gap-3">
@@ -206,6 +211,69 @@ export function AdminPanel() {
         </a>
       </section>
     </>
+  );
+}
+
+const rate = (k: number, n: number) =>
+  n > 0 ? `${Math.round((k / n) * 100)}%` : "—";
+
+// 试用效果（2026-10-24 评审建议）：来没来、留没留、学没学会。
+// 最要紧的是最后一列：隔天复习自己做对，才说明真学会了，不是当时看懂
+function TrialEffect({ invites }: { invites: InviteRow[] }) {
+  const came = invites.filter((r) => r.messagesTotal > 0).length;
+  const answered = invites.filter((r) => r.learn.answered > 0).length;
+  const returned = invites.filter((r) => r.daysActive >= 2).length;
+  const reviewed = invites.reduce((n, r) => n + r.learn.reviewed, 0);
+  const passed = invites.reduce((n, r) => n + r.learn.reviewPassed, 0);
+  return (
+    <section className="flex flex-col gap-3" data-testid="trial-effect">
+      <h2 className="font-bold text-[17px]">试用效果</h2>
+      <p className="text-[15px]" data-testid="trial-summary">
+        开了 {invites.length} 个码 · 来聊过 {came} 个 · 答过题 {answered} 个 ·
+        隔天又来 {returned} 个 · 隔天复习自己做对 {passed}/{reviewed}（
+        {rate(passed, reviewed)}）
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-[14px]">
+          <thead className="text-muted-foreground">
+            <tr>
+              <th className="py-2 pr-3 font-normal">名字</th>
+              <th className="py-2 pr-3 font-normal">来过几天</th>
+              <th className="py-2 pr-3 font-normal">答题 对 / 总</th>
+              <th className="py-2 pr-3 font-normal">真会</th>
+              <th className="py-2 pr-3 font-normal">看懂</th>
+              <th className="py-2 pr-3 font-normal">隔天复习 自己对 / 做了</th>
+              <th className="py-2 font-normal">现在该复习</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invites.map((r) => (
+              <tr
+                className={`border-t-2 ${r.disabled ? "text-muted-foreground" : ""}`}
+                data-testid={`effect-${r.code}`}
+                key={r.code}
+              >
+                <td className="py-2 pr-3">{r.name}</td>
+                <td className="py-2 pr-3">{r.daysActive}</td>
+                <td className="py-2 pr-3">
+                  {r.learn.correct} / {r.learn.answered}
+                </td>
+                <td className="py-2 pr-3">{r.learn.full}</td>
+                <td className="py-2 pr-3">{r.learn.half}</td>
+                <td className="py-2 pr-3">
+                  {r.learn.reviewPassed} / {r.learn.reviewed}
+                </td>
+                <td className="py-2">{r.learn.due}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[13px] text-muted-foreground">
+        真会 = 隔一段时间自己做对过；看懂 =
+        当时答对了，还没隔天验证。来过几天按悉尼日期算。
+      </p>
+    </section>
   );
 }
 
