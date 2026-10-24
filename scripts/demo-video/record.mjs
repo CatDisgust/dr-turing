@@ -14,6 +14,7 @@ import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Actor, sleep } from "./lib/actor.mjs";
 import {
+  browserPid,
   createStage,
   launchBrowser,
   measureFrame,
@@ -346,7 +347,7 @@ async function main() {
       if (opts.capture === "window") {
         const win = pickWindow(listWindows(), {
           bounds: stage.bounds,
-          pid: browser.process()?.pid,
+          pid: (await browserPid(browser)) ?? undefined,
         });
         if (win) {
           windowId = win.id;

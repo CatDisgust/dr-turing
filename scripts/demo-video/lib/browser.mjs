@@ -51,6 +51,19 @@ export async function launchBrowser(say) {
   return { browser: await chromium.launch(options), channel: "chromium" };
 }
 
+// Playwright 的 Browser 没有 process()（只有 launchServer 才有）：用 CDP 问浏览器主进程的进程号，
+// 给“在窗口列表里认出录屏用的 Chrome 窗口”用；问不到返回 null，那时只按窗口位置大小认
+export async function browserPid(browser) {
+  try {
+    const session = await browser.newBrowserCDPSession();
+    const { processInfo } = await session.send("SystemInfo.getProcessInfo");
+    await session.detach().catch(() => null);
+    return processInfo.find((p) => p.type === "browser")?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function windowOf(context, page) {
   const cdp = await context.newCDPSession(page);
   const { windowId } = await cdp.send("Browser.getWindowForTarget");
