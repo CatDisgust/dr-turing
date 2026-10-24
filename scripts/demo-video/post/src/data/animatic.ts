@@ -81,10 +81,19 @@ export function story({ question = true } = {}): Shot {
 
   const stamp = v3.end + 0.1;
   const v4 = question ? say("s2", stamp + 0.7 - v3.end) : undefined;
-  const never = Number.POSITIVE_INFINITY;
-  const words = v4 ? word(v4, "分不清", v4.end - 3) - 0.1 : never;
-  const understood = v4 ? word(v4, "看懂了", words + 1) - 0.1 : never;
-  const mastered = v4 ? word(v4, "真会了", understood + 1) + 0.3 : never;
+  // 60 秒版没有 s2：这几步的时刻都不给（JSON 里不能放 Infinity）
+  const ask = v4
+    ? (() => {
+        const words = word(v4, "分不清", v4.end - 3) - 0.1;
+        const understood = word(v4, "看懂了", words + 1) - 0.1;
+        return {
+          bar3: v4.cues[0].start + 0.2,
+          mastered: word(v4, "真会了", understood + 1) + 0.3,
+          understood,
+          words,
+        };
+      })()
+    : undefined;
 
   const sfx: Sfx[] = [
     ...[ok1, ok2, ok3].map((t) => ({ file: "sfx/pop.wav", t, volume: 0.5 })),
@@ -93,10 +102,14 @@ export function story({ question = true } = {}): Shot {
     { file: "sfx/thud.wav", t: bar2, volume: 0.65 },
     { file: "sfx/thud.wav", t: stamp + 0.12, volume: 0.45 },
     { file: "sfx/click.wav", t: stamp + 0.12, volume: 0.5 },
-    ...(v4
+    ...(ask
       ? [
-          { file: "sfx/chime-half.wav", t: understood + 0.15, volume: 0.3 },
-          { file: "sfx/pop.wav", t: mastered + 0.1, volume: 0.4 },
+          {
+            file: "sfx/chime-half.wav",
+            t: ask.understood + 0.15,
+            volume: 0.3,
+          },
+          { file: "sfx/pop.wav", t: ask.mastered + 0.1, volume: 0.4 },
         ]
       : []),
   ];
@@ -109,19 +122,16 @@ export function story({ question = true } = {}): Shot {
       bar1From,
       bar2,
       bar2From,
-      bar3: v4 ? v4.cues[0].start + 0.2 : never,
       chartIn,
-      mastered,
       ok1,
       ok2,
       ok3,
       stamp,
+      ...ask,
       // AI 的回答一下子刷满（讲得“太顺”）
       stream0: 0.1,
       stream1: Math.min(v1.end - 0.3, 1.9),
-      understood,
       what,
-      words,
       yank,
     },
     card: "story",

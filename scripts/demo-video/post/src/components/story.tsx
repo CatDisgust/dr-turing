@@ -14,7 +14,11 @@ import { Star } from "./sky";
 // ② 聊天缩到左边，右边柱状图：用 AI 练习 +48%（以没用过 AI 的同学为 0 线）
 // ③ 音乐停，“然后呢？”；AI 窗口被一把拿走，换成一张空白考卷；考试 −17% 砸下去
 // ④ 盖章「AI 让你以为学会了」；只给提示的 AI 辅导那根柱子贴着 0 线；最后只剩“看懂了？真会了？”
-// 时间点（镜头内秒数）由 data/animatic.ts 的 story() 按配音算好放在 beats 里
+// 时间点（镜头内秒数）由 data/animatic.ts 的 story() 按配音算好放在 beats 里。
+// 60 秒版没有 s2：beats 里就没有 bar3、words、understood、mastered，这几步都不出现
+// （beats 里不能放 Infinity：props 序列化成 JSON 时会变成 null；
+// 这里也不用 Infinity：interpolate 只收有限的数，所以“不出现”就是一个很远的时刻）
+const NEVER = 1e6;
 
 export const AI_TEXT =
   "死锁是指两个或多个事务互相等待对方持有的锁，谁也无法继续执行。它的产生需要同时满足四个条件：互斥、占有并等待、不可抢占、循环等待。数据库通常用等待图来检测死锁，再选一个事务回滚来解除……";
@@ -320,7 +324,7 @@ function Chart({ b, t }: { b: Record<string, number>; t: number }) {
   const axis = ramp(t, b.chartIn ?? 3.6, 0.5);
   const g1 = grow(t, b.bar1From ?? 5, b.bar1 ?? 6);
   const g2 = grow(t, b.bar2From ?? 10, b.bar2 ?? 11);
-  const g3 = ramp(t, b.bar3 ?? 13, 0.4);
+  const g3 = ramp(t, b.bar3 ?? NEVER, 0.4);
   // 只给提示的 AI 辅导那根出来时，前两根暗一点
   const back = 1 - 0.5 * g3;
   return (
@@ -439,7 +443,7 @@ function Stamp({ at }: { at: number }) {
 // 结尾两个大词：念到“分不清”时一起出来（灰的），念到哪个词哪个亮起来、旁边亮一颗星：
 // 看懂了（半亮）、真会了（全亮）
 function Words({ b, t }: { b: Record<string, number>; t: number }) {
-  const shown = ramp(t, b.words ?? 15, 0.4);
+  const shown = ramp(t, b.words ?? NEVER, 0.4);
   const word = (at: number, text: string, level: "half" | "full") => {
     const lit = ramp(t, at, 0.35);
     const color = level === "full" ? C.starFull : C.starHalf;
@@ -473,8 +477,8 @@ function Words({ b, t }: { b: Record<string, number>; t: number }) {
         transform: `translateY(${(1 - shown) * 30}px)`,
       }}
     >
-      {word(b.understood ?? 16, "看懂了？", "half")}
-      {word(b.mastered ?? 17, "真会了？", "full")}
+      {word(b.understood ?? NEVER, "看懂了？", "half")}
+      {word(b.mastered ?? NEVER, "真会了？", "full")}
     </AbsoluteFill>
   );
 }
@@ -483,7 +487,7 @@ export function StoryCard({ beats: b }: { beats: Record<string, number> }) {
   const { t } = useT();
   const chartIn = b.chartIn ?? 3.6;
   const yank = b.yank ?? 8;
-  const words = b.words ?? 15;
+  const words = b.words ?? NEVER;
   // 聊天窗口：先在正中，图表出来时缩到左边；被“拿走”时往左飞出画面
   const shrink = ramp(t, chartIn, 0.6);
   const fly = interpolate(t, [yank, yank + 0.45], [0, 1], clamp) ** 2;
@@ -497,7 +501,7 @@ export function StoryCard({ beats: b }: { beats: Record<string, number> }) {
     interpolate(t, [what, what + 0.15], [0, 1], clamp) *
     interpolate(t, [yank - 0.05, yank + 0.25], [1, 0], clamp);
   // 底下一行小字：先是出处；只给提示的 AI 辅导那根柱子出来后换成那组的结果
-  const note = t >= (b.bar3 ?? 13) ? TUTOR_NOTE : CITE;
+  const note = t >= (b.bar3 ?? NEVER) ? TUTOR_NOTE : CITE;
   // 结尾只留两个大词：前面的东西都淡掉
   const out = 1 - ramp(t, words, 0.5);
   // −17% 砸下去时画面抖一下
