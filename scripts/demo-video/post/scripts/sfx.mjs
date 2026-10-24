@@ -2,6 +2,7 @@
 //   click.wav       轻轻一下鼠标点击
 //   chime-half.wav  「死锁」半亮：两个音，柔和
 //   chime-full.wav  「死锁」全亮：三个音往上走，亮一些、尾音长一些
+//   low.wav         「以为学会了」红条：两个音往下走，低沉、短
 // 也可以单独跑：node scripts/sfx.mjs
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -84,10 +85,10 @@ function bell(out, start, freq, decay, gain) {
   }
 }
 
-export function chime(notes, decay, length) {
+export function chime(notes, decay, length, gap = 0.09) {
   const out = new Float64Array(Math.round(RATE * length));
   for (const [i, f] of notes.entries()) {
-    bell(out, i * 0.09, f, decay, 1 - i * 0.12);
+    bell(out, i * gap, f, decay, 1 - i * 0.12);
   }
   // 尾巴最后 0.15 秒淡出
   const fade = Math.round(RATE * 0.15);
@@ -109,7 +110,12 @@ export function makeSfx(dir) {
     join(dir, "chime-full.wav"),
     wav(chime([659.3, 830.6, 987.8, 1318.5], 1.1, 2.2))
   );
-  return ["click.wav", "chime-half.wav", "chime-full.wav"];
+  // 红条：E4 落到 C#4，低一些、短一些
+  writeFileSync(
+    join(dir, "low.wav"),
+    wav(chime([329.6, 277.2], 0.45, 1.2, 0.16))
+  );
+  return ["click.wav", "chime-half.wav", "chime-full.wav", "low.wav"];
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

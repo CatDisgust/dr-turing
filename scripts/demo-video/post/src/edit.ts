@@ -100,6 +100,8 @@ export type Music = {
   volume: number;
   // 说话时再压低多少分贝
   duckDb: number;
+  // 抬起层：和 file 拍子对齐，从成片第 at 秒起淡入到结尾（同样随说话压低）
+  lift?: { file: string; at: number };
 };
 
 export type Edit = {

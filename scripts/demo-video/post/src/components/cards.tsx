@@ -6,6 +6,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import { QR, SITE_URL } from "../data/qr";
 import type { CardKind } from "../edit";
 import { C, FONT } from "../theme";
 import { Sky, Star } from "./sky";
@@ -237,6 +238,30 @@ function PilotCard({ beats }: { beats: Record<string, number> }) {
   );
 }
 
+// 二维码：白底圆角小方块，留 2 格静区，扫得出来
+function QrCode({ size }: { size: number }) {
+  const n = QR.length;
+  const quiet = 2;
+  return (
+    <svg
+      height={size}
+      role="img"
+      style={{ background: "#fff", borderRadius: 10 }}
+      viewBox={`${-quiet} ${-quiet} ${n + quiet * 2} ${n + quiet * 2}`}
+      width={size}
+    >
+      <title>{SITE_URL}</title>
+      <path
+        d={QR.flatMap((row, y) =>
+          [...row].flatMap((c, x) => (c === "1" ? [`M${x} ${y}h1v1h-1z`] : []))
+        ).join("")}
+        fill="#0b0f1a"
+        shapeRendering="crispEdges"
+      />
+    </svg>
+  );
+}
+
 function EndCard({ beats }: { beats: Record<string, number> }) {
   return (
     <AbsoluteFill style={center}>
@@ -260,10 +285,13 @@ function EndCard({ beats }: { beats: Record<string, number> }) {
           <span>Dr.Turing，让你真的学会。</span>
         </div>
       </Appear>
-      <div style={{ bottom: 64, position: "absolute" }}>
+      <div style={{ bottom: 56, position: "absolute" }}>
         <Appear at={beats.url ?? 4}>
-          <div style={{ color: C.textOnSkySoft, fontSize: 32 }}>
-            dr-turing-81so.vercel.app
+          <div style={{ alignItems: "center", display: "flex", gap: 28 }}>
+            <QrCode size={190} />
+            <div style={{ color: C.textOnSkySoft, fontSize: 32 }}>
+              {SITE_URL.replace("https://", "")}
+            </div>
           </div>
         </Appear>
       </div>

@@ -8,6 +8,7 @@ import {
   outputTime,
   type Sfx,
   type Shot,
+  shotDuration,
   type Viewport,
 } from "../edit";
 import { ending, gap, NEXT_DAY, PAGE, PRESET, pain } from "./animatic";
@@ -85,13 +86,18 @@ export function fitClips(clips: Clip[], need: number): Clip[] {
 // （停留标记是鼠标到星旁边的时刻，镜头还要再推约 0.35 秒才停稳）
 const CLICK_RATE = 2;
 const CHIME_DELAY = 0.35;
+// 「以为学会了」那条红条：一声低沉的下行两音
 const CHIMES: [RegExp, string][] = [
   [/「死锁」全亮/, "sfx/chime-full.wav"],
   [/「死锁」半亮/, "sfx/chime-half.wav"],
+  [/以为学会了/, "sfx/low.wav"],
 ];
 
-// 背景音乐（scripts/music.mjs 合成）：没人说话时约 -24 LUFS，说话时再压低 9 分贝（配音 -16 LUFS）
-const MUSIC = { duckDb: 9, file: "music/bed.wav", volume: 0.35 };
+// 背景音乐（scripts/music.mjs 合成，bed.wav 约 -19 LUFS）：没人说话时约 -24 LUFS，
+// 说话时再压低 12 分贝，比配音（-16 LUFS）低 20 分贝；「死锁」全亮起叠上抬起层 lift.wav
+const MUSIC = { duckDb: 12, file: "music/bed.wav", volume: 0.57 };
+const LIFT = "music/lift.wav";
+const CHIME_FULL = "sfx/chime-full.wav";
 
 export function shotSfx(draft: DraftShot, clips: Clip[]): Sfx[] {
   const laid = layoutClips(clips);
@@ -149,14 +155,39 @@ export function takeEdit(take: Take): Edit | null {
     .filter((d) => d.shot >= 3 && d.shot <= 7)
     .toSorted((a, b) => a.shot - b.shot)
     .map((d) => screenShot(take, d));
+  const all = [pain, gap, ...shots, ...ending];
   return {
     fps: FPS,
     height: 1080,
-    music: take.music ? MUSIC : undefined,
+    music: take.music
+      ? { ...MUSIC, lift: { at: liftAt(all), file: LIFT } }
+      : undefined,
     narrationDurations,
-    shots: [pain, gap, ...shots, ...ending],
+    shots: all,
     width: 1920,
   };
+}
+
+// 抬起层从「死锁」全亮那一声开始；没有这一声就从片尾字卡开始
+function liftAt(shots: Shot[]): number {
+  let t = 0;
+  for (const s of shots) {
+    const full =
+      s.kind === "screen"
+        ? s.sfx?.find((x) => x.file === CHIME_FULL)
+        : undefined;
+    if (full) {
+      return t + full.t;
+    }
+    t += shotDuration(s);
+  }
+  return (
+    t -
+    shots
+      .filter((s) => s.kind === "card")
+      .slice(-2)
+      .reduce((n, s) => n + shotDuration(s), 0)
+  );
 }
 
 export const currentTake = TAKE as Take;

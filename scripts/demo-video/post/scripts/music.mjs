@@ -1,6 +1,6 @@
-// 背景音乐：自己合成，不用外部素材（没有版权问题）。use-take.mjs 调用，写 public/music/bed.wav：
-//   一段安静的铺底（E 大调，80 拍），软垫和弦 + 低音 + 稀疏的钢片琴分解和弦，加混响；
-//   开头 12 秒只有软垫，之后进分解和弦。比成片长一些，成片结尾由 video.tsx MusicTrack 淡出，说话时自动压低
+// 背景音乐：自己合成，不用外部素材（没有版权问题）。use-take.mjs 调用，写 public/music/bed.wav、lift.wav：
+//   温暖的铺底（E 大调，100 拍），软垫和弦 + 低音 + 稀疏的钢片琴分解和弦，加混响；开头 12 秒只有软垫。
+//   lift 是对齐的抬起层，「死锁」全亮时淡入到结尾。比成片长一些，成片结尾由 video.tsx MusicTrack 淡出，说话时自动压低
 // 也可以单独跑：node scripts/music.mjs [秒数]
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -8,9 +8,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const RATE = 48_000;
-const BEAT = 0.75; // 80 拍
+const BEAT = 0.6; // 100 拍
 const BAR = BEAT * 4;
-const CHORD = BAR * 2; // 每个和弦两小节，6 秒
+const CHORD = BAR * 2; // 每个和弦两小节，4.8 秒
 
 const hz = (midi) => 440 * 2 ** ((midi - 69) / 12);
 
@@ -185,40 +185,14 @@ function reverb(input, spread) {
   return out;
 }
 
-export function bed(seconds = 200) {
-  const n = Math.round(seconds * RATE);
-  const padL = new Float32Array(n);
-  const padR = new Float32Array(n);
-  const keyL = new Float32Array(n);
-  const keyR = new Float32Array(n);
-  const low = new Float32Array(n);
-  const rand = random();
-  const chords = FORM.flat();
-  for (let c = 0; c * CHORD < seconds; c += 1) {
-    const chord = CHORDS[chords[c % chords.length]];
-    const start = c * CHORD;
-    for (const m of chord.pad) {
-      pad(padL, padR, start, CHORD + 2.4, m, 0.05);
-    }
-    bass(low, start, CHORD + 1.2, chord.bass, 0.05);
-    // 开头 12 秒只有铺底
-    if (start < 12) {
-      continue;
-    }
-    for (const [i, hit] of ARP.entries()) {
-      if (!hit) {
-        continue;
-      }
-      const t = start + i * (BEAT / 2) + (rand() - 0.5) * 0.012;
-      const [k, v] = hit;
-      const g = v * (0.85 + rand() * 0.15) * 0.26;
-      pluck(keyL, keyR, t, chord.arp[k], g, 0.35 + rand() * 0.3);
-    }
-  }
+// 一层的合成：软垫、低音、钢片琴进混响，再混成立体声
+function mix({ padL, padR, keyL, keyR, low }, n, seconds) {
   lowpass(padL, 1400);
   lowpass(padR, 1400);
-  const send = (i) => padL[i] * 0.5 + padR[i] * 0.5 + (keyL[i] + keyR[i]) * 0.9;
-  const mono = Float32Array.from({ length: n }, (_, i) => send(i));
+  const mono = Float32Array.from(
+    { length: n },
+    (_, i) => (padL[i] + padR[i]) * 0.5 + (keyL[i] + keyR[i]) * 0.9
+  );
   const wetL = reverb(mono, 0);
   const wetR = reverb(mono, 23);
   const L = new Float32Array(n);
@@ -229,11 +203,63 @@ export function bed(seconds = 200) {
     L[i] = (padL[i] + keyL[i] * 0.8 + low[i] + wetL[i] * 0.55) * fade;
     R[i] = (padR[i] + keyR[i] * 0.8 + low[i] + wetR[i] * 0.55) * fade;
   }
+  return [L, R];
+}
+
+const layer = (n) => ({
+  keyL: new Float32Array(n),
+  keyR: new Float32Array(n),
+  low: new Float32Array(n),
+  padL: new Float32Array(n),
+  padR: new Float32Array(n),
+});
+
+// 两层，拍子和和弦完全对齐：
+//   bed  整段铺底：软垫 + 低音 + 分解和弦（开头 12 秒只有软垫）
+//   lift 抬起层：高八度的分解和弦、每拍一下轻低音、软垫加一个高音；成片在「死锁」全亮时淡入，一直到结尾
+// 两层用同一个增益，渲染时 lift 音量给 1 就是设计好的比例
+export function bed(seconds = 200) {
+  const n = Math.round(seconds * RATE);
+  const base = layer(n);
+  const up = layer(n);
+  const rand = random();
+  const chords = FORM.flat();
+  for (let c = 0; c * CHORD < seconds; c += 1) {
+    const chord = CHORDS[chords[c % chords.length]];
+    const start = c * CHORD;
+    for (const m of chord.pad) {
+      pad(base.padL, base.padR, start, CHORD + 2.4, m, 0.05);
+    }
+    pad(up.padL, up.padR, start, CHORD + 2.4, chord.pad.at(-1) + 12, 0.035);
+    bass(base.low, start, CHORD + 1.2, chord.bass, 0.05);
+    for (let b = 0; b < 8; b += 1) {
+      bass(up.low, start + b * BEAT, 0.45, chord.bass + 12, 0.05);
+    }
+    for (const [i, hit] of ARP.entries()) {
+      const t = start + i * (BEAT / 2) + (rand() - 0.5) * 0.012;
+      if (hit && start >= 12) {
+        const [k, v] = hit;
+        const g = v * (0.85 + rand() * 0.15) * 0.26;
+        pluck(base.keyL, base.keyR, t, chord.arp[k], g, 0.35 + rand() * 0.3);
+      }
+      // 抬起层把休止的位置补上，高八度
+      if (!hit) {
+        const k = (i * 3) % chord.arp.length;
+        pluck(up.keyL, up.keyR, t, chord.arp[k] + 12, 0.15, 0.2 + rand() * 0.6);
+      }
+    }
+  }
+  const outBed = mix(base, n, seconds);
+  const outLift = mix(up, n, seconds);
   const peak = Math.max(
-    ...[L, R].map((x) => x.reduce((m, s) => Math.max(m, Math.abs(s)), 0))
+    ...[...outBed, ...outLift].map((x) =>
+      x.reduce((m, s) => Math.max(m, Math.abs(s)), 0)
+    )
   );
-  const g = 0.7 / (peak || 1);
-  return [L.map((s) => s * g), R.map((s) => s * g)];
+  // 两层叠起来也不削波
+  const g = 0.7 / (peak * 1.6 || 1);
+  const scale = ([L, R]) => [L.map((x) => x * g), R.map((x) => x * g)];
+  return { bed: scale(outBed), lift: scale(outLift) };
 }
 
 function wav([L, R]) {
@@ -266,13 +292,17 @@ function wav([L, R]) {
 
 export function makeMusic(dir, seconds = 200) {
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "bed.wav"), wav(bed(seconds)));
-  return "bed.wav";
+  const layers = bed(seconds);
+  writeFileSync(join(dir, "bed.wav"), wav(layers.bed));
+  writeFileSync(join(dir, "lift.wav"), wav(layers.lift));
+  return ["bed.wav", "lift.wav"];
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const dir = join(root, "public/music");
   const seconds = Number(process.argv[2] ?? 200);
-  console.log(`写入 ${join(dir, makeMusic(dir, seconds))}（${seconds} 秒）`);
+  console.log(
+    `写入 ${dir}：${makeMusic(dir, seconds).join("、")}（${seconds} 秒）`
+  );
 }

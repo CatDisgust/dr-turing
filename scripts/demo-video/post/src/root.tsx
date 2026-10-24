@@ -1,4 +1,5 @@
-import { Composition } from "remotion";
+import { Composition, Still } from "remotion";
+import { Cover } from "./cover";
 import { animatic } from "./data/animatic";
 import { engineTest } from "./data/engine-test";
 import { fromTake } from "./data/take";
@@ -23,6 +24,13 @@ export function Root() {
       {comp("Animatic", animatic)}
       {comp("EngineTest", engineTest)}
       {fromTake ? comp("Take", fromTake) : null}
+      <Still
+        component={Cover}
+        defaultProps={{ edit: fromTake ?? animatic }}
+        height={1080}
+        id="Cover"
+        width={1920}
+      />
     </>
   );
 }
