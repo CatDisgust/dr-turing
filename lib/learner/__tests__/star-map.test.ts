@@ -139,6 +139,42 @@ describe("我的星图", () => {
     ]);
   });
 
+  it("两门课撞号时先到先得，不把前一门课的星盖掉", () => {
+    const other: CourseGraph = {
+      ...course,
+      courseId: "old101",
+      edges: [],
+      name: "旧测试课",
+      points: [point("kp_lock", "进程")],
+    };
+    const otherState = applyEvidence(
+      emptyLearnerState("stu", "old101"),
+      other,
+      "kp_lock",
+      {
+        at: "2026-10-22T00:00:00Z",
+        correct: true,
+        d: 1,
+        hinted: false,
+        id: "a2",
+        producedStep: true,
+        provisional: false,
+        quote: "进程就是跑起来的程序",
+        sessionId: "s4",
+        source: "slow",
+        turnId: "t2",
+        type: "check_correct",
+      }
+    );
+    const map = buildStarMap({
+      courses: [course, other],
+      personal: personal(),
+      states: [stateWithLock(), otherState],
+    });
+    expect(map.stars.kp_lock.name).toBe("锁");
+    expect(map.graph.points.filter((p) => p.id === "kp_lock")).toHaveLength(1);
+  });
+
   it("合并候选：别的课外概念都列；课内知识点只列名字像的；课内星没有候选", () => {
     const map = buildStarMap({
       courses: [course],
