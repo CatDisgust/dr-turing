@@ -6,7 +6,8 @@ export const isTestEnvironment = Boolean(
     process.env.CI_PLAYWRIGHT
 );
 
-// 首页示例问题，取自 COMP5348 前三课
+// 首页示例问题，取自 COMP5348 前三课；只在新对话选了这门课时显示（2026-10-24 选课）
+export const SUGGESTIONS_COURSE = "comp5348";
 export const suggestions = [
   "两个人同时往一个账户里存钱，为什么最后会少一笔？",
   "乐观并发控制和悲观并发控制有什么区别？",

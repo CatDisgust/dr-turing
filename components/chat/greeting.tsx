@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
+import { CoursePicker } from "./course-picker";
 
-export const Greeting = () => (
+export const Greeting = ({ canPick = false }: { canPick?: boolean }) => (
   <div className="flex flex-col items-center px-4" key="overview">
     <motion.div
       animate={{ opacity: 1, y: 0 }}
@@ -18,5 +19,6 @@ export const Greeting = () => (
     >
       说说卡在哪儿，我们从你已经懂的地方接上。
     </motion.div>
+    {canPick ? <CoursePicker /> : null}
   </div>
 );

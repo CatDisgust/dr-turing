@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FreeGraph } from "@/components/graph/free-graph";
 import { LearnerGraph } from "@/components/graph/learner-graph";
 import {
   AlertDialog,
@@ -18,7 +19,7 @@ import {
   useArtifact,
   useArtifactSelector,
 } from "@/hooks/use-artifact";
-import { COURSE_ID, LEARNER_REFRESH_EVENT } from "@/lib/constants";
+import { LEARNER_REFRESH_EVENT } from "@/lib/constants";
 import type { Attachment, ChatMessage, CheckCard } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Artifact } from "./artifact";
@@ -48,6 +49,8 @@ export function ChatShell() {
     visibilityType,
     isReadonly,
     limitReached,
+    courseId,
+    courseReady,
     isLoading,
     votes,
     showCreditCardAlert,
@@ -82,7 +85,7 @@ export function ChatShell() {
       return;
     }
     fetch("/api/session/catch-up", {
-      body: JSON.stringify({ courseId: COURSE_ID, exceptChatId: chatId }),
+      body: JSON.stringify({ exceptChatId: chatId }),
       headers: { "content-type": "application/json" },
       method: "POST",
     })
@@ -287,15 +290,24 @@ export function ChatShell() {
         {!isArtifactVisible && (
           <SideDrawer
             graph={
-              <LearnerGraph
-                key={chatId}
-                onStartLearning={
-                  isReadonly || status === "submitted" || status === "streaming"
-                    ? undefined
-                    : handleStartLearning
-                }
-                sessionId={chatId}
-              />
+              courseReady ? (
+                courseId ? (
+                  <LearnerGraph
+                    courseId={courseId}
+                    key={`${chatId}:${courseId}`}
+                    onStartLearning={
+                      isReadonly ||
+                      status === "submitted" ||
+                      status === "streaming"
+                        ? undefined
+                        : handleStartLearning
+                    }
+                    sessionId={chatId}
+                  />
+                ) : (
+                  <FreeGraph />
+                )
+              ) : null
             }
             material={<MaterialPane />}
             showMaterial={!isReadonly}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useActiveChat } from "@/hooks/use-active-chat";
 import { useLearnerState } from "@/hooks/use-learner-state";
-import { COURSE_ID, NODE_TOUCHED_EVENT } from "@/lib/constants";
+import { NODE_TOUCHED_EVENT } from "@/lib/constants";
 import { nodeLight } from "@/lib/learner/light";
 import type { CourseGraph } from "@/lib/types";
 
@@ -10,16 +11,21 @@ import type { CourseGraph } from "@/lib/types";
 // 哪一课：这次对话正在讲的点所在的课（刚归类到的点，否则是最后一条导师回答的目标点）。
 // 这次对话还没碰到课里的点（新对话、问课外的东西）就什么都不显示，不拿别的对话的课来充数
 export function LessonProgress({ targetId }: { targetId?: string }) {
+  const { courseId } = useActiveChat();
   const [graph, setGraph] = useState<CourseGraph | null>(null);
-  const state = useLearnerState();
+  const state = useLearnerState(courseId);
   const [touchedId, setTouchedId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/course/${COURSE_ID}`)
+    if (!courseId) {
+      setGraph(null);
+      return;
+    }
+    fetch(`/api/course/${courseId}`)
       .then((response) => response.json())
       .then((body) => setGraph(body.graph ?? null))
       .catch(() => setGraph(null));
-  }, []);
+  }, [courseId]);
 
   useEffect(() => {
     const onTouched = (event: Event) =>

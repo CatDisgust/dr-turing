@@ -3,7 +3,8 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import { motion } from "framer-motion";
 import { memo, useCallback } from "react";
-import { suggestions } from "@/lib/constants";
+import { useActiveChat } from "@/hooks/use-active-chat";
+import { SUGGESTIONS_COURSE, suggestions } from "@/lib/constants";
 import type { ChatMessage } from "@/lib/types";
 import { Suggestion } from "../ai-elements/suggestion";
 import type { VisibilityType } from "./visibility-selector";
@@ -15,7 +16,8 @@ type SuggestedActionsProps = {
 };
 
 function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
-  const suggestedActions = suggestions;
+  const { courseId } = useActiveChat();
+  const suggestedActions = courseId === SUGGESTIONS_COURSE ? suggestions : [];
   const handleSuggestionClick = useCallback(
     (suggestion: string) => {
       window.history.pushState(

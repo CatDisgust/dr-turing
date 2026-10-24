@@ -42,6 +42,8 @@ export const user = pgTable("User", {
 export type User = InferSelectModel<typeof user>;
 
 export const chat = pgTable("Chat", {
+  // 这次对话学哪门课；空 = 不选课，随便问（2026-10-24 选课）。开对话时定下，之后不变
+  courseId: text("courseId"),
   createdAt: timestamp("createdAt").notNull(),
   id: uuid("id").primaryKey().notNull().defaultRandom(),
   report: jsonb("report").$type<SessionReport>(),

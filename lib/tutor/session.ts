@@ -4,6 +4,7 @@ import {
   getCourseById,
   getEventsByStudent,
   getLearnerState,
+  getLearnerStatesByStudent,
   getMessagesByChatId,
   getOtherStudentModels,
   getPlanMessagesByStudent,
@@ -33,8 +34,8 @@ import { reviewedAttempts } from "@/lib/learner/predict";
 import { armOutcomes, populationPrior } from "@/lib/learner/preference";
 import { applyReview, sessionReport } from "@/lib/learner/review";
 import { rebuildStudentModel } from "@/lib/learner/student-model";
-import { learnRateOf, relearn } from "@/lib/learner/update";
-import type { CourseGraph, SessionReport } from "@/lib/types";
+import { emptyLearnerState, learnRateOf, relearn } from "@/lib/learner/update";
+import type { ConceptChange, CourseGraph, SessionReport } from "@/lib/types";
 import { identify } from "./identify";
 import { writeNotes } from "./notes";
 import { partText } from "./parts";
@@ -54,10 +55,37 @@ function textOf(parts: unknown): string {
   return parts.map(partText).join("").trim();
 }
 
+// 没有课内证据可复核时的空报告
+function emptyReport(sessionId: string, now: string): SessionReport {
+  return {
+    confirmed: 0,
+    leaks: 0,
+    oGain: [],
+    ownSteps: 0,
+    retracted: [],
+    revealRate: null,
+    reviewedAt: now,
+    selfProducedRate: null,
+    sessionId,
+    steps: 0,
+  };
+}
+
+async function loadTranscript(chatId: string): Promise<TranscriptLine[]> {
+  return (await getMessagesByChatId({ id: chatId }))
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      id: m.id,
+      role: m.role as TranscriptLine["role"],
+      text: textOf(m.parts),
+    }))
+    .filter((line) => line.text !== "");
+}
+
+// 学哪门课以对话开头选的为准（Chat.courseId）；空 = 不选课
 export async function endSession(input: {
   chatId: string;
   studentId: string;
-  courseId: string;
 }): Promise<SessionReport | null> {
   const chat = await getChatById({ id: input.chatId });
   if (!chat || chat.userId !== input.studentId) {
@@ -66,37 +94,24 @@ export async function endSession(input: {
   if (chat.report) {
     return chat.report;
   }
-  const course = await getCourseById({ id: input.courseId });
-  const before = await getLearnerState(input);
   const now = new Date().toISOString();
+  if (!chat.courseId) {
+    return await endFreeSession(input, now);
+  }
+  const { courseId } = chat;
+  const course = await getCourseById({ id: courseId });
+  const before = await getLearnerState({
+    courseId,
+    studentId: input.studentId,
+  });
   if (!(course && before)) {
     // 这门课还没有图谱或学生还没有状态：没有证据可复核，只记下这次会话结束了
-    const report: SessionReport = {
-      confirmed: 0,
-      leaks: 0,
-      oGain: [],
-      ownSteps: 0,
-      retracted: [],
-      revealRate: null,
-      reviewedAt: now,
-      selfProducedRate: null,
-      sessionId: input.chatId,
-      steps: 0,
-    };
+    const report = emptyReport(input.chatId, now);
     await saveChatReport({ id: input.chatId, report });
     return report;
   }
 
-  const transcript: TranscriptLine[] = (
-    await getMessagesByChatId({ id: input.chatId })
-  )
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({
-      id: m.id,
-      role: m.role as TranscriptLine["role"],
-      text: textOf(m.parts),
-    }))
-    .filter((line) => line.text !== "");
+  const transcript = await loadTranscript(input.chatId);
 
   const { graph: personal } = await loadPersonal(input.studentId);
   const { concepts, leaks, verdicts } = await reviewSession({
@@ -108,14 +123,15 @@ export async function endSession(input: {
   });
 
   // 复核要跑一阵子，这期间学生可能在别的对话里又答了题：落状态前重新读一次
-  const fresh = (await getLearnerState(input)) ?? before;
+  const fresh =
+    (await getLearnerState({ courseId, studentId: input.studentId })) ?? before;
   const applied = applyReview(fresh, course.graph, input.chatId, verdicts, now);
   let { state } = applied;
   await saveLearnerState({ state });
   // 撤销、改判也是原始记录：Transaction 只追加不改，复核结论记成事件
   await saveEvents(
     applied.changes.map((c) => ({
-      courseId: input.courseId,
+      courseId,
       kpId: c.kpId,
       messageId: c.turnId,
       payload: {
@@ -149,11 +165,32 @@ export async function endSession(input: {
   } catch (error) {
     console.error("rebuild student model failed:", error);
   }
-  // 个人图谱：先认人再记账。落库前重新读一次日志，认人失败就全部按复核给的编号或新概念记
+  const changed = await recordConcepts(input, concepts, [course.graph]);
+  const report = sessionReport({
+    confirmed: applied.confirmed,
+    graph: course.graph,
+    leaks,
+    now,
+    retracted: applied.retracted,
+    sessionId: input.chatId,
+    state,
+  });
+  report.concepts = changed;
+  report.revised = applied.revised;
+  await saveChatReport({ id: input.chatId, report });
+  return report;
+}
+
+// 个人图谱：先认人再记账。落库前重新读一次日志，认人失败就全部按复核给的编号或新概念记
+async function recordConcepts(
+  input: { chatId: string; studentId: string },
+  concepts: ConceptChange[],
+  graphs: CourseGraph[]
+) {
   const { events: freshEvents, graph: freshPersonal } = await loadPersonal(
     input.studentId
   );
-  const pool = identityPool(freshPersonal, [course.graph]);
+  const pool = identityPool(freshPersonal, graphs);
   const questions = identityQuestions(concepts, pool);
   let answers = new Map<number, string>();
   try {
@@ -172,25 +209,49 @@ export async function endSession(input: {
       nextConceptSeq(freshEvents)
     )
   );
-  const changed = nextPersonal.log
-    .slice(freshPersonal.log.length)
-    .map((entry) => ({
-      name:
-        nextPersonal.concepts.find((c) => c.id === entry.conceptId)?.name ??
-        entry.conceptId,
-      op: entry.op,
-    }));
-  const report = sessionReport({
-    confirmed: applied.confirmed,
-    graph: course.graph,
-    leaks,
-    now,
-    retracted: applied.retracted,
-    sessionId: input.chatId,
-    state,
-  });
-  report.concepts = changed;
-  report.revised = applied.revised;
+  return nextPersonal.log.slice(freshPersonal.log.length).map((entry) => ({
+    name:
+      nextPersonal.concepts.find((c) => c.id === entry.conceptId)?.name ??
+      entry.conceptId,
+    op: entry.op,
+  }));
+}
+
+// 不选课的对话（2026-10-24）：没有课内状态要复核，只把聊到的概念记进我的星图。
+// 认人时用他学过的课，聊到课里的点就挂到那颗星上
+const FREE_GRAPH: CourseGraph = {
+  builtAt: "",
+  courseId: "",
+  edges: [],
+  lessons: [],
+  name: "（这次没选课）",
+  points: [],
+};
+
+async function endFreeSession(
+  input: { chatId: string; studentId: string },
+  now: string
+): Promise<SessionReport> {
+  const report = emptyReport(input.chatId, now);
+  const transcript = await loadTranscript(input.chatId);
+  if (transcript.length > 0) {
+    const [{ graph: personal }, states] = await Promise.all([
+      loadPersonal(input.studentId),
+      getLearnerStatesByStudent({ studentId: input.studentId }),
+    ]);
+    const { concepts } = await reviewSession({
+      graph: FREE_GRAPH,
+      personal,
+      sessionId: input.chatId,
+      state: emptyLearnerState(input.studentId, ""),
+      transcript,
+    });
+    const rows = await Promise.all(
+      states.map((s) => getCourseById({ id: s.courseId }))
+    );
+    const graphs = rows.flatMap((row) => (row ? [row.graph] : []));
+    report.concepts = await recordConcepts(input, concepts, graphs);
+  }
   await saveChatReport({ id: input.chatId, report });
   return report;
 }
@@ -265,7 +326,6 @@ async function refreshStudentModel(input: {
 // 开新对话时补跑：之前没点“结束本次学习”的会话，挨个复核。失败的下次再补
 export async function catchUpSessions(input: {
   studentId: string;
-  courseId: string;
   exceptChatId: string;
 }) {
   const stale = await getUnreviewedChats({
@@ -277,7 +337,7 @@ export async function catchUpSessions(input: {
     try {
       // 一个一个来：每次复核都要读写同一份学生状态
       // biome-ignore lint/performance/noAwaitInLoops: 顺序执行是故意的
-      await endSession({ ...input, chatId: chat.id });
+      await endSession({ chatId: chat.id, studentId: input.studentId });
     } catch (error) {
       console.error(`catch-up review of ${chat.id} failed:`, error);
     }
