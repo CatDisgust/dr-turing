@@ -16,6 +16,15 @@ export type PickedQuestion = Pick<
 const hoursBetween = (from: string, to: string) =>
   (Date.parse(to) - Date.parse(from)) / 3_600_000;
 
+// 该复习了：上次独立做对已经隔了一阵（至少 REVIEW_MIN_GAP_HOURS），还没全亮
+export function reviewDue(node: NodeState | undefined, now: string): boolean {
+  return Boolean(
+    node?.lastIndependentAt &&
+      node.O < FULL_O &&
+      hoursBetween(node.lastIndependentAt, now) >= REVIEW_MIN_GAP_HOURS
+  );
+}
+
 // 题都来自建图时给每个点写的检查题：第一道当检查题，第二道当变式题。
 // 上次独立做对已经隔了一阵、还没全亮，就拿第一道当复习题
 export function pickQuestion(
@@ -29,11 +38,7 @@ export function pickQuestion(
     return null;
   }
   const check = { question: first, questionId: `${point.id}:q0` };
-  if (
-    node?.lastIndependentAt &&
-    node.O < FULL_O &&
-    hoursBetween(node.lastIndependentAt, now) >= REVIEW_MIN_GAP_HOURS
-  ) {
+  if (reviewDue(node, now)) {
     return { ...check, kind: "review" };
   }
   const today = node?.attempts.filter((a) => a.sessionId === sessionId) ?? [];

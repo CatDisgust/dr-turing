@@ -27,27 +27,31 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
 async function SidebarShell({ children }: { children: React.ReactNode }) {
   const [session, cookieStore] = await Promise.all([auth(), cookies()]);
-  const isCollapsed = cookieStore.get("sidebar_state")?.value !== "true";
+  // 侧边栏放着「我的课」：试用同学第一次来默认展开；管理员和演示（录视频）照旧默认收起
+  const saved = cookieStore.get("sidebar_state")?.value;
+  const open =
+    saved === undefined ? session.role === "trial" : saved === "true";
 
   return (
-    <SidebarProvider defaultOpen={!isCollapsed}>
-      <AppSidebar user={session?.user} />
-      <SidebarInset className="min-w-0">
-        <Toaster
-          position="top-center"
-          theme="system"
-          toastOptions={{
-            className:
-              "!bg-card !text-foreground !border-border/50 !shadow-[var(--shadow-float)]",
-          }}
-        />
-        <Suspense fallback={<div className="flex h-dvh" />}>
-          <ActiveChatProvider>
+    <SidebarProvider defaultOpen={open}>
+      {/* 侧边栏要知道这次对话学哪门课、点课名开新对话，所以和对话共用一份状态 */}
+      <Suspense fallback={<div className="flex h-dvh w-full bg-sidebar" />}>
+        <ActiveChatProvider>
+          <AppSidebar user={session?.user} />
+          <SidebarInset className="min-w-0">
+            <Toaster
+              position="top-center"
+              theme="system"
+              toastOptions={{
+                className:
+                  "!bg-card !text-foreground !border-border/50 !shadow-[var(--shadow-float)]",
+              }}
+            />
             <ChatShell />
-          </ActiveChatProvider>
-        </Suspense>
-        {children}
-      </SidebarInset>
+            {children}
+          </SidebarInset>
+        </ActiveChatProvider>
+      </Suspense>
     </SidebarProvider>
   );
 }

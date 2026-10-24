@@ -1,17 +1,30 @@
 "use client";
 
+import { useEffect } from "react";
 import useSWR from "swr";
+import { LEARNER_REFRESH_EVENT } from "@/lib/constants";
 import { fetcher } from "@/lib/utils";
 
-export type CourseOption = { id: string; name: string; lessons: number };
+// due = 这门课现在有几个点该复习了
+export type CourseOption = {
+  id: string;
+  name: string;
+  lessons: number;
+  due: number;
+};
 
-// 选课列表（2026-10-24）。所有对话共用一份，不随对话重新取
+// 选课列表（2026-10-24）。所有对话共用一份；学完一次（星图刷新）再重新取，复习数跟着变
 export function useCourses() {
-  const { data } = useSWR<{ courses: CourseOption[] }>(
+  const { data, mutate } = useSWR<{ courses: CourseOption[] }>(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/courses`,
     fetcher,
     { revalidateOnFocus: false }
   );
+  useEffect(() => {
+    const refresh = () => mutate();
+    window.addEventListener(LEARNER_REFRESH_EVENT, refresh);
+    return () => window.removeEventListener(LEARNER_REFRESH_EVENT, refresh);
+  }, [mutate]);
   return data?.courses ?? null;
 }
 

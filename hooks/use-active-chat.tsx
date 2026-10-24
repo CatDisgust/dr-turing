@@ -237,18 +237,26 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     }
   }, [status, setWaitingStatus]);
 
-  const loadedChatIds = useRef(new Set<string>());
-
-  if (isNewChat && !loadedChatIds.current.has(newChatIdRef.current)) {
-    loadedChatIds.current.add(newChatIdRef.current);
+  // 在这里新开、还没离开过的对话：消息就在 useChat 里，别拿库里的盖掉正在长出来的回复。
+  // 离开以后再回来，就照库里的重新载入（原来一直跳过，切回刚聊过的对话会是空白）
+  const bornHere = useRef(new Set<string>());
+  if (isNewChat) {
+    bornHere.current.add(newChatIdRef.current);
   }
+  const statusRef = useRef(status);
+  statusRef.current = status;
 
   useEffect(() => {
-    if (loadedChatIds.current.has(chatId)) {
+    if (bornHere.current.has(chatId)) {
+      return;
+    }
+    if (
+      statusRef.current === "streaming" ||
+      statusRef.current === "submitted"
+    ) {
       return;
     }
     if (chatData?.messages) {
-      loadedChatIds.current.add(chatId);
       setMessages(chatData.messages);
     }
   }, [chatId, chatData?.messages, setMessages]);
@@ -256,6 +264,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const prevChatIdRef = useRef(chatId);
   useEffect(() => {
     if (prevChatIdRef.current !== chatId) {
+      bornHere.current.delete(prevChatIdRef.current);
       prevChatIdRef.current = chatId;
       if (isNewChat) {
         setMessages([]);

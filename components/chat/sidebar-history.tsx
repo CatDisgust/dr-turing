@@ -1,9 +1,9 @@
 "use client";
 
-import { isToday, isYesterday, subMonths, subWeeks } from "date-fns";
 import { motion } from "framer-motion";
+import { ChevronRightIcon, PlusIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import useSWRInfinite from "swr/infinite";
 import {
@@ -23,59 +23,23 @@ import {
   SidebarMenu,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useActiveChat } from "@/hooks/use-active-chat";
+import { type CourseOption, useCourses } from "@/hooks/use-courses";
 import type { Chat } from "@/lib/db/schema";
 import type { User } from "@/lib/session";
 import { fetcher } from "@/lib/utils";
 import { LoaderIcon } from "./icons";
 import { ChatItem } from "./sidebar-history-item";
 
-type GroupedChats = {
-  today: Chat[];
-  yesterday: Chat[];
-  lastWeek: Chat[];
-  lastMonth: Chat[];
-  older: Chat[];
-};
-
 export type ChatHistory = {
   chats: Chat[];
   hasMore: boolean;
 };
 
-const PAGE_SIZE = 20;
-
-const groupChatsByDate = (chats: Chat[]): GroupedChats => {
-  const now = new Date();
-  const oneWeekAgo = subWeeks(now, 1);
-  const oneMonthAgo = subMonths(now, 1);
-
-  return chats.reduce(
-    (groups, chat) => {
-      const chatDate = new Date(chat.createdAt);
-
-      if (isToday(chatDate)) {
-        groups.today.push(chat);
-      } else if (isYesterday(chatDate)) {
-        groups.yesterday.push(chat);
-      } else if (chatDate > oneWeekAgo) {
-        groups.lastWeek.push(chat);
-      } else if (chatDate > oneMonthAgo) {
-        groups.lastMonth.push(chat);
-      } else {
-        groups.older.push(chat);
-      }
-
-      return groups;
-    },
-    {
-      lastMonth: [],
-      lastWeek: [],
-      older: [],
-      today: [],
-      yesterday: [],
-    } as GroupedChats
-  );
-};
+// 一页取 50 个（接口上限），对话按课分组，翻页前每门课的对话基本都在第一页里
+const PAGE_SIZE = 50;
+// 每门课先显示最近几个对话，多的点「再显示」
+const SHOWN = 5;
 
 export function getChatHistoryPaginationKey(
   pageIndex: number,
@@ -98,10 +62,14 @@ export function getChatHistoryPaginationKey(
   return `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/history?ending_before=${firstChatFromPage.id}&limit=${PAGE_SIZE}`;
 }
 
+// 侧边栏「我的课」+「随便问」（2026-10-24，课程当文件夹）：点课名在这门课开新对话，
+// 展开看这门课的旧对话；对话的课一开始就定了，换课就是去另一门课开新对话
 export function SidebarHistory({ user }: { user: User | undefined }) {
   const { setOpenMobile } = useSidebar();
   const pathname = usePathname();
   const id = pathname?.startsWith("/chat/") ? pathname.split("/")[2] : null;
+  const courses = useCourses();
+  const { courseId, courseReady, pickCourse } = useActiveChat();
 
   const {
     data: paginatedChatHistories,
@@ -119,12 +87,40 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
+  // 展开了哪几门课；正在学的那门自动展开
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    if (courseReady && courseId) {
+      setOpen((current) =>
+        current.has(courseId) ? current : new Set(current).add(courseId)
+      );
+    }
+  }, [courseId, courseReady]);
+  const toggle = useCallback((course: string) => {
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(course)) {
+        next.delete(course);
+      } else {
+        next.add(course);
+      }
+      return next;
+    });
+  }, []);
+
+  const start = useCallback(
+    (course: string | null) => {
+      pickCourse(course);
+      setOpenMobile(false);
+      if (pathname !== "/") {
+        router.push("/");
+      }
+    },
+    [pathname, pickCourse, router, setOpenMobile]
+  );
+
   const hasReachedEnd = paginatedChatHistories
     ? paginatedChatHistories.some((page) => page.hasMore === false)
-    : false;
-
-  const hasEmptyChatHistory = paginatedChatHistories
-    ? paginatedChatHistories.every((page) => page.chats.length === 0)
     : false;
 
   const handleDelete = useCallback(() => {
@@ -151,7 +147,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
       { method: "DELETE" }
     );
 
-    toast.success("Chat deleted");
+    toast.success("对话已删掉");
   }, [deleteId, mutate, pathname, router]);
 
   const handleShowDeleteDialog = useCallback((chatId: string) => {
@@ -166,167 +162,59 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
   }, [hasReachedEnd, isValidating, setSize]);
 
   if (!user) {
-    return (
-      <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-        <SidebarGroupContent>
-          <div className="flex w-full flex-row items-center justify-center gap-2 px-2 text-[13px] text-sidebar-foreground/60">
-            Login to save and revisit previous chats!
-          </div>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    );
+    return null;
   }
 
-  if (isLoading) {
-    return (
-      <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-        <SidebarGroupLabel className="text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
-          History
-        </SidebarGroupLabel>
-        <SidebarGroupContent>
-          <div className="flex flex-col gap-0.5 px-1">
-            {[44, 32, 28, 64, 52].map((item) => (
-              <div
-                className="flex h-8 items-center gap-2 rounded-lg px-2"
-                key={item}
-              >
-                <div
-                  className="h-3 max-w-(--skeleton-width) flex-1 animate-pulse rounded-md bg-sidebar-foreground/[0.06]"
-                  style={
-                    {
-                      "--skeleton-width": `${item}%`,
-                    } as React.CSSProperties
-                  }
-                />
-              </div>
-            ))}
-          </div>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    );
-  }
-
-  if (hasEmptyChatHistory) {
-    return (
-      <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-        <SidebarGroupLabel className="text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
-          History
-        </SidebarGroupLabel>
-        <SidebarGroupContent>
-          <div className="flex w-full flex-row items-center justify-center gap-2 px-2 text-[13px] text-sidebar-foreground/60">
-            Your conversations will appear here once you start chatting!
-          </div>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    );
-  }
+  const chats = (paginatedChatHistories ?? []).flatMap((page) => page.chats);
+  const known = new Set((courses ?? []).map((c) => c.id));
+  // 课被删了的老对话也放进「随便问」，别丢
+  const free = chats.filter((c) => !(c.courseId && known.has(c.courseId)));
+  const onCourse = courseReady ? courseId : undefined;
 
   return (
     <>
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-        <SidebarGroupLabel className="text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
-          History
+        <SidebarGroupLabel className="text-[12px] font-semibold text-sidebar-foreground/70">
+          我的课
         </SidebarGroupLabel>
         <SidebarGroupContent>
-          <SidebarMenu>
-            {paginatedChatHistories
-              ? (() => {
-                  const chatsFromHistory = paginatedChatHistories.flatMap(
-                    (paginatedChatHistory) => paginatedChatHistory.chats
-                  );
+          <SidebarMenu data-testid="sidebar-courses">
+            {courses === null ? (
+              <div className="h-8 animate-pulse rounded-md bg-sidebar-foreground/[0.06]" />
+            ) : null}
+            {courses?.map((course) => (
+              <CourseFolder
+                activeChat={id}
+                chats={chats.filter((c) => c.courseId === course.id)}
+                course={course}
+                current={onCourse === course.id}
+                key={course.id}
+                loading={isLoading}
+                onDelete={handleShowDeleteDialog}
+                onStart={start}
+                onToggle={toggle}
+                open={open.has(course.id)}
+              />
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
 
-                  const groupedChats = groupChatsByDate(chatsFromHistory);
-
-                  return (
-                    <div className="flex flex-col gap-4">
-                      {groupedChats.today.length > 0 && (
-                        <div>
-                          <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
-                            Today
-                          </div>
-                          {groupedChats.today.map((chat) => (
-                            <ChatItem
-                              chat={chat}
-                              isActive={chat.id === id}
-                              key={chat.id}
-                              onDelete={handleShowDeleteDialog}
-                              setOpenMobile={setOpenMobile}
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      {groupedChats.yesterday.length > 0 && (
-                        <div>
-                          <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
-                            Yesterday
-                          </div>
-                          {groupedChats.yesterday.map((chat) => (
-                            <ChatItem
-                              chat={chat}
-                              isActive={chat.id === id}
-                              key={chat.id}
-                              onDelete={handleShowDeleteDialog}
-                              setOpenMobile={setOpenMobile}
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      {groupedChats.lastWeek.length > 0 && (
-                        <div>
-                          <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
-                            Last 7 days
-                          </div>
-                          {groupedChats.lastWeek.map((chat) => (
-                            <ChatItem
-                              chat={chat}
-                              isActive={chat.id === id}
-                              key={chat.id}
-                              onDelete={handleShowDeleteDialog}
-                              setOpenMobile={setOpenMobile}
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      {groupedChats.lastMonth.length > 0 && (
-                        <div>
-                          <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
-                            Last 30 days
-                          </div>
-                          {groupedChats.lastMonth.map((chat) => (
-                            <ChatItem
-                              chat={chat}
-                              isActive={chat.id === id}
-                              key={chat.id}
-                              onDelete={handleShowDeleteDialog}
-                              setOpenMobile={setOpenMobile}
-                            />
-                          ))}
-                        </div>
-                      )}
-
-                      {groupedChats.older.length > 0 && (
-                        <div>
-                          <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
-                            Older
-                          </div>
-                          {groupedChats.older.map((chat) => (
-                            <ChatItem
-                              chat={chat}
-                              isActive={chat.id === id}
-                              key={chat.id}
-                              onDelete={handleShowDeleteDialog}
-                              setOpenMobile={setOpenMobile}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()
-              : null}
+      <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+        <div className="flex items-center justify-between">
+          <SidebarGroupLabel className="text-[12px] font-semibold text-sidebar-foreground/70">
+            随便问（不选课）
+          </SidebarGroupLabel>
+          <NewFreeChat current={onCourse === null} onStart={start} />
+        </div>
+        <SidebarGroupContent>
+          <SidebarMenu data-testid="sidebar-free">
+            <ChatList
+              activeChat={id}
+              chats={free}
+              empty={isLoading ? "" : "还没有。和课无关的问题点 ＋ 来问。"}
+              onDelete={handleShowDeleteDialog}
+            />
           </SidebarMenu>
 
           <motion.div onViewportEnter={handleViewportEnter} />
@@ -336,7 +224,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
               <div className="animate-spin">
                 <LoaderIcon />
               </div>
-              <div className="text-[11px]">Loading...</div>
+              <div className="text-[11px]">加载中…</div>
             </div>
           )}
         </SidebarGroupContent>
@@ -356,6 +244,158 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </>
+  );
+}
+
+function CourseFolder({
+  loading,
+  course,
+  chats,
+  open,
+  current,
+  activeChat,
+  onToggle,
+  onStart,
+  onDelete,
+}: {
+  loading: boolean;
+  course: CourseOption;
+  chats: Chat[];
+  open: boolean;
+  current: boolean;
+  activeChat: string | null;
+  onToggle: (id: string) => void;
+  onStart: (id: string | null) => void;
+  onDelete: (chatId: string) => void;
+}) {
+  const toggle = useCallback(() => onToggle(course.id), [onToggle, course.id]);
+  const start = useCallback(() => onStart(course.id), [onStart, course.id]);
+  return (
+    <li className="flex flex-col" data-testid={`folder-${course.id}`}>
+      <div
+        className={`group/folder flex items-center gap-1 rounded-lg pr-1 ${current ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/50"}`}
+      >
+        <button
+          aria-expanded={open}
+          aria-label={open ? "收起这门课的对话" : "展开这门课的对话"}
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground"
+          onClick={toggle}
+          type="button"
+        >
+          <ChevronRightIcon
+            className={`size-3.5 transition-transform ${open ? "rotate-90" : ""}`}
+          />
+        </button>
+        <button
+          className={`min-w-0 flex-1 truncate py-1.5 text-left text-[13px] ${current ? "font-semibold text-sidebar-foreground" : "text-sidebar-foreground/80"}`}
+          data-testid={`course-${course.id}`}
+          onClick={start}
+          title={`在「${course.name}」开一个新对话`}
+          type="button"
+        >
+          {course.name}
+        </button>
+        {course.due > 0 ? (
+          <span
+            className="shrink-0 rounded-full bg-[var(--duo-blue-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--duo-blue-ink)]"
+            data-testid={`due-${course.id}`}
+            title="这些点隔了一阵还没全亮，回来自己答一遍就会更亮"
+          >
+            待复习 {course.due}
+          </span>
+        ) : null}
+        <PlusIcon
+          aria-hidden
+          className="size-3.5 shrink-0 text-sidebar-foreground/40 opacity-0 group-hover/folder:opacity-100"
+        />
+      </div>
+      {open ? (
+        <ul className="ml-4 border-l border-sidebar-border pl-1">
+          <ChatList
+            activeChat={activeChat}
+            chats={chats}
+            empty={loading ? "" : "还没有对话，点课名开始。"}
+            onDelete={onDelete}
+          />
+        </ul>
+      ) : null}
+    </li>
+  );
+}
+
+function NewFreeChat({
+  current,
+  onStart,
+}: {
+  current: boolean;
+  onStart: (id: string | null) => void;
+}) {
+  const start = useCallback(() => onStart(null), [onStart]);
+  return (
+    <button
+      aria-label="不选课，开一个新对话"
+      aria-pressed={current}
+      className={`mr-2 flex size-6 items-center justify-center rounded-md ${current ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/50 hover:text-sidebar-foreground"}`}
+      data-testid="course-none"
+      onClick={start}
+      title="不选课，开一个新对话"
+      type="button"
+    >
+      <PlusIcon className="size-4" />
+    </button>
+  );
+}
+
+function ChatList({
+  chats,
+  activeChat,
+  empty,
+  onDelete,
+}: {
+  chats: Chat[];
+  activeChat: string | null;
+  empty: string;
+  onDelete: (chatId: string) => void;
+}) {
+  const { setOpenMobile } = useSidebar();
+  const [all, setAll] = useState(false);
+  const showAll = useCallback(() => setAll(true), []);
+  if (chats.length === 0) {
+    return empty ? (
+      <li className="px-2 py-1 text-[12px] text-sidebar-foreground/45">
+        {empty}
+      </li>
+    ) : null;
+  }
+  // 当前打开的对话就算排在后面也要露出来
+  const activeIndex = chats.findIndex((c) => c.id === activeChat);
+  const shown =
+    all || chats.length <= SHOWN || activeIndex >= SHOWN
+      ? chats
+      : chats.slice(0, SHOWN);
+  return (
+    <>
+      {shown.map((chat) => (
+        <ChatItem
+          chat={chat}
+          isActive={chat.id === activeChat}
+          key={chat.id}
+          onDelete={onDelete}
+          setOpenMobile={setOpenMobile}
+        />
+      ))}
+      {shown.length < chats.length ? (
+        <li>
+          <button
+            className="px-2 py-1 text-[12px] text-sidebar-foreground/50 hover:text-sidebar-foreground"
+            onClick={showAll}
+            type="button"
+          >
+            再显示 {chats.length - shown.length} 个
+          </button>
+        </li>
+      ) : null}
     </>
   );
 }
