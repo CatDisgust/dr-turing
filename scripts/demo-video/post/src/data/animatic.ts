@@ -11,32 +11,6 @@ export const PRESET = "演示账号 · 学习记录为预置";
 export const LATER = "模拟一段时间后（预置数据）";
 export const PAGE = { height: 720, scale: 1, width: 1280, x: 0, y: 0 };
 
-// 字卡念完只留一小口气就切（之前两张字卡之间空了 1.7 秒）
-const CARD_LEAD = 0.3;
-const CARD_TAIL = 0.45;
-
-export function card(
-  id: string,
-  kind: "pain" | "gap",
-  narrationStart = CARD_LEAD
-): Shot {
-  const s = LINES.find((x) => x.id === id);
-  if (!s) {
-    throw new Error(id);
-  }
-  const { cues, end, narration } = narrate(id, s.narration, narrationStart);
-  return {
-    card: kind,
-    cues,
-    // 有配音就跟着配音走；没有就至少占分镜给的时长
-    duration: narration ? end + CARD_TAIL : Math.max(s.slot, end + 0.8),
-    id,
-    kind: "card",
-    narration,
-    title: s.title,
-  };
-}
-
 function screen(
   id: string,
   opts: { intro?: boolean; badge?: string } = {}
@@ -66,25 +40,6 @@ function screen(
   };
 }
 
-// 两个数字一开场就出来；配音念到“练习”“拿走（拿掉）”时各跳一下
-export function painCard(id: string): Shot {
-  const shot = card(id, "pain");
-  if (shot.kind === "card") {
-    const beats: Record<string, number> = {};
-    for (const [key, re] of [
-      ["practiceSaid", /练习/],
-      ["examSaid", /拿[走掉]/],
-    ] as const) {
-      const cue = shot.cues.find((c) => re.test(c.text));
-      if (cue) {
-        beats[key] = cue.start;
-      }
-    }
-    shot.beats = beats;
-  }
-  return shot;
-}
-
 // 开场动画（components/story.tsx）：三段配音 s1a、s1b、s1c 加 s2 都在一张字卡里，
 // 中间按配音算好各个动作的时刻。s1b 念完先停一下音乐出“然后呢？”，再把 AI 拿走。
 // 60 秒版不要 s2（question: false），盖完章就切
@@ -112,14 +67,16 @@ export function story({ question = true } = {}): Shot {
 
   const v2 = say("s1b", 0.3);
   const chartIn = v2.cues[0].start - 0.2;
-  // 柱子落到头的时刻对着念到数字；从念到“用 AI 练习”“考试”开始长
-  const bar1 = word(v2, "48%", chartIn + 3);
+  // 柱子落到头的时刻对着念到数字（按字数估的时刻比实际念到早 0.2–0.3 秒，往后挪一点）；
+  // 从念到“用 AI 练习”“考试”开始长
+  const LATE = 0.25;
+  const bar1 = word(v2, "48%", chartIn + 3) + LATE;
   const bar1From = Math.min(bar1 - 0.8, word(v2, "用 AI 练习", bar1 - 1.5));
 
   const what = v2.end + 0.2;
   const yank = what + 1;
   const v3 = say("s1c", yank + 0.45 - v2.end);
-  const bar2 = word(v3, "17%", yank + 3);
+  const bar2 = word(v3, "17%", yank + 3) + LATE + 0.05;
   const bar2From = Math.min(bar2 - 0.8, word(v3, "考试", bar2 - 1.5));
 
   const stamp = v3.end + 0.1;
@@ -127,7 +84,7 @@ export function story({ question = true } = {}): Shot {
   const never = Number.POSITIVE_INFINITY;
   const words = v4 ? word(v4, "分不清", v4.end - 3) - 0.1 : never;
   const understood = v4 ? word(v4, "看懂了", words + 1) - 0.1 : never;
-  const mastered = v4 ? word(v4, "真会了", understood + 1) - 0.1 : never;
+  const mastered = v4 ? word(v4, "真会了", understood + 1) + 0.3 : never;
 
   const sfx: Sfx[] = [
     ...[ok1, ok2, ok3].map((t) => ({ file: "sfx/pop.wav", t, volume: 0.5 })),

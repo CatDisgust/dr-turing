@@ -104,14 +104,6 @@ export const SCRIPT: ShotScript[] = [
 // 星图（看懂半亮、真会全亮）、很确定却答错、过一段时间不看提示答对全亮。收尾沿用 s8 的配音
 export const SHORT_SCRIPT: ShotScript[] = [
   {
-    id: "m1",
-    narration:
-      "AI 讲得太顺了，学生以为自己会了。实验里，用 AI 练习成绩高了 48%；拿掉 AI，考试反而低了 17%。",
-    picture: "同镜头 1 字卡：练习 +48%，考试 −17%，角落标注出处",
-    slot: 10,
-    title: "痛点",
-  },
-  {
     id: "m2",
     narration:
       "Dr.Turing 把看懂和真会分开算：看懂了，星星半亮；真会了，才全亮。",

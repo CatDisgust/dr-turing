@@ -77,7 +77,7 @@ export type ScreenShot = {
   sfx?: Sfx[];
 };
 
-export type CardKind = "pain" | "gap" | "pilot" | "end" | "story";
+export type CardKind = "story" | "pilot" | "end";
 
 export type CardShot = {
   kind: "card";

@@ -288,13 +288,8 @@ export function caught(take: Take, d5: DraftShot): Shot {
     badges: [{ text: PRESET }],
     camera: [
       { dur: 0, t: barKey.t, x: barKey.x, y: barKey.y, zoom: barKey.zoom },
-      {
-        dur: 0,
-        t: after.from,
-        x: starKey.x,
-        y: starKey.y,
-        zoom: starKey.zoom,
-      },
+      // 只看得见星图抽屉，左边不露半截对话
+      { ...starMapView(starKey.y), dur: 0, t: after.from },
     ],
     clicks: [],
     clips,
