@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   alignEvents,
+  blankSpans,
   countShowinfo,
   editHints,
   findFlash,
@@ -63,6 +64,40 @@ describe("闪白定位", () => {
 
   test("没有闪白返回 null", () => {
     assert.equal(findFlash(lumaSeries(300, [])), null);
+  });
+});
+
+describe("空白帧", () => {
+  test("解析别的指标（最暗像素 YMIN）", () => {
+    const text = [
+      "frame:0    pts:0       pts_time:0",
+      "lavfi.signalstats.YMIN=16",
+      "frame:1    pts:1001    pts_time:0.0166833",
+      "lavfi.signalstats.YMIN=235",
+    ].join("\n");
+    assert.deepEqual(
+      parseSignalstats(text, "YMIN").map((s) => s.y),
+      [16, 235]
+    );
+    assert.deepEqual(parseSignalstats(text), []);
+  });
+
+  test("连着的白帧并成一段，到下一张不白的为止；结尾还白就补一帧", () => {
+    const at = (frame, y) => ({ frame, t: frame / 10, y });
+    const samples = [
+      at(0, 16),
+      at(1, 235),
+      at(2, 235),
+      at(3, 199),
+      at(4, 16),
+      at(5, 250),
+      at(6, 250),
+    ];
+    assert.deepEqual(blankSpans(samples), [
+      { frames: 2, from: 0.1, to: 0.3 },
+      { frames: 2, from: 0.5, to: 0.7 },
+    ]);
+    assert.deepEqual(blankSpans([at(0, 16), at(1, 20)]), []);
   });
 });
 

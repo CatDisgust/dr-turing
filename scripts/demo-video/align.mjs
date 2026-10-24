@@ -1,12 +1,13 @@
 // 把一条录制的日志对到素材时间上：node align.mjs out/<take>
 // 用 ffmpeg 量开头、结尾各 40 秒每帧的亮度（只看右边星图那一条，深色底上闪白最明显），找到两次闪白，
-// 和 log.json 里记的闪白时间一对，写 out/<take>/aligned.json：光标关键帧、点击、镜头标记（素材秒）。
+// 和 log.json 里记的闪白时间一对，写 out/<take>/aligned.json：光标关键帧、点击、镜头标记、空白帧（素材秒）。
 // 需要 ffmpeg / ffprobe（brew install ffmpeg）
 
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
+  blankSpans,
   countShowinfo,
   editHints,
   findFlashes,
@@ -57,6 +58,24 @@ function lumas(video, from = 0) {
     ...s,
     t: s.t + from,
   }));
+}
+
+// 整条素材里的空白帧（Chrome 重载页面、录制中截图时会把窗口画白几帧），剪辑单据此剪掉。
+// 四边各让 5%（窗口描边不算）；最近邻缩小不把字糊浅，量每帧最暗的像素
+function blanks(video) {
+  const out = run("ffmpeg", [
+    "-hide_banner",
+    "-nostats",
+    "-i",
+    video,
+    "-an",
+    "-vf",
+    "crop=iw*0.9:ih*0.9:iw*0.05:ih*0.05,scale=640:-2:flags=neighbor,signalstats,metadata=print:key=lavfi.signalstats.YMIN:file=-",
+    "-f",
+    "null",
+    "-",
+  ]);
+  return blankSpans(parseSignalstats(out, "YMIN"));
 }
 
 // 测帧率那段里不重复的帧数 ÷ 时长 = OBS 实际录到的帧率（制作方案要求超过 50）
@@ -137,6 +156,12 @@ function main() {
   const ui = log.events
     .filter((e) => e.type === "ui" || e.type === "stream" || e.type === "app")
     .map((e) => ({ ...e, v: Math.round(clock(e.t) * 1000) / 1000 }));
+  const blank = blanks(video);
+  console.log(
+    blank.length > 0
+      ? `空白帧 ${blank.length} 段（共 ${blank.reduce((n, b) => n + b.frames, 0)} 帧）：${blank.map((b) => `${b.from.toFixed(2)}s×${b.frames}`).join("、")}，剪辑单会剪掉`
+      : "没有空白帧"
+  );
   const probe = probeWindow(log.events, clock);
   if (probe) {
     probe.uniqueFps = uniqueFps(video, probe);
@@ -146,7 +171,7 @@ function main() {
   }
   writeFileSync(
     join(dir, "aligned.json"),
-    `${JSON.stringify({ anchors, duration, probe, rate, video: file, viewport: log.footageViewport, ...hints, ui }, null, 1)}\n`
+    `${JSON.stringify({ anchors, blanks: blank, duration, probe, rate, video: file, viewport: log.footageViewport, ...hints, ui }, null, 1)}\n`
   );
   console.log(
     `对齐好了：开头闪白在素材 ${anchors[0].videoSec.toFixed(3)}s${anchors[1] ? `，结尾 ${anchors[1].videoSec.toFixed(3)}s，时钟比 ${rate.toFixed(6)}` : ""}；写入 ${join(dir, "aligned.json")}`

@@ -348,6 +348,36 @@ describe("剪辑单草稿", () => {
     assert.deepEqual(kinds(spans, "cut"), [["cut", 10.25, 10.7]]);
   });
 
+  test("空白帧前后各多剪 0.02 秒，镜头外的不算", () => {
+    const window = { end: 100, start: 10 };
+    const aligned = {
+      blanks: [
+        { frames: 3, from: 5, to: 5.05 },
+        { frames: 3, from: 40, to: 40.05 },
+        { frames: 1, from: 60, to: 60.017 },
+      ],
+    };
+    const cuts = kinds(editSpans(aligned, window), "cut").map(([k, a, b]) => [
+      k,
+      Number(a.toFixed(3)),
+      Number(b.toFixed(3)),
+    ]);
+    assert.deepEqual(cuts, [
+      ["cut", 4.98, 5.07],
+      ["cut", 39.98, 40.07],
+      ["cut", 59.98, 60.037],
+    ]);
+    // 剪完的片段不碰空白帧（没动静的部分照常加速）
+    const clips = draftClips(window, editSpans(aligned, window));
+    for (const b of aligned.blanks) {
+      assert.ok(!clips.some((c) => c.from < b.to && c.to > b.from));
+    }
+    assert.deepEqual(
+      [39.98, 59.98].map((t) => clips.some((c) => c.to === t)),
+      [true, true]
+    );
+  });
+
   test("收紧的镜头：停留按比例缩短，全亮不缩；整轮快放压得更短", () => {
     const window = { end: 60, start: 0 };
     const marks = [hold(10, "答对了", 2000), hold(20, "「死锁」全亮", 3000)];

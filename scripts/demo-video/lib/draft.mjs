@@ -14,6 +14,7 @@
 //  停留（hold：鼠标指着一处让观众看）原速，但最多留 2 秒（题目 2.4 秒、出处 3 秒、镜头 3 的星图全留），多的剪掉
 //  第二次及以后的“结束本次学习”：小结镜头 6 已经演过，从小结弹出前到关掉小结整段剪掉
 //  打开“我的星图”后星星还没画出来的那一下（空黑板）剪掉
+//  空白帧（整个窗口一片白，align.mjs 量出来的）剪掉，前后各多剪一点
 const MAX_IDLE = 0.8;
 const MIN_RATE = 2;
 const STREAM_MAX = 2;
@@ -57,6 +58,8 @@ const frameChat = (f) =>
     : f;
 // 镜头移动用多久（成片秒），加速段里按倍数换成素材秒，不会一闪而过
 const CAMERA_DUR = 0.8;
+// 空白帧前后各多剪多少秒（60 帧/秒时略多于一帧，取整后也盖得住）
+const BLANK_PAD = 0.02;
 
 const round3 = (x) => Math.round(x * 1000) / 1000;
 
@@ -204,7 +207,7 @@ function idleSpans(aligned, window) {
 
 // 剪辑要处理的时段（kind 见文件开头）。另外：
 //  keep   停留：原速（不被当成 idle），超过上限的部分 cut
-//  cut    剪掉：镜头 7 开头模拟第二天、重开页面；第二次结束学习的小结；停留超长的尾巴
+//  cut    剪掉：镜头 7 开头模拟第二天、重开页面；第二次结束学习的小结；停留超长的尾巴；空白帧
 export function editSpans(aligned, window, o = {}) {
   const ui = aligned.ui ?? [];
   const marks = aligned.marks ?? [];
@@ -302,6 +305,13 @@ export function editSpans(aligned, window, o = {}) {
         });
       }
     }
+  }
+  for (const b of aligned.blanks ?? []) {
+    spans.push({
+      end: b.to + BLANK_PAD,
+      kind: "cut",
+      start: b.from - BLANK_PAD,
+    });
   }
   spans.push(...idleSpans(aligned, window));
   return spans;
