@@ -78,7 +78,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
       method: "DELETE",
     });
 
-    toast.success("All chats deleted");
+    toast.success("全部对话已删掉");
   }, [mutate, router]);
 
   return (
@@ -91,7 +91,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                 <SidebarMenuButton
                   asChild
                   className="size-8 !px-0 items-center justify-center group-data-[collapsible=icon]:group-hover/logo:opacity-0"
-                  tooltip="Chatbot"
+                  tooltip="Dr.Turing"
                 >
                   <Link href="/" onClick={closeMobile}>
                     <MessageSquareIcon className="size-4 text-sidebar-foreground/50" />
@@ -107,10 +107,13 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                     </SidebarMenuButton>
                   </TooltipTrigger>
                   <TooltipContent className="hidden md:block" side="right">
-                    Open sidebar
+                    展开侧边栏
                   </TooltipContent>
                 </Tooltip>
               </div>
+              <span className="flex-1 pl-1 font-bold text-[15px] text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+                Dr.Turing
+              </span>
               <div className="group-data-[collapsible=icon]:hidden">
                 <SidebarTrigger className="text-sidebar-foreground/60 transition-colors duration-150 hover:text-sidebar-foreground" />
               </div>
@@ -125,30 +128,28 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                   <SidebarMenuButton
                     className="h-8 rounded-lg border border-sidebar-border text-[13px] text-sidebar-foreground/70 transition-colors duration-150 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                     onClick={handleNewChat}
-                    tooltip="New Chat"
+                    tooltip="新对话（同一门课）"
                   >
                     <PenSquareIcon className="size-4" />
-                    <span className="font-medium">New chat</span>
+                    <span className="font-medium">新对话</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-                {user ? (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      className="rounded-lg text-sidebar-foreground/40 transition-colors duration-150 hover:bg-destructive/10 hover:text-destructive"
-                      onClick={handleShowDeleteAllDialog}
-                      tooltip="Delete All Chats"
-                    >
-                      <TrashIcon className="size-4" />
-                      <span className="text-[13px]">Delete all</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ) : null}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
           <SidebarHistory user={user} />
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border pt-2 pb-3">
+          {user ? (
+            <button
+              className="flex items-center gap-1.5 px-2 py-1 text-[12px] text-sidebar-foreground/40 transition-colors hover:text-destructive group-data-[collapsible=icon]:hidden"
+              onClick={handleShowDeleteAllDialog}
+              type="button"
+            >
+              <TrashIcon className="size-3.5" />
+              删掉全部对话
+            </button>
+          ) : null}
           {user ? <SidebarUserNav user={user} /> : null}
         </SidebarFooter>
         <SidebarRail />
