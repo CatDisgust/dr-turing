@@ -12,6 +12,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { StudentDump } from "../demo/snapshot";
 import type {
   Attempt,
   ConceptEventPayload,
@@ -246,4 +247,12 @@ export const studentModel = pgTable("StudentModel", {
   data: jsonb("data").$type<StudentModelData>().notNull(),
   studentId: uuid("studentId").primaryKey().notNull(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+// 产品演示学生的存档（录演示视频用）：每个镜头录完存一份，重录某一镜时读回前一镜的存档
+export const demoSnapshot = pgTable("DemoSnapshot", {
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  data: jsonb("data").$type<StudentDump>().notNull(),
+  name: text("name").primaryKey().notNull(),
+  studentId: uuid("studentId").notNull(),
 });
