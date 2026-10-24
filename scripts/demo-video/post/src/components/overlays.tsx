@@ -69,30 +69,30 @@ export function Badges({ badges, speed }: { badges: Badge[]; speed: number }) {
     fontSize: 26,
     padding: "6px 18px",
   } as const;
+  // 右上角一列：先是预置说明，加速时下面再加一个（左上角是网站的 Logo，不能挡）
   return (
-    <>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-          left: 28,
-          position: "absolute",
-          top: 24,
-        }}
-      >
-        {shown.map((b) => (
-          <div key={b.text} style={pill}>
-            {b.text}
-          </div>
-        ))}
-      </div>
+    <div
+      style={{
+        alignItems: "flex-end",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        position: "absolute",
+        right: 28,
+        top: 24,
+      }}
+    >
+      {shown.map((b) => (
+        <div key={b.text} style={pill}>
+          {b.text}
+        </div>
+      ))}
       {speed > 1 ? (
-        <div style={{ ...pill, position: "absolute", right: 28, top: 24 }}>
-          已加速 ×{Math.round(speed)}
+        <div style={pill}>
+          已加速 ×{speed >= 2 ? Math.round(speed) : speed.toFixed(1)}
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
 

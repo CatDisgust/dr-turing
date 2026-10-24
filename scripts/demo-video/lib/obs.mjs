@@ -8,7 +8,7 @@ import {
   cropFromBox,
   plausibleBox,
 } from "./geometry.mjs";
-import { decodePng, findMarkerBox } from "./png.mjs";
+import { decodePng, findMarkerBox, looksBlank, lumaStats } from "./png.mjs";
 
 // 用 obs-websocket（v5，OBS 30 起自带）控制 OBS：专用配置文件 DrTuring（不动你自己的配置）、
 // 画布 2560×1440 @ 60fps、高质量录制、场景 DrTuring 里一个“macOS 屏幕采集”源抓录屏用的 Chrome 窗口，
@@ -25,6 +25,8 @@ export class ObsSetupError extends Error {}
 
 const HELP = {
   auth: "OBS 密码不对：脚本会自动读 OBS 的 WebSocket 配置；读不到时在 OBS「工具 → WebSocket 服务器设置」点“显示连接信息”，把密码设成环境变量 OBS_PASSWORD 再跑。",
+  blank:
+    "OBS 录到的是一整片空白：采集源没有画面。在 OBS 里双击来源“DrTuring Chrome”点“重新启动采集”，或者完全退出 OBS（⌘Q）再打开，然后重跑。",
   connect:
     "连不上 OBS：打开 OBS，菜单「工具 → WebSocket 服务器设置」，勾上“启用 WebSocket 服务器”，端口 4455，点确定。OBS 要一直开着。",
   kind: "OBS 里没有“macOS 屏幕采集”（screen_capture）：需要 OBS 30 以上、macOS 13 以上。请升级 OBS。",
@@ -32,25 +34,66 @@ const HELP = {
     "OBS 抓不到画面：打开「系统设置 → 隐私与安全性 → 屏幕与系统录音」，打开 OBS 的开关，然后完全退出 OBS（⌘Q）再打开，重跑脚本。如果已经开着，在 OBS 里双击来源“DrTuring Chrome”，点一次“重新启动采集”。",
 };
 
-// 没设 OBS_PASSWORD 时，从 OBS 自己的 WebSocket 配置里读密码（macOS），这样密码不用经过任何人手。
-// 读不到（没装 OBS、没开过 WebSocket、没开身份验证）返回 null
+// 没设 OBS_PASSWORD 时，从 OBS 自己的设置里读 WebSocket 密码（macOS），这样密码不用经过任何人手。
+// 新版 OBS 存在 global.ini 的 [OBSWebSocket] 段，旧版存在 plugin_config/obs-websocket/config.json。
+// 读不到或没开身份验证返回 null
+const OBS_DIR = join(homedir(), "Library/Application Support/obs-studio");
+
+function readText(file) {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+// 纯函数：从 global.ini 文本里取 [OBSWebSocket] 段的密码
+export function passwordFromIni(text) {
+  let inSection = false;
+  let auth = true;
+  let password = null;
+  for (const raw of (text ?? "").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith("[")) {
+      inSection = line === "[OBSWebSocket]";
+      continue;
+    }
+    const eq = line.indexOf("=");
+    if (!inSection || eq < 0) {
+      continue;
+    }
+    const key = line.slice(0, eq);
+    const value = line.slice(eq + 1);
+    if (key === "AuthRequired") {
+      auth = value !== "false";
+    } else if (key === "ServerPassword") {
+      password = value;
+    }
+  }
+  return auth && password ? password : null;
+}
+
+function passwordFromJson(text) {
+  try {
+    const config = JSON.parse(text ?? "");
+    return config.auth_required === false
+      ? null
+      : (config.server_password ?? null);
+  } catch {
+    return null;
+  }
+}
+
 export function obsPassword() {
   if (process.env.OBS_PASSWORD) {
     return process.env.OBS_PASSWORD;
   }
-  const file = join(
-    homedir(),
-    "Library/Application Support/obs-studio/plugin_config/obs-websocket/config.json"
+  return (
+    passwordFromIni(readText(join(OBS_DIR, "global.ini"))) ??
+    passwordFromJson(
+      readText(join(OBS_DIR, "plugin_config/obs-websocket/config.json"))
+    )
   );
-  let config = null;
-  try {
-    config = JSON.parse(readFileSync(file, "utf8"));
-  } catch {
-    config = null;
-  }
-  return config?.auth_required === false
-    ? null
-    : (config?.server_password ?? null);
 }
 
 export class ObsRecorder {
@@ -260,25 +303,13 @@ export class ObsRecorder {
             window: windowId,
           }
         : { hide_obs: true, show_cursor: false, type: 0 };
-    const { inputs } = await this.call("GetInputList");
-    const existing = inputs.find((i) => i.inputName === INPUT);
-    if (existing && existing.inputKind !== INPUT_KIND) {
-      await this.call("RemoveInput", { inputName: INPUT });
-    }
-    if (existing && existing.inputKind === INPUT_KIND) {
-      await this.call("SetInputSettings", {
-        inputName: INPUT,
-        inputSettings,
-        overlay: true,
-      });
-      await this.call("GetSceneItemId", {
-        sceneName: SCENE,
-        sourceName: INPUT,
-      }).catch(() =>
-        this.call("CreateSceneItem", { sceneName: SCENE, sourceName: INPUT })
-      );
-    } else {
+    // 每次都删掉旧的采集源重建：上次的 Chrome 窗口关掉后，旧源的采集流已经停了，
+    // 只改窗口号不会自己恢复，会录出一整条黑屏（2026-10-24 第二条就是这样）
+    await this.removeCaptureInput();
+    let created = false;
+    for (let attempt = 1; !created; attempt += 1) {
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: 名字刚释放时可能还占着，隔一会儿再试
         await this.call("CreateInput", {
           inputKind: INPUT_KIND,
           inputName: INPUT,
@@ -286,10 +317,15 @@ export class ObsRecorder {
           sceneItemEnabled: true,
           sceneName: SCENE,
         });
+        created = true;
       } catch (error) {
-        throw new ObsSetupError(`${HELP.kind}（${error?.message ?? error}）`, {
-          cause: error,
-        });
+        if (attempt >= 4) {
+          throw new ObsSetupError(
+            `${HELP.kind}（${error?.message ?? error}）`,
+            { cause: error }
+          );
+        }
+        await sleep(700);
       }
     }
     const { sceneItemId } = await this.call("GetSceneItemId", {
@@ -374,6 +410,52 @@ export class ObsRecorder {
       );
     }
     return this.info.capture;
+  }
+
+  async removeCaptureInput() {
+    const has = async () =>
+      (await this.call("GetInputList")).inputs.some(
+        (i) => i.inputName === INPUT
+      );
+    if (!(await has())) {
+      return;
+    }
+    await this.call("RemoveInput", { inputName: INPUT });
+    await this.waitFor(async () => !(await has()), 5000, "删掉旧的采集源");
+  }
+
+  // 截一帧场景画面（录出来的就是它），看是不是一整片同一个颜色。
+  // 是的话按一次“重新启动采集”再看，三次都不行就报错，别白录几分钟黑屏
+  async ensureLive() {
+    const file = join(tmpdir(), `drturing-obs-live-${process.pid}.png`);
+    let stats = null;
+    try {
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: 一次一次试
+        await this.call("SaveSourceScreenshot", {
+          imageFilePath: file,
+          imageFormat: "png",
+          imageHeight: 360,
+          imageWidth: 640,
+          sourceName: SCENE,
+        });
+        stats = lumaStats(decodePng(readFileSync(file)));
+        if (!looksBlank(stats)) {
+          return stats;
+        }
+        this.say(
+          `注意：OBS 画面是一整片（亮度 ${stats.mean.toFixed(0)}，起伏 ${stats.stdev.toFixed(1)}），重新启动采集再看（第 ${attempt} 次）`
+        );
+        await this.call("PressInputPropertiesButton", {
+          inputName: INPUT,
+          propertyName: "reactivate_capture",
+        }).catch(() => null);
+        await sleep(2000);
+      }
+    } finally {
+      rmSync(file, { force: true });
+    }
+    throw new ObsSetupError(HELP.blank);
   }
 
   // 截一帧采集源的原始画面，找品红框

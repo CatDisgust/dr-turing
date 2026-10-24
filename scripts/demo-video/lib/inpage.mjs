@@ -176,6 +176,13 @@ export function installDemoLog(config) {
     "lesson-name": lastOf('[data-testid="lesson-name"]'),
     "personal-panel": present('[data-testid="personal-panel"]'),
     plan: lastOf('[data-testid="plan"] > summary'),
+    // 导师回复里已经露出文字的条数：从“思考中”变成有字的那一刻，后期据此加速思考的等待
+    "reply-shown": () => ({
+      value: [
+        ...document.querySelectorAll('[data-testid="message-assistant"]'),
+      ].filter((m) => m.querySelector('[data-testid="message-content"]'))
+        .length,
+    }),
     "report-concepts": lastOf('[data-testid="report-concepts"]'),
     "retry-notice": present('[data-testid="retry-notice"]'),
     "session-report": lastOf('[data-testid="session-report"]', 200),
@@ -220,14 +227,18 @@ export function installDemoLog(config) {
   });
   setInterval(schedule, 500);
 
-  addEventListener("DOMContentLoaded", () =>
+  addEventListener("DOMContentLoaded", () => {
     push({
       dpr: devicePixelRatio,
       type: "page",
       url: location.href,
       viewport: { h: innerHeight, w: innerWidth },
-    })
-  );
+    });
+    // 录屏时不显示开发用的耗时行（“首字 4.9s（引擎…快路径 模型名）”，D12 验收用，不是给学生看的）
+    const style = document.createElement("style");
+    style.textContent = '[data-testid="timing"]{display:none!important}';
+    document.head.append(style);
+  });
 
   // 闪白：盖一层白，至少 frames 帧且至少 ms 毫秒，时间记进日志；后期在素材里找这一帧对时间
   const flash = (ms = 50, frames = 3, color = "#ffffff") =>
@@ -265,5 +276,35 @@ export function installDemoLog(config) {
       requestAnimationFrame(step);
     });
 
-  window.__demo = { busy, flash, flush, version: 2 };
+  // 测帧率：盖一层深色，一根白条每帧挪一格，持续 ms 毫秒。每一帧画面都不一样，
+  // 后期数这段素材里不重复的帧，就是 OBS 实际录到的帧率
+  const probe = (ms = 2000) =>
+    new Promise((resolve) => {
+      const cover = document.createElement("div");
+      cover.style.cssText =
+        "position:fixed;inset:0;background:#101010;z-index:2147483647;pointer-events:none";
+      const bar = document.createElement("div");
+      bar.style.cssText =
+        "position:absolute;top:0;bottom:0;width:24px;left:0;background:#ffffff";
+      cover.append(bar);
+      document.documentElement.append(cover);
+      const start = now();
+      let n = 0;
+      const step = () => {
+        n += 1;
+        bar.style.transform = `translateX(${(n * 24) % innerWidth}px)`;
+        if (now() - start < ms) {
+          requestAnimationFrame(step);
+          return;
+        }
+        cover.remove();
+        const end = now();
+        push({ frames: n, t: r1(start), tEnd: r1(end), type: "probe" });
+        flush();
+        requestAnimationFrame(() => resolve({ end, frames: n, start }));
+      };
+      requestAnimationFrame(step);
+    });
+
+  window.__demo = { busy, flash, flush, probe, version: 2 };
 }

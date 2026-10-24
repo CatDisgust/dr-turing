@@ -65,10 +65,11 @@ export async function shot3(d) {
   await sleep(1200);
   // 视线移到右边星图，停住
   await d.actor.moveTo(await restPointInDrawer(d));
-  d.log.mark("hold", { label: "镜头 3 星图", ms: 6000 });
-  await sleep(3000);
+  // 讲稿约 12 秒（标题卡淡出占前 2 秒），星图留够 10 秒，后期不用补停帧
+  d.log.mark("hold", { label: "镜头 3 星图", ms: 10_000 });
+  await sleep(5000);
   await d.screenshot("shot3-star-map");
-  await sleep(3000);
+  await sleep(5000);
   return facts;
 }
 
@@ -85,7 +86,7 @@ export async function shot4(d) {
     )?.detail?.name ?? null;
   facts.lessonName = await d.textOf(d.page.getByTestId("lesson-name"));
 
-  // 回复上方的来源标签：“从你会的「丢失更新」讲起”
+  // 回复上方的来源标签：“从你会的「悲观并发控制（加锁）」讲起”
   const reply = d.lastAssistant();
   const startFrom = reply.getByTestId("start-from");
   facts.startFrom = await d.textOf(startFrom);

@@ -83,7 +83,7 @@ describe("每个镜头的判定", () => {
       lessonName: "第 2 课 · 并发控制",
       sim: true,
       simStatus: "卡死了：T1 拿着 A 等 B……这就是死锁。",
-      startFrom: "· 从你会的「丢失更新」讲起",
+      startFrom: "· 从你会的「悲观并发控制（加锁）」讲起",
       touched: "死锁",
       warnings: [],
     });

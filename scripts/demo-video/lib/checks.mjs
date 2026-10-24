@@ -26,6 +26,7 @@ export const litAtLeast = (light, min) =>
 
 // 和 lib/demo/seed.ts 的 demoTarget 一样：先按名字找，再按别名找
 export const DEADLOCK = /死锁|deadlock/i;
+const START_FROM = /悲观并发控制|加锁/;
 export const PHILOSOPHERS = /哲学家/;
 
 export function findPoint(graph, re) {
@@ -92,9 +93,10 @@ export function verdictFor(shot, f = {}) {
         has(f.touched, DEADLOCK),
         `问题归到了「${f.touched ?? "无"}」，不是死锁`
       );
+      // 图谱里「死锁」的前置是「悲观并发控制（加锁）」（seed.ts，用户 2026-10-22 定），预置学生已经会它
       need(
-        has(f.startFrom, /丢失更新/),
-        `标签不是“从你会的「丢失更新」讲起”（实际：${f.startFrom ?? "没有标签"}）`
+        has(f.startFrom, START_FROM),
+        `标签不是“从你会的「悲观并发控制（加锁）」讲起”（实际：${f.startFrom ?? "没有标签"}）`
       );
       need(f.sim, "没有出死锁模拟");
       need(

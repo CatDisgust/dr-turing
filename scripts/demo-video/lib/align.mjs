@@ -104,10 +104,39 @@ export function editHints(events, clock, { minGapMs = 33 } = {}) {
       cursor.push({ t: round3(clock(e.t)), x: e.x, y: e.y });
       clicks.push({ t: round3(clock(e.t)), testid: e.testid, x: e.x, y: e.y });
     } else if (e.type === "mark") {
-      marks.push({ name: e.name, t: round3(clock(e.t)) });
+      marks.push({
+        name: e.name,
+        t: round3(clock(e.t)),
+        ...(e.label ? { label: e.label } : {}),
+        ...(typeof e.ms === "number" ? { ms: e.ms } : {}),
+      });
     }
   }
   return { clicks, cursor, marks };
 }
 
 const round3 = (x) => Math.round(x * 1000) / 1000;
+
+// 测帧率那段动画在素材里的时段（两头各让 0.15 秒，避开盖层出现和消失的那一帧）；没测就返回 null
+export function probeWindow(events, clock) {
+  const e = events.find((x) => x.type === "probe");
+  if (!e) {
+    return null;
+  }
+  const from = clock(e.t) + 0.15;
+  const to = clock(e.tEnd) - 0.15;
+  return to > from
+    ? {
+        from: round3(from),
+        pageFps: Math.round((e.frames / (e.tEnd - e.t)) * 1000),
+        to: round3(to),
+      }
+    : null;
+}
+
+// 数 ffmpeg showinfo 打出来的帧（每帧一行 “n:  12 pts:…”）
+export function countShowinfo(text) {
+  return text
+    .split(/\r?\n/)
+    .filter((l) => /Parsed_showinfo.*\bn:\s*\d+/.test(l)).length;
+}

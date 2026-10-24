@@ -116,3 +116,24 @@ export function findMarkerBox(img, test = isMagenta) {
   }
   return { height: bottom - top + 1, width: right - left + 1, x: left, y: top };
 }
+
+// 隔 step 个像素取样，算亮度的平均和起伏（标准差）。看 OBS 是不是录成了一整片黑或白
+export function lumaStats(img, step = 4) {
+  let n = 0;
+  let sum = 0;
+  let sq = 0;
+  for (let y = 0; y < img.height; y += step) {
+    for (let x = 0; x < img.width; x += step) {
+      const [r, g, b] = rgbAt(img, x, y);
+      const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      n += 1;
+      sum += l;
+      sq += l * l;
+    }
+  }
+  const mean = n ? sum / n : 0;
+  return { mean, stdev: n ? Math.sqrt(Math.max(0, sq / n - mean * mean)) : 0 };
+}
+
+// 网页（左边白色对话、右边深色星图）的亮度起伏很大；一整片黑或白几乎是 0
+export const looksBlank = (stats) => stats.stdev < 4;

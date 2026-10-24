@@ -9,12 +9,12 @@ import {
 } from "remotion";
 import {
   cameraAt,
-  clipAt,
   cursorAt,
   layoutClips,
   project,
   type ScreenShot,
   sourceTime,
+  speedAt,
   VIEW_H,
   VIEW_W,
 } from "../edit";
@@ -95,7 +95,7 @@ export function ScreenScene({ shot }: { shot: ScreenShot }) {
           y={cursorOut.y}
         />
       ) : null}
-      <Badges badges={shot.badges ?? []} speed={clipAt(laid, out)?.rate ?? 1} />
+      <Badges badges={shot.badges ?? []} speed={speedAt(laid, out)} />
       <Subtitles cues={shot.cues} />
       {shot.intro ? <TitleIntro t={out} /> : null}
     </AbsoluteFill>
