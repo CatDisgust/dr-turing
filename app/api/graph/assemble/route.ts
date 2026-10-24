@@ -6,6 +6,7 @@ import { makeCourseId } from "@/lib/graph/course-id";
 import { inferEdges } from "@/lib/graph/edges";
 import { enrichPoints } from "@/lib/graph/enrich";
 import { matchLesson } from "@/lib/graph/match";
+import { namespacePoints } from "@/lib/graph/namespace";
 import { scoreGraph } from "@/lib/graph/score";
 import {
   type CourseGraph,
@@ -74,14 +75,14 @@ export async function POST(request: Request) {
         ]);
         ({ points } = enriched);
 
-        const graph: CourseGraph = {
+        const graph: CourseGraph = namespacePoints({
           builtAt: new Date().toISOString(),
           courseId,
           edges,
           lessons: lessons.map(({ lesson }) => lesson),
           name: body.name,
           points,
-        };
+        });
 
         let saved = true;
         try {
