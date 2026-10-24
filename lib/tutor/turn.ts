@@ -30,6 +30,7 @@ import { generateUUID } from "@/lib/utils";
 import { classifyQuestion } from "./classify";
 import { gradeAnswer } from "./grade";
 import { fillPlan } from "./plan";
+import { ownQuestionNote, tailorQuestion } from "./tailor";
 
 // 一轮对话里引擎这一侧要做的事：快捷按钮、批改上一轮留的题、归类新问题。
 // 返回新状态和给导师的情况说明；之后 planAndAsk 定本轮动作、要不要出题
@@ -56,6 +57,8 @@ export type TurnResult = {
   };
   // 写进导师 system 的本轮情况；null 就是普通讲解
   note: string | null;
+  // 这一轮是学生自己提的新问题（不是答题、不是按钮）
+  studentAsked?: boolean;
 };
 
 const HELP_ORDER = ["none", "hint", "revealed"] as const;
@@ -201,6 +204,7 @@ export async function questionTurn(turn: Turn): Promise<TurnResult> {
   return {
     note: null,
     state: touchNode(state, point.id, turn.sessionId),
+    studentAsked: true,
     touched: point,
   };
 }
@@ -336,6 +340,14 @@ export async function planAndAsk(
   });
   let plan = rulePlan;
   let { state } = result;
+  // 学生自己提的新问题，规则又定了只出题（⑤⑥⑦）：导师先接住他的问题，题改写到他问的情境里。
+  // 改写和填规划同时跑，不多等
+  const ownQuestion =
+    result.studentAsked &&
+    (rulePlan.prompt === "question" || rulePlan.prompt === "review");
+  const tailoring = ownQuestion
+    ? tailorFor(turn, state, rulePlan.target_kc)
+    : Promise.resolve(null);
   try {
     const { plan: filledPlan, reaction } = await fillPlan({
       graph: turn.graph,
@@ -353,7 +365,7 @@ export async function planAndAsk(
   } catch (error) {
     console.error("[plan] Claude 填 plan 失败，用规则默认值", error);
   }
-  const note = withNotes(
+  const base = withNotes(
     withBurden(result.note, state),
     state,
     plan,
@@ -361,37 +373,89 @@ export async function planAndAsk(
   );
   const stillOpen = state.pendingQuestion?.sessionId === turn.sessionId;
   const target = turn.graph.points.find((p) => p.id === plan.target_kc);
+  const join = (...parts: (string | null)[]) =>
+    parts.filter(Boolean).join("") || null;
   if (
     stillOpen ||
     !target ||
     !ASKS.includes(plan.next_action) ||
     plan.reveals_answer
   ) {
-    return { note, plan, state };
+    return { note: base, plan, state };
   }
   const asked = askQuestion(turn, state, target, plan.expect_like);
   if (asked) {
+    const tailored = await tailoring;
+    const question =
+      tailored && tailored.from === asked.question
+        ? tailored.to
+        : asked.question;
     return {
-      note,
+      note: join(
+        base,
+        ownQuestion ? ownQuestionNote(turn.text, question) : null
+      ),
       plan,
-      question: asked.question,
-      state: asked.state,
+      question,
+      state:
+        question === asked.question
+          ? asked.state
+          : withPendingText(asked.state, question),
     };
   }
   // 规则说该出题，但这个点这次的题都做完了：简短收个尾
   if (plan.prompt === "question" || plan.prompt === "review") {
     return {
-      note: [
-        note,
-        "这个点这次的题都做完了。用一两句话总结他今天弄懂了什么，再问他接下来想弄懂什么。",
-      ]
-        .filter(Boolean)
-        .join(""),
+      note: join(
+        base,
+        ownQuestion ? ownQuestionNote(turn.text) : null,
+        "这个点这次的题都做完了。用一两句话总结他今天弄懂了什么，再问他接下来想弄懂什么。"
+      ),
       plan,
       state,
     };
   }
-  return { note, plan, state };
+  return { note: base, plan, state };
+}
+
+// 先按规则挑出这一轮会出的题，再请 Claude 改写到学生问的情境里；失败或不用改就是 null
+async function tailorFor(
+  turn: Turn,
+  state: LearnerState,
+  kpId: string
+): Promise<{ from: string; to: string } | null> {
+  const point = turn.graph.points.find((p) => p.id === kpId);
+  if (!point || state.pendingQuestion?.sessionId === turn.sessionId) {
+    return null;
+  }
+  const picked = pickQuestion(
+    point,
+    state.nodes[kpId],
+    turn.sessionId,
+    turn.now
+  );
+  if (!picked) {
+    return null;
+  }
+  try {
+    const to = await tailorQuestion({
+      kind: picked.kind,
+      point,
+      question: picked.question,
+      studentText: turn.text,
+    });
+    return to ? { from: picked.question, to } : null;
+  } catch (error) {
+    console.error("[tailor] 改写题目失败，用原题", error);
+    return null;
+  }
+}
+
+function withPendingText(state: LearnerState, question: string): LearnerState {
+  const pending = state.pendingQuestion;
+  return pending
+    ? { ...state, pendingQuestion: { ...pending, question } }
+    : state;
 }
 
 // 讲完之后出题：选好题、存成 PendingQuestion，返回题面
