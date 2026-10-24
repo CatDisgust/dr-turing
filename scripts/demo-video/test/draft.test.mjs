@@ -6,6 +6,7 @@ import {
   draftTake,
   editSpans,
   fitCamera,
+  homeBeforeEnd,
   PACE,
   shotWindows,
   thinkingSpans,
@@ -467,6 +468,30 @@ describe("剪辑单草稿", () => {
       marks: aligned.marks,
     });
     assert.ok(!cam.some((k) => k.t >= 420.5 && k.t < 424 && k.zoom > 1));
+  });
+
+  test("镜头结尾还放大着：结尾前 0.8 成片秒回全景；本来就回了全景的不动", () => {
+    const zoomed = { t: 174.245, x: 1139.5, y: 418.6, zoom: 2 };
+    const clips = [
+      { from: 169.991, rate: 3, to: 171.54 },
+      { from: 171.54, to: 176.545 },
+    ];
+    assert.deepEqual(homeBeforeEnd([zoomed], clips), [
+      zoomed,
+      { t: 175.745, x: 640, y: 360, zoom: 1 },
+    ]);
+    // 回全景的键落在最后一小段里（镜头 4 结尾）：挪到结尾前 0.8 秒，跨进加速段时按倍数换成素材秒
+    const card = { t: 72.721, x: 444, y: 427.7, zoom: 1.4 };
+    const tail = [
+      { from: 72.605, rate: 2, to: 75.421 },
+      { from: 76.021, to: 76.039 },
+    ];
+    assert.deepEqual(
+      homeBeforeEnd([card, { t: 76.021, x: 640, y: 360, zoom: 1 }], tail),
+      [card, { dur: 1.6, t: 73.857, x: 640, y: 360, zoom: 1 }]
+    );
+    const home = [zoomed, { t: 175, x: 640, y: 360, zoom: 1 }];
+    assert.deepEqual(homeBeforeEnd(home, clips), home);
   });
 
   test("收紧的镜头：停留按比例缩短，全亮不缩；整轮快放压得更短", () => {

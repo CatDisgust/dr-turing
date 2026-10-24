@@ -610,6 +610,41 @@ export function fitCamera(keys, clips) {
 }
 
 // 一个镜头的完整草稿
+// 镜头结尾还放大着（回全景的键落在最后不到 CAMERA_DUR 成片秒里、或者根本没有）：在结尾前 CAMERA_DUR 成片秒
+// 放一个回全景的键，下一个镜头从全景接上，不会从放大一下切回全景
+export function homeBeforeEnd(keys, clips) {
+  if (keys.length === 0 || clips.length === 0) {
+    return keys;
+  }
+  let need = CAMERA_DUR;
+  let at = clips[0].from;
+  for (let i = clips.length - 1; i >= 0; i -= 1) {
+    const c = clips[i];
+    const rate = c.rate ?? 1;
+    const len = (c.to - c.from) / rate;
+    if (len >= need) {
+      at = c.to - need * rate;
+      break;
+    }
+    need -= len;
+  }
+  const kept = keys.filter((k) => !(k.zoom === 1 && k.t > at));
+  const prev = kept.at(-1);
+  if (!prev || prev.zoom === 1) {
+    return kept;
+  }
+  const t = Math.max(at, prev.t + 0.3);
+  const clip = clips.find((c) => t >= c.from && t < c.to);
+  return [
+    ...kept,
+    {
+      t: round3(t),
+      ...HOME,
+      ...(clip?.rate ? { dur: round3(CAMERA_DUR * clip.rate) } : {}),
+    },
+  ];
+}
+
 export function draftShot(aligned, window, options = {}) {
   const ui = aligned.ui ?? [];
   const clips = draftClips(
@@ -622,14 +657,17 @@ export function draftShot(aligned, window, options = {}) {
   const edited = clips.reduce((n, c) => n + (c.to - c.from) / (c.rate ?? 1), 0);
   const sped = clips.filter((c) => c.rate);
   return {
-    camera: fitCamera(
-      draftCamera(window, {
-        cursor: aligned.cursor ?? [],
-        dropHolds: options.dropHolds,
-        holdScale: options.holdScale,
-        marks: aligned.marks ?? [],
-        ui,
-      }),
+    camera: homeBeforeEnd(
+      fitCamera(
+        draftCamera(window, {
+          cursor: aligned.cursor ?? [],
+          dropHolds: options.dropHolds,
+          holdScale: options.holdScale,
+          marks: aligned.marks ?? [],
+          ui,
+        }),
+        clips
+      ),
       clips
     ),
     clicks: (aligned.clicks ?? [])
