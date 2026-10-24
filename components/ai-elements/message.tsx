@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { createMathPlugin } from "@streamdown/math";
-import { mermaid } from "@streamdown/mermaid";
+import { createMermaidPlugin } from "@streamdown/mermaid";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import {
   createContext,
@@ -322,7 +322,36 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 // 导师讲公式常用 $...$ 行内写法，默认只认 $$...$$，这里打开（D12 公式渲染）
 const math = createMathPlugin({ singleDollarTextMath: true });
+// 导师画的图（2026-10-24）配成冷灰加蓝：浅蓝框、深蓝箭头，跟按钮一个色
+const mermaid = createMermaidPlugin({
+  config: {
+    theme: "base",
+    themeVariables: {
+      fontFamily: "inherit",
+      fontSize: "14px",
+      edgeLabelBackground: "#ffffff",
+      lineColor: "#0071a5",
+      primaryBorderColor: "#84d8ff",
+      primaryColor: "#ddf4ff",
+      primaryTextColor: "#252e3c",
+      tertiaryColor: "#ffffff",
+    },
+  },
+});
 const streamdownPlugins = { cjk, code, math, mermaid };
+
+// 图的格式写错了：别给学生看一大段英文报错，退回显示原文
+function DiagramFallback({ chart }: { chart: string }) {
+  return (
+    <div className="text-[14px]" data-testid="diagram-fallback">
+      <p className="mb-1 text-muted-foreground">这张图没画出来，下面是原文：</p>
+      <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-muted p-3 text-[13px]">
+        {chart}
+      </pre>
+    </div>
+  );
+}
+const mermaidOptions = { errorComponent: DiagramFallback };
 
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
@@ -331,6 +360,7 @@ export const MessageResponse = memo(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
+      mermaid={mermaidOptions}
       plugins={streamdownPlugins}
       {...props}
     />
