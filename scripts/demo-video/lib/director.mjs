@@ -309,6 +309,8 @@ export class Director {
       .locator(".react-flow__node-point")
       .first()
       .waitFor({ state: "visible", timeout: 20_000 });
+    // 星星画出来的时刻：之前那一下是空黑板，剪辑单会剪掉
+    this.log.mark("stars.shown");
     await sleep(1200);
     return panel;
   }

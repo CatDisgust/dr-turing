@@ -295,7 +295,28 @@ describe("剪辑单草稿", () => {
     );
   });
 
-  test("第二次结束学习：从点结束到点“我的星图”整段剪掉，第一次不剪", () => {
+  test("第二次结束学习：从小结弹出前剪到关掉小结之后，第一次不剪", () => {
+    const click = (t, label) => ({ label, name: "click", t });
+    const marks = [
+      click(10, "结束本次学习"),
+      mark("wait.review.shot6.start", 10.3),
+      mark("wait.review.shot6.end", 30),
+      click(33, "关闭小结"),
+      click(35, "我的星图"),
+      click(100, "结束本次学习"),
+      mark("wait.review.shot7.start", 100.3),
+      mark("wait.review.shot7.end", 120),
+      click(124, "关闭小结"),
+      click(126, "我的星图"),
+    ];
+    const spans = editSpans(
+      { marks, ui: [ui(100.25, "session-report", "本次学习小结")] },
+      { end: 200, start: 0 }
+    );
+    assert.deepEqual(kinds(spans, "cut"), [["cut", 100.2, 124.5]]);
+  });
+
+  test("第二次结束学习：没记到小结弹出、没点关闭时，退回按点击时间剪", () => {
     const click = (t, label) => ({ label, name: "click", t });
     const marks = [
       click(10, "结束本次学习"),
@@ -308,6 +329,22 @@ describe("剪辑单草稿", () => {
       click(126, "我的星图"),
     ];
     const spans = editSpans({ marks }, { end: 200, start: 0 });
-    assert.deepEqual(kinds(spans, "cut"), [["cut", 100.6, 125.2]]);
+    assert.deepEqual(kinds(spans, "cut"), [["cut", 100.2, 125.2]]);
+  });
+
+  test("打开我的星图：星星画出来之前的空黑板剪掉，很快就画出来的不剪", () => {
+    const click = (t, label) => ({ label, name: "click", t });
+    const spans = editSpans(
+      {
+        marks: [
+          click(10, "我的星图"),
+          mark("stars.shown", 10.7),
+          click(50, "我的星图"),
+          mark("stars.shown", 50.2),
+        ],
+      },
+      { end: 100, start: 0 }
+    );
+    assert.deepEqual(kinds(spans, "cut"), [["cut", 10.25, 10.7]]);
   });
 });

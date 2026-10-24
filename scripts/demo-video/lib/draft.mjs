@@ -12,7 +12,8 @@
 //         第二道起的独立题、复习后再答、点“先不做题”
 //  idle   画面上什么都没动（没光标、没点击、页面没变）超过 1.2 秒 → 不超过 0.6 秒
 //  停留（hold：鼠标指着一处让观众看）原速，但最多留 2 秒（题目 2.4 秒、出处 3 秒、镜头 3 的星图全留），多的剪掉
-//  第二次及以后的“结束本次学习”：小结镜头 6 已经演过，从点结束到点“我的星图”整段剪掉
+//  第二次及以后的“结束本次学习”：小结镜头 6 已经演过，从小结弹出前到关掉小结整段剪掉
+//  打开“我的星图”后星星还没画出来的那一下（空黑板）剪掉
 const MAX_IDLE = 0.8;
 const MIN_RATE = 2;
 const STREAM_MAX = 2;
@@ -219,7 +220,32 @@ export function editSpans(aligned, window) {
         (e) => e.name === "click" && e.label === "我的星图" && e.t > m.t
       );
       if (again && ended && opened) {
-        spans.push({ end: opened.t - 0.8, kind: "cut", start: ended.t + 0.6 });
+        // 从小结弹出前一点剪起（不然会闪一下加载中的小结），剪到小结关掉之后
+        const popped = ui.find(
+          (e) => e.key === "session-report" && e.value && e.v > ended.t
+        );
+        const closed = marks.find(
+          (e) =>
+            e.name === "click" &&
+            e.label === "关闭小结" &&
+            e.t > m.t &&
+            e.t < opened.t
+        );
+        spans.push({
+          end: closed ? closed.t + 0.5 : opened.t - 0.8,
+          kind: "cut",
+          start: popped
+            ? Math.max(ended.t + 0.1, popped.v - 0.05)
+            : ended.t + 0.2,
+        });
+      }
+    }
+    if (m.name === "stars.shown") {
+      const opened = marks.findLast(
+        (e) => e.name === "click" && e.label === "我的星图" && e.t <= m.t
+      );
+      if (opened && m.t - opened.t > 0.4) {
+        spans.push({ end: m.t, kind: "cut", start: opened.t + 0.25 });
       }
     }
     if (m.name === "type.start") {
