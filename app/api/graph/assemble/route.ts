@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import gold from "@/fixtures/gold/comp5348-w1-w3.json";
 import { saveCourse } from "@/lib/db/queries";
+import { makeCourseId } from "@/lib/graph/course-id";
 import { inferEdges } from "@/lib/graph/edges";
 import { enrichPoints } from "@/lib/graph/enrich";
 import { matchLesson } from "@/lib/graph/match";
@@ -17,7 +18,7 @@ import {
 export const maxDuration = 300;
 
 const bodySchema = z.object({
-  courseId: z.string().min(1),
+  courseId: z.string().min(1).optional(),
   lessons: z.array(
     z.object({
       accepted: z.array(knowledgePointSchema),
@@ -33,6 +34,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "请求格式不对" }, { status: 400 });
   }
   const body = parsed.data;
+  // 管理页加新课不带 id，这里起一个新的；/graph 自测页带 id 就是重新生成那门课
+  const courseId = body.courseId ?? makeCourseId(body.name);
   const lessons = [...body.lessons].sort(
     (a, b) => a.lesson.index - b.lesson.index
   );
@@ -73,7 +76,7 @@ export async function POST(request: Request) {
 
         const graph: CourseGraph = {
           builtAt: new Date().toISOString(),
-          courseId: body.courseId,
+          courseId,
           edges,
           lessons: lessons.map(({ lesson }) => lesson),
           name: body.name,
@@ -98,7 +101,7 @@ export async function POST(request: Request) {
           merged,
           notEnriched: enriched.missing,
           saved,
-          score: body.courseId === "comp5348" ? scoreGraph(graph, gold) : null,
+          score: courseId === "comp5348" ? scoreGraph(graph, gold) : null,
           timings,
         });
       } catch (error) {
