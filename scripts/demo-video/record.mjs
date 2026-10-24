@@ -34,6 +34,7 @@ import { TakeLog } from "./lib/log.mjs";
 import { listWindows, pickWindow } from "./lib/macwin.mjs";
 import { createRng, hashSeed } from "./lib/motion.mjs";
 import { ObsRecorder, ObsSetupError } from "./lib/obs.mjs";
+import { decodePng, looksBlank, lumaStats } from "./lib/png.mjs";
 import { SHOT_SCRIPTS } from "./lib/shots.mjs";
 import { Site } from "./lib/site.mjs";
 
@@ -187,6 +188,9 @@ async function runTake(ctx) {
     await prepare(ctx);
     await d.screenshot("ready");
     if (obs) {
+      // 开录前确认 OBS 真有画面（网页已经打开，不该是一整片）
+      const live = await obs.ensureLive();
+      log.mark("obs.live", live);
       await obs.startRecording(ctx.dir);
       recording = true;
       ctx.onStop = async () => {
@@ -197,9 +201,19 @@ async function runTake(ctx) {
       };
       log.mark("record.start");
       await sleep(800);
+      const framePath = join(ctx.dir, "obs-frame.png");
       await obs
-        .saveFrame(join(ctx.dir, "obs-frame.png"))
+        .saveFrame(framePath)
         .catch((error) => log.warn(`OBS 截帧失败：${error.message}`));
+      // 录上以后再看一眼：一整片就停，别录几分钟黑屏
+      const stats = existsSync(framePath)
+        ? lumaStats(decodePng(readFileSync(framePath)))
+        : null;
+      if (stats && looksBlank(stats)) {
+        throw new Error(
+          `OBS 录到的是一整片（亮度 ${stats.mean.toFixed(0)}），这条停掉`
+        );
+      }
     }
     await d.flash("start");
     if (obs) {

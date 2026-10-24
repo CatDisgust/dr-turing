@@ -7,7 +7,13 @@ import {
   plausibleBox,
 } from "../lib/geometry.mjs";
 import { pickWindow } from "../lib/macwin.mjs";
-import { decodePng, findMarkerBox, rgbAt } from "../lib/png.mjs";
+import {
+  decodePng,
+  findMarkerBox,
+  looksBlank,
+  lumaStats,
+  rgbAt,
+} from "../lib/png.mjs";
 
 // 造一张 RGBA PNG：白底，(bx,by) 起 bw×bh 的框画 border 宽的品红边；每行用不同的过滤类型，测解码
 function markerPng(width, height, { bx, by, bw, bh, border }) {
@@ -192,5 +198,31 @@ describe("找 Chrome 窗口", () => {
       pickWindow(windows, { bounds: { ...bounds, left: 600 }, pid: 222 }),
       null
     );
+  });
+});
+
+describe("空白画面", () => {
+  const img = (fill) => {
+    const width = 64;
+    const height = 36;
+    const pixels = Buffer.alloc(width * height * 3);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const v = fill(x, y);
+        pixels.set([v, v, v], (y * width + x) * 3);
+      }
+    }
+    return { channels: 3, height, pixels, width };
+  };
+
+  test("一整片黑、一整片白算空白", () => {
+    assert.ok(looksBlank(lumaStats(img(() => 16))));
+    assert.ok(looksBlank(lumaStats(img(() => 255))));
+  });
+
+  test("左白右黑（对话 + 星图）不算空白", () => {
+    const stats = lumaStats(img((x) => (x < 44 ? 250 : 20)));
+    assert.ok(!looksBlank(stats));
+    assert.ok(stats.stdev > 50);
   });
 });
