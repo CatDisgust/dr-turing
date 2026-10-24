@@ -73,6 +73,41 @@ const duration = (file) =>
     ]).trim()
   );
 
+// 配音里的停顿：字幕在这些地方换行（src/timing.ts snapCues）
+function pauses(wav) {
+  const r = spawnSync(
+    "ffmpeg",
+    [
+      "-hide_banner",
+      "-nostats",
+      "-i",
+      wav,
+      "-af",
+      "silencedetect=noise=-35dB:d=0.12",
+      "-f",
+      "null",
+      "-",
+    ],
+    { encoding: "utf8" }
+  );
+  const out = [];
+  let from = null;
+  for (const line of r.stderr.split("\n")) {
+    const a = line.match(/silence_start: ([\d.]+)/);
+    const z = line.match(/silence_end: ([\d.]+)/);
+    if (a) {
+      from = Number(a[1]);
+    } else if (z && from !== null) {
+      out.push([
+        Math.round(from * 100) / 100,
+        Math.round(Number(z[1]) * 100) / 100,
+      ]);
+      from = null;
+    }
+  }
+  return out;
+}
+
 // 去掉头尾的静音，响度统一到 -16 LUFS（混音时再整体调到 -14）
 const CLEAN = [
   "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05",
@@ -120,7 +155,11 @@ for (const s of SCRIPT) {
     continue;
   }
   const secs = Math.round(duration(wav) * 100) / 100;
-  files[s.id] = { duration: secs, file: `voice/${s.id}.wav` };
+  files[s.id] = {
+    duration: secs,
+    file: `voice/${s.id}.wav`,
+    pauses: pauses(wav),
+  };
   const cps = countChars(s.narration) / secs;
   console.log(
     `${s.id} ${s.title}：${secs.toFixed(1)} 秒，每秒 ${cps.toFixed(1)} 字（分镜 ${s.slot} 秒）`

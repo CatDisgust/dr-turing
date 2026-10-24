@@ -82,7 +82,9 @@ export function fitClips(clips: Clip[], need: number): Clip[] {
 }
 
 // 音效：点击只在原速、2 倍以内的片段里响（快放时一串咔哒反而吵）；「死锁」半亮、全亮时镜头到了星上响一声
+// （停留标记是鼠标到星旁边的时刻，镜头还要再推约 0.35 秒才停稳）
 const CLICK_RATE = 2;
+const CHIME_DELAY = 0.35;
 const CHIMES: [RegExp, string][] = [
   [/「死锁」全亮/, "sfx/chime-full.wav"],
   [/「死锁」半亮/, "sfx/chime-half.wav"],
@@ -99,13 +101,13 @@ export function shotSfx(draft: DraftShot, clips: Clip[]): Sfx[] {
   for (const c of draft.clicks ?? []) {
     const clip = clipAt(c.t);
     if (clip && clip.rate <= CLICK_RATE) {
-      out.push({ file: "sfx/click.wav", t: at(c.t), volume: 0.35 });
+      out.push({ file: "sfx/click.wav", t: at(c.t), volume: 0.6 });
     }
   }
   for (const h of draft.holds ?? []) {
     const file = CHIMES.find(([re]) => re.test(h.label ?? ""))?.[1];
     if (file && clipAt(h.t)) {
-      out.push({ file, t: at(h.t), volume: 0.45 });
+      out.push({ file, t: at(h.t) + CHIME_DELAY, volume: 0.45 });
     }
   }
   return out.sort((a, b) => a.t - b.t);

@@ -128,7 +128,7 @@ function MusicTrack({
           })
         )
       );
-      const fade = interpolate(t, [end - FADE_OUT, end], [1, 0], {
+      const fade = interpolate(t, [end - FADE_OUT, end - 0.1], [1, 0], {
         extrapolateLeft: "clamp",
         extrapolateRight: "clamp",
       });
