@@ -1,32 +1,13 @@
 "use client";
 
 import { type ChangeEvent, useState } from "react";
-import type { GraphScore } from "@/lib/graph/score";
-import type { ValidationResult } from "@/lib/graph/validate";
-import type { CourseGraph, Edge, Lesson } from "@/lib/types";
-
-type LessonResult = ValidationResult & {
-  fileId: string;
-  lesson: Lesson;
-  ms: number;
-  pageCount: number;
-};
-
-type AssembleResult = {
-  droppedEdges: { edge: Edge; reason: string }[];
-  graph: CourseGraph;
-  merged: { from: string; into: string }[];
-  saved: boolean;
-  score: GraphScore | null;
-  timings: Record<string, number>;
-};
-
-type Run = {
-  lessons: LessonResult[];
-  assemble: AssembleResult;
-  extractMs: number;
-  totalMs: number;
-};
+import {
+  type BuildRun,
+  buildCourse,
+  lessonTitleOf,
+  sortLessonFiles,
+} from "@/lib/graph/build-client";
+import type { Edge } from "@/lib/types";
 
 const EDGE_LABEL: Record<Edge["type"], string> = {
   confusable: "易混",
@@ -35,39 +16,6 @@ const EDGE_LABEL: Record<Edge["type"], string> = {
 };
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(0)} 秒`;
-
-// 读一行一个 JSON 的进度流，返回最后的结果
-async function readProgress<T>(
-  response: Response,
-  onStep: (step: string) => void
-): Promise<T> {
-  if (!response.body) {
-    throw new Error(`请求失败（${response.status}）`);
-  }
-  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = "";
-  while (true) {
-    // biome-ignore lint/performance/noAwaitInLoops: 流只能一段一段顺序读
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    buffer += value;
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines.filter(Boolean)) {
-      const event = JSON.parse(line);
-      if (event.error) {
-        throw new Error(event.error);
-      }
-      if (event.done) {
-        return event as T;
-      }
-      onStep(event.step);
-    }
-  }
-  throw new Error("连接中断，没有拿到结果");
-}
 
 // D2/D3 自测页：选一门课的课件（一个文件一课，按文件名排序定课序），
 // 每课并行抽知识点，再合成一张图、对金标准打分
@@ -80,67 +28,30 @@ export default function GraphBuildPage() {
   const [steps, setSteps] = useState<Record<string, string>>({});
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
-  const [run, setRun] = useState<Run | null>(null);
+  const [run, setRun] = useState<BuildRun | null>(null);
 
   const onCourseId = (e: ChangeEvent<HTMLInputElement>) =>
     setCourseId(e.target.value);
   const onCourseName = (e: ChangeEvent<HTMLInputElement>) =>
     setCourseName(e.target.value);
   const onFiles = (e: ChangeEvent<HTMLInputElement>) =>
-    setFiles(
-      [...(e.target.files ?? [])].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { numeric: true })
-      )
-    );
+    setFiles(sortLessonFiles([...(e.target.files ?? [])]));
 
   async function start() {
     setError("");
     setRun(null);
     setSteps({});
     setRunning(true);
-    const setStep = (key: string) => (step: string) =>
-      setSteps((current) => ({ ...current, [key]: step }));
-    const startedAt = Date.now();
-
     try {
-      const lessons = await Promise.all(
-        files.map(async (file, i) => {
-          const form = new FormData();
-          form.set("file", file);
-          form.set("lessonIndex", String(i + 1));
-          form.set("lessonTitle", file.name.replace(/\.pdf$/i, ""));
-          const response = await fetch("/api/graph/extract", {
-            body: form,
-            method: "POST",
-          });
-          const result = await readProgress<LessonResult>(
-            response,
-            setStep(`第 ${i + 1} 课`)
-          );
-          setStep(`第 ${i + 1} 课`)("完成");
-          return result;
+      setRun(
+        await buildCourse({
+          courseId,
+          lessons: files.map((file) => ({ file, title: lessonTitleOf(file) })),
+          name: courseName,
+          onStep: (key, step) =>
+            setSteps((current) => ({ ...current, [key]: step })),
         })
       );
-      const extractMs = Date.now() - startedAt;
-
-      const response = await fetch("/api/graph/assemble", {
-        body: JSON.stringify({
-          courseId,
-          lessons: lessons.map(({ accepted, lesson }) => ({
-            accepted,
-            lesson,
-          })),
-          name: courseName,
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      const assemble = await readProgress<AssembleResult>(
-        response,
-        setStep("合图")
-      );
-      setStep("合图")("完成");
-      setRun({ assemble, extractMs, lessons, totalMs: Date.now() - startedAt });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

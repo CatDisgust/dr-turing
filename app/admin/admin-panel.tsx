@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { CoursesSection } from "./courses-section";
 
 type InviteRow = {
   code: string;
@@ -38,7 +39,7 @@ const when = (iso: string | null) =>
       })
     : "还没来过";
 
-// 管理页（2026-10-24 试用账号）：给同学开邀请码、看用了多少、停用、看反馈
+// 管理页（2026-10-24 试用账号）：给同学开邀请码、看用了多少、停用、加课、看反馈
 export function AdminPanel() {
   const [invites, setInvites] = useState<InviteRow[] | null>(null);
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
@@ -163,6 +164,8 @@ export function AdminPanel() {
         </div>
       </section>
 
+      <CoursesSection />
+
       <section className="flex flex-col gap-3">
         <h2 className="font-bold text-[17px]">反馈</h2>
         {feedback.length === 0 ? (
@@ -185,7 +188,7 @@ export function AdminPanel() {
       <section className="flex flex-col gap-2 text-[14px]">
         <h2 className="font-bold text-[17px]">演示工具</h2>
         <a className="dt-text-btn inline-flex w-fit items-center" href="/graph">
-          上传课件生成图谱
+          重新生成某门课的图谱（自测页，会覆盖同 id 的课）
         </a>
         <a
           className="dt-text-btn inline-flex w-fit items-center"

@@ -670,17 +670,24 @@ export async function getCourseById({ id }: { id: string }) {
   }
 }
 
-// 选课列表：只要名字和每门课几课，不带整份图谱
+// 选课列表和管理页课程表：只要名字、几课、几个知识点，不带整份图谱
 export async function listCourses() {
   try {
     const rows = await db
-      .select({ graph: course.graph, id: course.id, name: course.name })
+      .select({
+        graph: course.graph,
+        id: course.id,
+        name: course.name,
+        updatedAt: course.updatedAt,
+      })
       .from(course)
       .orderBy(asc(course.name));
     return rows.map((row) => ({
       id: row.id,
       lessons: row.graph.lessons.length,
       name: row.name,
+      points: row.graph.points.length,
+      updatedAt: row.updatedAt,
     }));
   } catch (error) {
     throw new ChatbotError("bad_request:database", { cause: error });
