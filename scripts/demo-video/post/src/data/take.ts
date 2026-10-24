@@ -11,6 +11,7 @@ import {
   type Sfx,
   type Shot,
   shotDuration,
+  sourceTime,
   type Viewport,
 } from "../edit";
 import {
@@ -176,8 +177,14 @@ function screenShot(
   draft: DraftShot,
   {
     id = `s${draft.shot}`,
-    windows,
-  }: { id?: string; windows?: [number, number][] } = {}
+    windows: given,
+    fit = false,
+  }: {
+    id?: string;
+    windows?: [number, number][];
+    // 讲稿念完（再留 TAIL）就结束这一镜，后面的画面不要
+    fit?: boolean;
+  } = {}
 ): Shot {
   const s = LINES.find((x) => x.id === id);
   if (!s) {
@@ -185,6 +192,19 @@ function screenShot(
   }
   const intro = draft.shot === 3;
   const { cues, end, narration } = narrate(id, s.narration, intro ? 1.9 : 0.5);
+  const windows: [number, number][] | undefined =
+    given ??
+    (fit
+      ? [
+          [
+            draft.clips[0]?.from ?? draft.window.start,
+            sourceTime(
+              layoutClips(fitClips(draft.clips, end + TAIL)),
+              end + TAIL
+            ),
+          ],
+        ]
+      : undefined);
   const picked = windows ? clipWindows(draft.clips, windows) : draft.clips;
   const clips = fitClips(picked, end + TAIL);
   return {
@@ -260,17 +280,21 @@ export function shortEdit(take: Take): Edit | null {
   }
   const shots = [
     painCard("m1"),
-    screenShot(take, d3, { id: "m2" }),
+    screenShot(take, d3, { fit: true, id: "m2" }),
     screenShot(take, d5, {
       id: "m3",
       windows: [
-        [d5.window.start, holdAt(d5, /以为学会了/, 2.5)],
-        [holdAt(d5, /独立答对/, -0.6), holdAt(d5, /「死锁」半亮/, 3)],
+        [d5.window.start, holdAt(d5, /以为学会了/, 2)],
+        [holdAt(d5, /独立答对/, -0.3), holdAt(d5, /「死锁」半亮/, 2)],
       ],
     }),
+    // 复习题出现 → 跳到“答对了” → 「死锁」全亮（打字提问、作答的过程跳过）
     screenShot(take, d7, {
       id: "m4",
-      windows: [[d7.window.start, holdAt(d7, /「死锁」全亮/, 3)]],
+      windows: [
+        [holdAt(d7, /复习题/, -1.5), holdAt(d7, /复习题/, 2)],
+        [holdAt(d7, /答对了/, -0.5), holdAt(d7, /「死锁」全亮/, 3)],
+      ],
     }),
     endCard,
   ];
