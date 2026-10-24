@@ -11,6 +11,7 @@
     "rehearse": "node record.mjs --no-obs",
     "classify": "node classify-check.mjs",
     "align": "node align.mjs",
+    "draft": "node draft.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {

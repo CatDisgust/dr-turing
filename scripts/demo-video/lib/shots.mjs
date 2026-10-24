@@ -85,7 +85,7 @@ export async function shot4(d) {
     )?.detail?.name ?? null;
   facts.lessonName = await d.textOf(d.page.getByTestId("lesson-name"));
 
-  // 回复上方的来源标签：“从你会的「丢失更新」讲起”
+  // 回复上方的来源标签：“从你会的「悲观并发控制（加锁）」讲起”
   const reply = d.lastAssistant();
   const startFrom = reply.getByTestId("start-from");
   facts.startFrom = await d.textOf(startFrom);

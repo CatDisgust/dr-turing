@@ -176,6 +176,13 @@ export function installDemoLog(config) {
     "lesson-name": lastOf('[data-testid="lesson-name"]'),
     "personal-panel": present('[data-testid="personal-panel"]'),
     plan: lastOf('[data-testid="plan"] > summary'),
+    // 导师回复里已经露出文字的条数：从“思考中”变成有字的那一刻，后期据此加速思考的等待
+    "reply-shown": () => ({
+      value: [
+        ...document.querySelectorAll('[data-testid="message-assistant"]'),
+      ].filter((m) => m.querySelector('[data-testid="message-content"]'))
+        .length,
+    }),
     "report-concepts": lastOf('[data-testid="report-concepts"]'),
     "retry-notice": present('[data-testid="retry-notice"]'),
     "session-report": lastOf('[data-testid="session-report"]', 200),
