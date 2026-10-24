@@ -8,7 +8,7 @@ import {
   type Edit,
   layoutClips,
   type ScreenShot,
-  VIEW_W,
+  starMapView,
 } from "./edit";
 import { C, FONT, useFonts } from "./theme";
 
@@ -18,8 +18,6 @@ const LINE2 = "让你真的学会";
 const AFTER = 1.2;
 const SCALE = 0.56;
 const SHIFT = -60;
-// 网页右边「我的星图」抽屉宽 440：镜头放大到只看得见抽屉（左边不露半截对话），不画光标
-const DRAWER_W = 440;
 
 // 没有全亮那一声（比如计时样带）就取最后一个录屏镜头的中间
 function pickFrame(edit: Edit): { shot: ScreenShot; t: number } | null {
@@ -38,10 +36,10 @@ function pickFrame(edit: Edit): { shot: ScreenShot; t: number } | null {
 
 function starMapOnly(shot: ScreenShot, t: number): ScreenShot {
   const cam = cameraAt(cameraKeysOut(shot.camera, layoutClips(shot.clips)), t);
-  const zoom = Math.max(cam.zoom, (VIEW_W / DRAWER_W) * 1.03);
+  // 只看得见星图抽屉（左边不露半截对话），不画光标
   return {
     ...shot,
-    camera: [{ dur: 0, t: -1, x: VIEW_W, y: cam.y, zoom }],
+    camera: [{ ...starMapView(cam.y), dur: 0, t: -1 }],
     clicks: [],
     cursor: [],
   };

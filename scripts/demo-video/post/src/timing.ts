@@ -96,3 +96,13 @@ export function snapCues(
   }
   return out;
 }
+
+// 某个词在配音里大约什么时候念到：在它那条字幕里按字数比例估（和字幕同一种时间）
+export function wordAt(cues: Cue[], word: string): number | undefined {
+  const cue = cues.find((c) => c.text.includes(word));
+  if (!cue) {
+    return;
+  }
+  const at = cue.text.indexOf(word) / cue.text.length;
+  return cue.start + (cue.end - cue.start) * at;
+}

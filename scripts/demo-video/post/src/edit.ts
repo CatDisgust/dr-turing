@@ -77,7 +77,7 @@ export type ScreenShot = {
   sfx?: Sfx[];
 };
 
-export type CardKind = "pain" | "gap" | "pilot" | "end";
+export type CardKind = "story" | "pilot" | "end";
 
 export type CardShot = {
   kind: "card";
@@ -89,8 +89,19 @@ export type CardShot = {
   beats?: Record<string, number>;
   cues: Cue[];
   narration?: Narration;
+  // 一张字卡念好几段配音时，narration 之后的几段
+  voices?: Narration[];
+  // 这几段时间里音乐停掉（镜头内秒数），留一下空白（开场动画的“然后呢？”）
+  mute?: [number, number][];
   sfx?: Sfx[];
 };
+
+export function shotVoices(shot: Shot): Narration[] {
+  return [
+    ...(shot.narration ? [shot.narration] : []),
+    ...(shot.kind === "card" ? (shot.voices ?? []) : []),
+  ];
+}
 
 export type Shot = ScreenShot | CardShot;
 
@@ -233,6 +244,17 @@ export function clampCamera(c: CameraState): CameraState {
     y: Math.min(VIEW_H - halfH, Math.max(halfH, c.y)),
     zoom,
   };
+}
+
+// 网页右边「我的星图」抽屉从 x=840 起（宽 440）：镜头放大到刚好只看得见抽屉，左边不露半截对话
+export const STAR_MAP_LEFT = 840;
+
+export function starMapView(y: number): CameraState {
+  return clampCamera({
+    x: VIEW_W,
+    y,
+    zoom: (VIEW_W / (VIEW_W - STAR_MAP_LEFT)) * 1.03,
+  });
 }
 
 const DEFAULT_DUR = 0.8;
