@@ -76,8 +76,9 @@ export function ScreenScene({ shot }: { shot: ScreenShot }) {
         style={{
           background: C.page,
           borderRadius: 16,
+          // 右边是黑底的星图面板，和夜空分不开：描一圈亮一点的边，外面再加一圈很淡的光
           boxShadow:
-            "0 28px 90px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1)",
+            "0 0 0 1px rgba(255, 255, 255, 0.2), 0 0 0 7px rgba(132, 216, 255, 0.05), 0 28px 90px rgba(0, 0, 0, 0.6)",
           height: win.h,
           left: win.x,
           overflow: "hidden",
