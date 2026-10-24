@@ -1313,6 +1313,31 @@ export async function courseHasLearners(courseId: string): Promise<boolean> {
   return (row?.n ?? 0) > 0;
 }
 
+// 学生删自己的课（第 4 步后续，2026-10-24）：课、这门课的星星（LearnerState）、这门课的对话一起删。
+// 作答和反应记录（Transaction / Event）按设计只追加不删，留着给底层能力用。返回课件的 file_id
+export async function deleteCourse(courseId: string): Promise<string[]> {
+  return await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ files: course.files })
+      .from(course)
+      .where(eq(course.id, courseId));
+    const chats = await tx
+      .select({ id: chat.id })
+      .from(chat)
+      .where(eq(chat.courseId, courseId));
+    const ids = chats.map((c) => c.id);
+    if (ids.length > 0) {
+      await tx.delete(vote).where(inArray(vote.chatId, ids));
+      await tx.delete(message).where(inArray(message.chatId, ids));
+      await tx.delete(stream).where(inArray(stream.chatId, ids));
+      await tx.delete(chat).where(inArray(chat.id, ids));
+    }
+    await tx.delete(learnerState).where(eq(learnerState.courseId, courseId));
+    await tx.delete(course).where(eq(course.id, courseId));
+    return row?.files ?? [];
+  });
+}
+
 // 生成成功一次就记一次（删了课再传也算）
 export async function bumpGenerations(code: string) {
   await db

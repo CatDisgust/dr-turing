@@ -1,10 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ChevronRightIcon, PlusIcon } from "lucide-react";
+import { ChevronRightIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { mutate as refresh } from "swr";
 import useSWRInfinite from "swr/infinite";
 import {
   AlertDialog,
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useActiveChat } from "@/hooks/use-active-chat";
 import {
+  COURSES_URL,
   type CourseOption,
   useCourses,
   useOwnUpload,
@@ -155,6 +157,49 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     toast.success("对话已删掉");
   }, [deleteId, mutate, pathname, router]);
 
+  // 删自己传的课（第 4 步后续）：先警告，删完刷新课程列表和对话列表
+  const [dropCourse, setDropCourse] = useState<CourseOption | null>(null);
+  const closeDropCourse = useCallback((shown: boolean) => {
+    if (!shown) {
+      setDropCourse(null);
+    }
+  }, []);
+  const handleDropCourse = useCallback(async () => {
+    const target = dropCourse;
+    setDropCourse(null);
+    if (!target) {
+      return;
+    }
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/course/${target.id}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok) {
+      toast.error("没删成，等一下再试");
+      return;
+    }
+    const inCourse = (paginatedChatHistories ?? [])
+      .flatMap((page) => page.chats)
+      .some((c) => c.courseId === target.id && pathname === `/chat/${c.id}`);
+    if (courseId === target.id) {
+      pickCourse(courses?.find((c) => c.id !== target.id)?.id ?? null);
+    }
+    if (inCourse) {
+      router.replace("/");
+    }
+    await Promise.all([refresh(COURSES_URL), mutate()]);
+    toast.success(`「${target.name}」已删掉`);
+  }, [
+    courseId,
+    courses,
+    dropCourse,
+    mutate,
+    paginatedChatHistories,
+    pathname,
+    pickCourse,
+    router,
+  ]);
+
   const handleShowDeleteDialog = useCallback((chatId: string) => {
     setDeleteId(chatId);
     setShowDeleteDialog(true);
@@ -196,6 +241,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                 key={course.id}
                 loading={isLoading}
                 onDelete={handleShowDeleteDialog}
+                onDrop={setDropCourse}
                 onStart={start}
                 onToggle={toggle}
                 open={open.has(course.id)}
@@ -248,6 +294,27 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
         </SidebarGroupContent>
       </SidebarGroup>
 
+      <AlertDialog onOpenChange={closeDropCourse} open={dropCourse !== null}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删掉「{dropCourse?.name}」？</AlertDialogTitle>
+            <AlertDialogDescription>
+              这门课、你在这门课里的所有对话和星星都会删掉，找不回来。上传的课件也会从
+              Anthropic 删掉。已经用掉的生成次数不退。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="drop-course-confirm"
+              onClick={handleDropCourse}
+            >
+              删掉这门课
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog onOpenChange={setShowDeleteDialog} open={showDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -276,6 +343,7 @@ function CourseFolder({
   onToggle,
   onStart,
   onDelete,
+  onDrop,
 }: {
   loading: boolean;
   course: CourseOption;
@@ -286,8 +354,10 @@ function CourseFolder({
   onToggle: (id: string) => void;
   onStart: (id: string | null) => void;
   onDelete: (chatId: string) => void;
+  onDrop: (course: CourseOption) => void;
 }) {
   const toggle = useCallback(() => onToggle(course.id), [onToggle, course.id]);
+  const drop = useCallback(() => onDrop(course), [onDrop, course]);
   const start = useCallback(() => onStart(course.id), [onStart, course.id]);
   return (
     <li className="flex flex-col" data-testid={`folder-${course.id}`}>
@@ -322,6 +392,18 @@ function CourseFolder({
           >
             我的
           </span>
+        ) : null}
+        {course.mine ? (
+          <button
+            aria-label={`删掉「${course.name}」`}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/40 opacity-0 hover:text-[var(--duo-red-ink)] focus:opacity-100 group-hover/folder:opacity-100"
+            data-testid={`drop-${course.id}`}
+            onClick={drop}
+            title="删掉这门课"
+            type="button"
+          >
+            <Trash2Icon className="size-3.5" />
+          </button>
         ) : null}
         {course.due > 0 ? (
           <span
