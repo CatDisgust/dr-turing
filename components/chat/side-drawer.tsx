@@ -6,16 +6,18 @@ import { cn } from "@/lib/utils";
 
 type Tab = "material" | "graph";
 
-// 右边的侧拉框：课件和我的图谱两个标签页，可收起。看图谱时标签栏是一条夜空（视觉规范 StarMap），
+// 右边的侧拉框：课件和星图两个标签页，可收起（选了课叫「本课星图」，和右上角跨课的「我的星图」分开）。看图谱时标签栏是一条夜空（视觉规范 StarMap），
 // 看课件时跟着页面变白，收起后的把手也是白的，夜空只在真的看星图时出现
 // 两页都一直挂着（图谱要接收点亮事件、课件要留住打开的 PDF），只是叠在一起切换显示
 export function SideDrawer({
   material,
   graph,
+  graphLabel,
   showMaterial,
 }: {
   material: ReactNode;
   graph: ReactNode;
+  graphLabel: string;
   showMaterial: boolean;
 }) {
   const [open, setOpen] = useState(true);
@@ -30,7 +32,7 @@ export function SideDrawer({
     }
   }, []);
 
-  // 看课件时图谱有变化，在“我的图谱”上点个小蓝点
+  // 看课件时图谱有变化，在星图标签上点个小蓝点
   useEffect(() => {
     const onNews = () => setGraphNews(true);
     window.addEventListener(NODE_TOUCHED_EVENT, onNews);
@@ -66,7 +68,7 @@ export function SideDrawer({
           onClick={show}
           type="button"
         >
-          {showMaterial ? "课件 · 我的图谱" : "我的图谱"}
+          {showMaterial ? `课件 · ${graphLabel}` : `${graphLabel}`}
           {news ? (
             <span className="size-2 rounded-full bg-[var(--duo-blue-edge)]" />
           ) : null}
@@ -104,7 +106,7 @@ export function SideDrawer({
             sky={sky}
             tab="graph"
           >
-            我的图谱
+            {graphLabel}
             {news ? (
               <span className="ml-1.5 inline-block size-2 rounded-full bg-[var(--duo-blue-edge)]" />
             ) : null}

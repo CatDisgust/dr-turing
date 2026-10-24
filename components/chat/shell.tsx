@@ -309,6 +309,7 @@ export function ChatShell() {
                 )
               ) : null
             }
+            graphLabel={courseId ? "本课星图" : "我的星图"}
             material={<MaterialPane />}
             showMaterial={!isReadonly}
           />
